@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>한강 수난사고 환경조회 대시보드 v3</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
+  *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
+  header{position:sticky;top:0;z-index:5;background:#111827;color:#fff;padding:14px 16px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  header h1{font-size:18px;margin:0 0 4px} header p{margin:0;color:#d1d5db;font-size:12px}
+  main{max-width:980px;margin:0 auto;padding:14px}
+  .grid{display:grid;grid-template-columns:1fr;gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  h2{font-size:16px;margin:0 0 10px}.row{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:10px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px} input,select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:15px;background:#fff;color:var(--text)} textarea{min-height:76px;resize:vertical}
+  button{border:none;border-radius:10px;padding:12px 14px;font-size:15px;font-weight:700;background:var(--accent);color:#fff;cursor:pointer} button.secondary{background:#374151} button.ghost{background:#eef2ff;color:#1e40af}
+  .pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:700;margin:2px 4px 2px 0}.warn{background:#fff7ed;color:var(--warn)}.danger{background:#fef2f2;color:var(--danger)}.ok{background:#ecfdf5;color:var(--ok)}
+  .result{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafafa}.metric b{display:block;font-size:20px;margin-top:4px}.small{font-size:12px;color:var(--muted);line-height:1.5}.note{font-size:13px;line-height:1.55;background:#f9fafb;border-left:4px solid #9ca3af;padding:10px;border-radius:8px}.hidden{display:none}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;white-space:pre-wrap}
+  @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1 / -1}.row{grid-template-columns:1fr 1fr}.row.one{grid-template-columns:1fr}.result{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>한강 수난사고 환경조회 대시보드 v3</h1>
+  <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
+</header>
+<main>
+  <section class="card wide">
+    <h2>① API 키 입력</h2>
+    <div class="row">
+      <div><label>한강홍수통제소 인증키</label><input id="hrKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
+      <div><label>국립해양조사원 조석 API 인증키</label><input id="tideKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
+    </div>
+    <div class="row3">
+      <div><label>팔당댐 코드</label><input id="damCode" value="1017678"></div>
+      <div><label>조석 기준 관측소</label><select id="tideStation"><option value="DT_0001">인천 DT_0001</option><option value="DT_0002">평택 DT_0002</option><option value="DT_0044">영종대교 DT_0044</option></select></div>
+      <div><label>조회 단위</label><select id="interval"><option value="10M">10분</option><option value="1H">1시간</option><option value="1D">1일</option></select></div>
+    </div>
+    <button id="saveBtn" onclick="saveKeys()">키 저장</button>
+    <button id="clearBtn" class="secondary" onclick="clearKeys()">저장값 삭제</button>
+    <div id="keyStatus" class="note" style="margin-top:10px">화면 로딩 중입니다. 이 문구가 계속 보이면 Safari 미리보기에서는 실행이 제한된 상태입니다.</div>
+    <p class="small">키는 이 기기 브라우저(localStorage)에만 저장됩니다. 다른 사람에게 공유하지 마세요.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>② 사고 정보 입력</h2>
+      <div class="row one">
+        <div><label>교량 선택</label><select id="bridge">
+<option value="0">강동대교 → 서울시(광진교) (1018640)</option>
+<option value="1">천호대교 → 서울시(광진교) (1018640)</option>
+<option value="2">광진교 → 서울시(광진교) (1018640)</option>
+<option value="3">잠실대교 → 서울시(청담대교) (1018662)</option>
+<option value="4">잠실철교 → 서울시(청담대교) (1018662)</option>
+<option value="5">청담대교 → 서울시(청담대교) (1018662)</option>
+<option value="6">영동대교 → 청담 (1018660)</option>
+<option value="7">성수대교 → 뚝도 (1018664)</option>
+<option value="8">동호대교 → 뚝도 (1018664)</option>
+<option value="9">한남대교 → 서울시(잠수교) (1018680)</option>
+<option value="10">반포대교 → 서울시(반포2교) (1018681)</option>
+<option value="11">잠수교 → 서울시(잠수교) (1018680)</option>
+<option value="12">동작대교 → 서울시(한강대교) (1018683)</option>
+<option value="13" selected>한강대교 → 서울시(한강대교) (1018683)</option>
+<option value="14">원효대교 → 구용산 (1018685)</option>
+<option value="15">마포대교 → 구용산 (1018685)</option>
+<option value="16">서강대교 → 구용산 (1018685)</option>
+<option value="17">양화대교 → 서울시(행주대교) (1019630)</option>
+<option value="18">성산대교 → 서울시(행주대교) (1019630)</option>
+<option value="19">가양대교 → 서울시(행주대교) (1019630)</option>
+<option value="20">방화대교 → 서울시(행주대교) (1019630)</option>
+<option value="21">행주대교 → 서울시(행주대교) (1019630)</option>
+</select></div>
+      </div>
+      <div class="row">
+        <div><label>폴대번호 / 위치 메모</label><input id="pole" placeholder="예: 8번 폴대, 북단, 중앙부 등"></div>
+        <div><label>위치 정확도</label><select id="accuracy"><option>정확</option><option selected>추정</option><option>불명확</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>투신 시각</label><input id="incidentAt" type="datetime-local"></div>
+        <div><label>수색 시작/현재 시각</label><input id="searchAt" type="datetime-local"></div>
+      </div>
+      <button id="runBtn" onclick="runAll()">환경조회 실행</button>
+      <button id="nowBtn" class="ghost" onclick="fillNow()">현재시각 입력</button>
+    </section>
+
+    <section class="card">
+      <h2>③ 선택된 관측소</h2>
+      <div id="stationBox" class="note"></div>
+      <table class="table">
+        <thead><tr><th>교량</th><th>대표 수위관측소</th><th>코드</th></tr></thead>
+        <tbody id="mapTable"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="card wide">
+    <h2>④ 조회 결과</h2>
+    <div id="status" class="note">아직 조회하지 않았습니다.</div>
+    <div class="result" style="margin-top:10px">
+      <div class="metric"><span class="small">투신 당시 수위</span><b id="incidentWater">-</b></div>
+      <div class="metric"><span class="small">현재 수위</span><b id="currentWater">-</b></div>
+      <div class="metric"><span class="small">투신 당시 방류량</span><b id="incidentDam">-</b></div>
+      <div class="metric"><span class="small">현재 방류량</span><b id="currentDam">-</b></div>
+      <div class="metric"><span class="small">투신 당시 물때</span><b id="incidentTide">-</b></div>
+      <div class="metric"><span class="small">현재 물때</span><b id="currentTide">-</b></div>
+      <div class="metric"><span class="small">풍향</span><b id="windDir">수동 입력 전</b></div>
+      <div class="metric"><span class="small">풍속</span><b id="windSpd">수동 입력 전</b></div>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <h2>⑤ 수색 참고 판단</h2>
+    <div class="row3">
+      <div><label>풍향 수동 입력</label><input id="manualWindDir" placeholder="예: 서풍, 북서풍"></div>
+      <div><label>풍속 수동 입력</label><input id="manualWindSpd" placeholder="예: 3.2 m/s"></div>
+      <div><label>현장 육안 흐름</label><select id="manualFlow"><option value="unknown">불명확</option><option value="down">하류 방향 우세</option><option value="up">상류 방향 우세</option><option value="still">정체/와류 의심</option></select></div>
+    </div>
+    <button class="secondary" onclick="makeRecommendation()">수색 참고 의견 생성</button>
+    <div id="recommendation" class="note" style="margin-top:10px">수색 참고 의견이 여기에 표시됩니다.</div>
+  </section>
+
+  <section class="card wide">
+    <h2>원자료 응답 확인</h2>
+    <details><summary>API 응답 로그 보기</summary><pre id="raw" class="mono"></pre></details>
+  </section>
+</main>
+<script>
+const bridgeMap = [
+  {bridge:'강동대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 상류 대표값'},
+  {bridge:'천호대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 광진교 대표값'},
+  {bridge:'광진교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소'},
+  {bridge:'잠실대교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
+  {bridge:'잠실철교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
+  {bridge:'청담대교', station:'서울시(청담대교)', code:'1018662', note:'직접 관측소'},
+  {bridge:'영동대교', station:'청담', code:'1018660', note:'직접 관측소 없음: 청담 대표값'},
+  {bridge:'성수대교', station:'뚝도', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
+  {bridge:'동호대교', station:'뚝도 / 잠수교', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
+  {bridge:'한남대교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소 없음: 잠수교 대표값'},
+  {bridge:'반포대교', station:'서울시(반포2교)', code:'1018681', note:'반포 구간 대표값'},
+  {bridge:'잠수교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소'},
+  {bridge:'동작대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소 없음: 한강대교 대표값'},
+  {bridge:'한강대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소'},
+  {bridge:'원효대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'마포대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'서강대교', station:'구용산 / 행주대교', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'양화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
+  {bridge:'성산대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
+  {bridge:'가양대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
+  {bridge:'방화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
+  {bridge:'행주대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소'}
+];
+
+function init(){
+  const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">작동 준비 완료</span> 버튼이 정상 작동합니다. 키 저장을 누르면 이곳에 결과가 표시됩니다.';
+  ['saveBtn','clearBtn','runBtn','nowBtn'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.addEventListener('touchstart',()=>{}, {passive:true}); }});
+  const b=document.getElementById('bridge');
+  if(!b.options.length){
+    bridgeMap.forEach((x,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${x.bridge} → ${x.station} (${x.code})`;b.appendChild(o)});
+    b.value=13;
+  }
+  b.addEventListener('change',updateStation);
+  document.getElementById('mapTable').innerHTML=bridgeMap.map(x=>`<tr><td>${x.bridge}</td><td>${x.station}</td><td>${x.code}</td></tr>`).join('');
+  loadKeys(); fillNow(); updateStation();
+}
+function fillNow(){
+  const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">현재시각 입력</span> 시간 입력칸에 현재시각을 넣었습니다.';
+  const now=new Date(); const local=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById('searchAt').value=local;
+  if(!document.getElementById('incidentAt').value) document.getElementById('incidentAt').value=local;
+}
+function updateStation(){
+ const x=bridgeMap[document.getElementById('bridge').value];
+ document.getElementById('stationBox').innerHTML=`<span class="pill">${x.bridge}</span><br>대표 수위관측소: <b>${x.station}</b><br>관측소 코드: <b>${x.code}</b><br><span class="small">${x.note}</span>`;
+}
+function saveKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value)); const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">저장 완료</span> 인증키가 이 브라우저에 저장됐습니다.';}
+function loadKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>{const v=localStorage.getItem(id); if(v) document.getElementById(id).value=v;});}
+function clearKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.removeItem(id)); document.getElementById('hrKey').value=''; document.getElementById('tideKey').value=''; const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill warn">삭제 완료</span> 저장된 인증키를 삭제했습니다.';}
+function cleanKey(k){return (k||'').trim();}
+async function fetchJson(url){
+  const r=await fetch(url); const text=await r.text();
+  try{return JSON.parse(text)}catch(e){return {raw:text}}
+}
+function arrFrom(obj){
+  if(!obj) return [];
+  if(Array.isArray(obj)) return obj;
+  if(Array.isArray(obj.content)) return obj.content;
+  if(obj.response?.body?.items?.item) return Array.isArray(obj.response.body.items.item)?obj.response.body.items.item:[obj.response.body.items.item];
+  if(obj.result?.data) return Array.isArray(obj.result.data)?obj.result.data:[obj.result.data];
+  if(obj.raw) return [];
+  return [obj];
+}
+function getTimeValue(o){return o.ymdhm||o.obsymdhm||o.datetime||o.time||o.date||o.tm||o.YMDHM||o.ymd||''}
+function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.swl||o.SWL||o.value||''}
+function getDamOut(o){return o.tototf||o.TOTOTF||o.otf||o.OTF||o.edq||o.outflow||o.discharge||''}
+function closest(items, dt){
+ if(!items.length) return null;
+ const target=new Date(dt).getTime();
+ let best=items[0], bd=Infinity;
+ for(const it of items){
+   const tstr=String(getTimeValue(it)).replace(/[^0-9]/g,'');
+   let d=Infinity;
+   if(tstr.length>=12){ const y=tstr.slice(0,4),mo=tstr.slice(4,6),da=tstr.slice(6,8),h=tstr.slice(8,10),mi=tstr.slice(10,12); d=Math.abs(new Date(`${y}-${mo}-${da}T${h}:${mi}`).getTime()-target); }
+   if(d<bd){bd=d;best=it}
+ }
+ return best;
+}
+async function runAll(){
+  saveKeys();
+  const hr=cleanKey(document.getElementById('hrKey').value); const tide=cleanKey(document.getElementById('tideKey').value);
+  if(!hr){alert('한강홍수통제소 인증키를 입력하세요.');return;}
+  const x=bridgeMap[document.getElementById('bridge').value]; const interval=document.getElementById('interval').value; const damCode=document.getElementById('damCode').value.trim();
+  const inc=document.getElementById('incidentAt').value, cur=document.getElementById('searchAt').value;
+  document.getElementById('status').innerHTML='조회 중입니다...'; document.getElementById('raw').textContent='';
+  try{
+    const wlUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}.json`;
+    const damUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}.json`;
+    const wl=await fetchJson(wlUrl); const dam=await fetchJson(damUrl);
+    const wlItems=arrFrom(wl), damItems=arrFrom(dam);
+    const incW=closest(wlItems,inc) || wlItems[0]; const curW=closest(wlItems,cur) || wlItems[0];
+    const incD=closest(damItems,inc) || damItems[0]; const curD=closest(damItems,cur) || damItems[0];
+    document.getElementById('incidentWater').textContent=incW?`${getWaterValue(incW)||'값 확인 필요'} m`:'조회 실패';
+    document.getElementById('currentWater').textContent=curW?`${getWaterValue(curW)||'값 확인 필요'} m`:'조회 실패';
+    document.getElementById('incidentDam').textContent=incD?`${getDamOut(incD)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    document.getElementById('currentDam').textContent=curD?`${getDamOut(curD)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    document.getElementById('raw').textContent=`[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
+    if(tide) await loadTide(tide, inc, cur);
+    else {document.getElementById('incidentTide').textContent='조석키 미입력';document.getElementById('currentTide').textContent='조석키 미입력';}
+    document.getElementById('status').innerHTML=`<span class="pill ok">조회 완료</span> ${x.bridge} / 대표관측소 ${x.station}(${x.code}) 기준입니다.`;
+    makeRecommendation();
+  }catch(e){
+    document.getElementById('status').innerHTML=`<span class="pill danger">조회 실패</span> 브라우저 CORS 또는 API 주소 문제일 수 있습니다. 아래 로그를 확인하세요.`;
+    document.getElementById('raw').textContent=String(e.stack||e);
+  }
+}
+async function loadTide(key, inc, cur){
+  const station=document.getElementById('tideStation').value;
+  async function one(dt){
+    const d=new Date(dt); const ymd=d.toISOString().slice(0,10).replace(/-/g,'');
+    const url=`https://www.khoa.go.kr/api/oceangrid/tideObsPre/search.do?ServiceKey=${encodeURIComponent(key)}&ObsCode=${station}&Date=${ymd}&ResultType=json`;
+    const j=await fetchJson(url); const items=arrFrom(j.result||j);
+    const c=closest(items,dt); return {url,j,c};
+  }
+  try{
+    const a=await one(inc), b=await one(cur);
+    const fmt=(o)=>{ if(!o) return '값 확인 필요'; const h=o.tph_time||o.pred_time||getTimeValue(o)||''; const v=o.tph_level||o.pred_level||o.tide_level||o.level||''; return `${h} / ${v? v+' cm':''}`; };
+    document.getElementById('incidentTide').textContent=fmt(a.c);
+    document.getElementById('currentTide').textContent=fmt(b.c);
+    document.getElementById('raw').textContent += `\n\n[조석 URL 예시]\n${a.url.replace(key,'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.j,null,2).slice(0,3000)}`;
+  }catch(e){
+    document.getElementById('incidentTide').textContent='조회 실패'; document.getElementById('currentTide').textContent='조회 실패';
+    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}`;
+  }
+}
+function makeRecommendation(){
+  const x=bridgeMap[document.getElementById('bridge').value]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
+  const wd=document.getElementById('manualWindDir').value.trim(); const ws=document.getElementById('manualWindSpd').value.trim();
+  document.getElementById('windDir').textContent=wd||'수동 입력 전'; document.getElementById('windSpd').textContent=ws||'수동 입력 전';
+  let flowText='현재 API 값만으로는 실제 유속과 정확한 이동거리를 확정할 수 없습니다.';
+  if(flow==='down') flowText='현장 관찰상 하류 방향 흐름이 우세하므로, 1차 수색은 사고지점 하류 교각·와류 구간부터 설정합니다.';
+  if(flow==='up') flowText='현장 관찰상 상류 방향 또는 조석 역류 가능성이 있으므로, 사고지점 상류측 정체·와류 구간도 함께 확인합니다.';
+  if(flow==='still') flowText='정체·와류가 의심되므로, 교각 주변·잠수교/보 구조물 주변 체류 가능 구간을 우선 확인합니다.';
+  const uncertainty = acc==='정확' ? '위치 정확도가 높아 사고지점 기준 ±1개 교량 구간부터 확인합니다.' : acc==='추정' ? '위치가 추정이므로 사고지점 기준 상·하류 모두 열어두고 ±1~2개 교량 구간을 확인합니다.' : '위치가 불명확하므로 신고지점 주변 넓은 구간을 수색 우선구역으로 잡아야 합니다.';
+  document.getElementById('recommendation').innerHTML=`
+    <span class="pill warn">주의</span> 이 결과는 수색 참고자료이며, 정확한 잠수 위치를 확정하는 자료가 아닙니다.<br><br>
+    <b>선택 위치:</b> ${x.bridge} / ${document.getElementById('pole').value||'폴대 미입력'}<br>
+    <b>대표 수위관측소:</b> ${x.station} (${x.code})<br><br>
+    <b>1차 판단:</b> ${uncertainty}<br>
+    <b>흐름 참고:</b> ${flowText}<br>
+    <b>바람 참고:</b> ${wd||'풍향 미입력'} / ${ws||'풍속 미입력'}<br><br>
+    <b>권장 수색 구분:</b><br>
+    ① 사고지점 직하류 교각 및 와류 가능 구간<br>
+    ② 사고지점 직상류 정체 가능 구간<br>
+    ③ 조석 역전 시각 전후라면 상·하류 양방향 재확인<br>
+    ④ 방류량 증가 시 하류 이동 가능성 가중
+  `;
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', init);}else{init();}
+</script>
+</body>
+</html>

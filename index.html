@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v4</title>
+<title>한강 수난사고 환경조회 대시보드 v5</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v4</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v5</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -192,6 +192,24 @@ function arrFrom(obj){
 function getTimeValue(o){return o.ymdhm||o.obsymdhm||o.datetime||o.time||o.date||o.tm||o.YMDHM||o.ymd||''}
 function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.swl||o.SWL||o.value||''}
 function getDamOut(o){return o.tototf||o.TOTOTF||o.otf||o.OTF||o.edq||o.outflow||o.discharge||''}
+function formatNumber(v){
+  if(v===undefined||v===null||v==='') return '';
+  const n=Number(String(v).replace(/,/g,''));
+  if(!Number.isFinite(n)) return v;
+  return n.toLocaleString('ko-KR',{maximumFractionDigits:1});
+}
+function getBridgeIndex(){return Number(document.getElementById('bridge').value||0)}
+function getSearchZone(idx, flow){
+  const names=bridgeMap.map(x=>x.bridge);
+  const start=Math.max(0,idx-2), end=Math.min(names.length-1,idx+2);
+  const up=names.slice(Math.max(0,idx-2), idx+1).join(' → ');
+  const down=names.slice(idx, Math.min(names.length,idx+3)).join(' → ');
+  const both=names.slice(start,end+1).join(' → ');
+  if(flow==='down') return `하류 우선: ${down}`;
+  if(flow==='up') return `상류/역류 우선: ${up}`;
+  if(flow==='still') return `정체·와류 우선: ${names[idx]} 주변 교각/저류부 + ${both}`;
+  return `상·하류 동시 확인: ${both}`;
+}
 function closest(items, dt){
  if(!items.length) return null;
  const target=new Date(dt).getTime();
@@ -220,8 +238,11 @@ async function runAll(){
     const incD=closest(damItems,inc) || damItems[0]; const curD=closest(damItems,cur) || damItems[0];
     document.getElementById('incidentWater').textContent=incW?`${getWaterValue(incW)||'값 확인 필요'} m`:'조회 실패';
     document.getElementById('currentWater').textContent=curW?`${getWaterValue(curW)||'값 확인 필요'} m`:'조회 실패';
-    document.getElementById('incidentDam').textContent=incD?`${getDamOut(incD)||'값 확인 필요'} ㎥/s`:'조회 실패';
-    document.getElementById('currentDam').textContent=curD?`${getDamOut(curD)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    const incDamVal = incD ? getDamOut(incD) : '';
+    const curDamVal = curD ? getDamOut(curD) : '';
+    window.lastEnv = {bridge:x.bridge, station:x.station, code:x.code, incidentWater:getWaterValue(incW)||'', currentWater:getWaterValue(curW)||'', incidentDam:incDamVal||'', currentDam:curDamVal||''};
+    document.getElementById('incidentDam').textContent=incD?`${formatNumber(incDamVal)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    document.getElementById('currentDam').textContent=curD?`${formatNumber(curDamVal)||'값 확인 필요'} ㎥/s`:'조회 실패';
     document.getElementById('raw').textContent=`[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
     if(tide) await loadTide(tide, inc, cur);
     else {document.getElementById('incidentTide').textContent='조석키 미입력';document.getElementById('currentTide').textContent='조석키 미입력';}
@@ -252,26 +273,39 @@ async function loadTide(key, inc, cur){
   }
 }
 function makeRecommendation(){
-  const x=bridgeMap[document.getElementById('bridge').value]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
+  const idx=getBridgeIndex();
+  const x=bridgeMap[idx]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
   const wd=document.getElementById('manualWindDir').value.trim(); const ws=document.getElementById('manualWindSpd').value.trim();
   document.getElementById('windDir').textContent=wd||'수동 입력 전'; document.getElementById('windSpd').textContent=ws||'수동 입력 전';
-  let flowText='현재 API 값만으로는 실제 유속과 정확한 이동거리를 확정할 수 없습니다.';
-  if(flow==='down') flowText='현장 관찰상 하류 방향 흐름이 우세하므로, 1차 수색은 사고지점 하류 교각·와류 구간부터 설정합니다.';
-  if(flow==='up') flowText='현장 관찰상 상류 방향 또는 조석 역류 가능성이 있으므로, 사고지점 상류측 정체·와류 구간도 함께 확인합니다.';
-  if(flow==='still') flowText='정체·와류가 의심되므로, 교각 주변·잠수교/보 구조물 주변 체류 가능 구간을 우선 확인합니다.';
-  const uncertainty = acc==='정확' ? '위치 정확도가 높아 사고지점 기준 ±1개 교량 구간부터 확인합니다.' : acc==='추정' ? '위치가 추정이므로 사고지점 기준 상·하류 모두 열어두고 ±1~2개 교량 구간을 확인합니다.' : '위치가 불명확하므로 신고지점 주변 넓은 구간을 수색 우선구역으로 잡아야 합니다.';
+  const env=window.lastEnv||{};
+  const dam=Number(String(env.currentDam||'').replace(/,/g,''));
+  let damText='방류량 조회 전입니다. 조회 후 하류 이동 가능성을 다시 판단하세요.';
+  let damClass='warn';
+  if(Number.isFinite(dam)){
+    if(dam<500){damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 낮음~보통 수준으로 보고, 조석·교각 와류·현장 육안 흐름을 더 크게 반영합니다.`; damClass='ok';}
+    else if(dam<2000){damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 하류 이동 가능성을 기본값으로 두되, 조석 역전 시 상류/정체 구간도 확인합니다.`; damClass='warn';}
+    else {damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 하류 이동 가능성 가중. 하류 교각·와류·굴곡부를 우선 확인합니다.`; damClass='danger';}
+  }
+  let flowText='현장 흐름 미입력: API 값만으로 실제 유속과 정확한 이동거리를 확정할 수 없습니다.';
+  if(flow==='down') flowText='현장 관찰상 하류 방향 흐름 우세: 하류 방향 수색구역에 가중치를 둡니다.';
+  if(flow==='up') flowText='현장 관찰상 상류 방향 또는 조석 역류 가능성: 상류측 정체·와류 구간도 1차에 포함합니다.';
+  if(flow==='still') flowText='정체·와류 의심: 교각 주변, 저류부, 구조물 주변 체류 가능성을 우선 확인합니다.';
+  const uncertainty = acc==='정확' ? '위치 정확도 높음: 사고지점 기준 ±1개 교량 구간부터 확인.' : acc==='추정' ? '위치 추정: 사고지점 기준 상·하류 모두 열어두고 ±1~2개 교량 구간 확인.' : '위치 불명확: 신고지점 주변 넓은 구간을 수색 우선구역으로 설정.';
+  const zone=getSearchZone(idx,flow);
   document.getElementById('recommendation').innerHTML=`
     <span class="pill warn">주의</span> 이 결과는 수색 참고자료이며, 정확한 잠수 위치를 확정하는 자료가 아닙니다.<br><br>
     <b>선택 위치:</b> ${x.bridge} / ${document.getElementById('pole').value||'폴대 미입력'}<br>
-    <b>대표 수위관측소:</b> ${x.station} (${x.code})<br><br>
+    <b>대표 수위관측소:</b> ${x.station} (${x.code})<br>
+    <b>현재 수위/유량 참고:</b> ${env.currentWater?env.currentWater+'m':'조회 전'} / 수위 API의 fw 값은 유량 참고값입니다.<br><br>
     <b>1차 판단:</b> ${uncertainty}<br>
+    <b>방류량 판단:</b> <span class="pill ${damClass}">${damText}</span><br>
     <b>흐름 참고:</b> ${flowText}<br>
     <b>바람 참고:</b> ${wd||'풍향 미입력'} / ${ws||'풍속 미입력'}<br><br>
-    <b>권장 수색 구분:</b><br>
-    ① 사고지점 직하류 교각 및 와류 가능 구간<br>
-    ② 사고지점 직상류 정체 가능 구간<br>
-    ③ 조석 역전 시각 전후라면 상·하류 양방향 재확인<br>
-    ④ 방류량 증가 시 하류 이동 가능성 가중
+    <b>수색 우선구역:</b><br>
+    ① ${zone}<br>
+    ② 사고지점 직하류 교각 및 와류 가능 구간<br>
+    ③ 사고지점 직상류 정체 가능 구간<br>
+    ④ 조석 역전 시각 전후라면 상·하류 양방향 재확인
   `;
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', init);}else{init();}

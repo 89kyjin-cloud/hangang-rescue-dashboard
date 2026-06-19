@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v10</title>
+<title>한강 수난사고 환경조회 대시보드 v11</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v10</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v11</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -193,7 +193,11 @@ function arrFrom(obj){
   if(!obj) return [];
   if(Array.isArray(obj)) return obj;
   if(Array.isArray(obj.content)) return obj.content;
-  if(obj.response?.body?.items?.item) return Array.isArray(obj.response.body.items.item)?obj.response.body.items.item:[obj.response.body.items.item];
+  // data.go.kr APIs may return either response.body.items.item or body.items.item
+  const directItem=obj.body?.items?.item;
+  if(directItem) return Array.isArray(directItem)?directItem:[directItem];
+  const wrappedItem=obj.response?.body?.items?.item;
+  if(wrappedItem) return Array.isArray(wrappedItem)?wrappedItem:[wrappedItem];
   if(obj.result?.data) return Array.isArray(obj.result.data)?obj.result.data:[obj.result.data];
   if(obj.raw) return [];
   return [obj];

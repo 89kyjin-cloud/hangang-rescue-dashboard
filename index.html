@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v5</title>
+<title>한강 수난사고 환경조회 대시보드 v6</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v5</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v6</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -30,6 +30,7 @@
     <div class="row">
       <div><label>한강홍수통제소 인증키</label><input id="hrKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
       <div><label>국립해양조사원 조석 API 인증키</label><input id="tideKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
+      <div><label>기상청 단기예보 API 인증키(선택)</label><input id="kmaKey" type="password" placeholder="풍향·풍속 자동조회용" autocomplete="off"></div>
     </div>
     <div class="row3">
       <div><label>팔당댐 코드</label><input id="damCode" value="1017310"></div>
@@ -48,27 +49,28 @@
       <div class="row one">
         <div><label>교량 선택</label><select id="bridge">
 <option value="0">강동대교 → 서울시(광진교) (1018640)</option>
-<option value="1">천호대교 → 서울시(광진교) (1018640)</option>
-<option value="2">광진교 → 서울시(광진교) (1018640)</option>
-<option value="3">잠실대교 → 서울시(청담대교) (1018662)</option>
-<option value="4">잠실철교 → 서울시(청담대교) (1018662)</option>
-<option value="5">청담대교 → 서울시(청담대교) (1018662)</option>
-<option value="6">영동대교 → 청담 (1018660)</option>
-<option value="7">성수대교 → 뚝도 (1018664)</option>
-<option value="8">동호대교 → 뚝도 (1018664)</option>
-<option value="9">한남대교 → 서울시(잠수교) (1018680)</option>
-<option value="10">반포대교 → 서울시(반포2교) (1018681)</option>
+<option value="1">구리암사대교 → 서울시(광진교) (1018640)</option>
+<option value="2">천호대교 → 서울시(광진교) (1018640)</option>
+<option value="3">올림픽대교 → 서울시(광진교) (1018640)</option>
+<option value="4">광진교 → 서울시(광진교) (1018640)</option>
+<option value="5">잠실대교 → 서울시(광진교) (1018640)</option>
+<option value="6">청담대교 → 서울시(광진교) (1018640)</option>
+<option value="7">영동대교 → 서울시(광진교) (1018640)</option>
+<option value="8">성수대교 → 서울시(광진교) (1018640)</option>
+<option value="9">동호대교 → 서울시(잠수교) (1018680)</option>
+<option value="10">한남대교 → 서울시(잠수교) (1018680)</option>
 <option value="11">잠수교 → 서울시(잠수교) (1018680)</option>
-<option value="12">동작대교 → 서울시(한강대교) (1018683)</option>
-<option value="13" selected>한강대교 → 서울시(한강대교) (1018683)</option>
-<option value="14">원효대교 → 구용산 (1018685)</option>
-<option value="15">마포대교 → 구용산 (1018685)</option>
-<option value="16">서강대교 → 구용산 (1018685)</option>
-<option value="17">양화대교 → 서울시(행주대교) (1019630)</option>
-<option value="18">성산대교 → 서울시(행주대교) (1019630)</option>
-<option value="19">가양대교 → 서울시(행주대교) (1019630)</option>
-<option value="20">방화대교 → 서울시(행주대교) (1019630)</option>
-<option value="21">행주대교 → 서울시(행주대교) (1019630)</option>
+<option value="12">반포대교 → 서울시(반포2교) (1018681)</option>
+<option value="13">동작대교 → 서울시(한강대교) (1018683)</option>
+<option value="14" selected>한강대교 → 서울시(한강대교) (1018683)</option>
+<option value="15">원효대교 → 서울시(한강대교) (1018683)</option>
+<option value="16">마포대교 → 서울시(한강대교) (1018683)</option>
+<option value="17">서강대교 → 서울시(한강대교) (1018683)</option>
+<option value="18">양화대교 → 서울시(한강대교) (1018683)</option>
+<option value="19">성산대교 → 서울시(행주대교) (1019630)</option>
+<option value="20">가양대교 → 서울시(행주대교) (1019630)</option>
+<option value="21">방화대교 → 서울시(행주대교) (1019630)</option>
+<option value="22">행주대교 → 서울시(행주대교) (1019630)</option>
 </select></div>
       </div>
       <div class="row">
@@ -115,6 +117,11 @@
       <div><label>풍속 수동 입력</label><input id="manualWindSpd" placeholder="예: 3.2 m/s"></div>
       <div><label>현장 육안 흐름</label><select id="manualFlow"><option value="unknown">불명확</option><option value="down">하류 방향 우세</option><option value="up">상류 방향 우세</option><option value="still">정체/와류 의심</option></select></div>
     </div>
+    <div class="row3">
+      <div><label>투신 당시 물때 수동 입력</label><input id="manualIncidentTide" placeholder="예: 간조 후 밀물 시작"></div>
+      <div><label>현재 물때 수동 입력</label><input id="manualCurrentTide" placeholder="예: 만조 전 정체"></div>
+      <div><label>기상청 격자(nx,ny)</label><input id="kmaGrid" value="60,127" placeholder="예: 60,127"></div>
+    </div>
     <button class="secondary" onclick="makeRecommendation()">수색 참고 의견 생성</button>
     <div id="recommendation" class="note" style="margin-top:10px">수색 참고 의견이 여기에 표시됩니다.</div>
   </section>
@@ -126,28 +133,29 @@
 </main>
 <script>
 const bridgeMap = [
-  {bridge:'강동대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 상류 대표값'},
-  {bridge:'천호대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 광진교 대표값'},
-  {bridge:'광진교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소'},
-  {bridge:'잠실대교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
-  {bridge:'잠실철교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
-  {bridge:'청담대교', station:'서울시(청담대교)', code:'1018662', note:'직접 관측소'},
-  {bridge:'영동대교', station:'청담', code:'1018660', note:'직접 관측소 없음: 청담 대표값'},
-  {bridge:'성수대교', station:'뚝도', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
-  {bridge:'동호대교', station:'뚝도 / 잠수교', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
-  {bridge:'한남대교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소 없음: 잠수교 대표값'},
-  {bridge:'반포대교', station:'서울시(반포2교)', code:'1018681', note:'반포 구간 대표값'},
-  {bridge:'잠수교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소'},
-  {bridge:'동작대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소 없음: 한강대교 대표값'},
-  {bridge:'한강대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소'},
-  {bridge:'원효대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
-  {bridge:'마포대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
-  {bridge:'서강대교', station:'구용산 / 행주대교', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
-  {bridge:'양화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
-  {bridge:'성산대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
-  {bridge:'가양대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
-  {bridge:'방화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
-  {bridge:'행주대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소'}
+  {bridge:'강동대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'구리암사대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'천호대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'올림픽대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'광진교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'잠실대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'청담대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'영동대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'성수대교', station:'서울시(광진교)', code:'1018640', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'동호대교', station:'서울시(잠수교)', code:'1018680', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'한남대교', station:'서울시(잠수교)', code:'1018680', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'잠수교', station:'서울시(잠수교)', code:'1018680', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'반포대교', station:'서울시(반포2교)', code:'1018681', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'동작대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'한강대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'원효대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'마포대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'서강대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'양화대교', station:'서울시(한강대교)', code:'1018683', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'성산대교', station:'서울시(행주대교)', code:'1019630', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'가양대교', station:'서울시(행주대교)', code:'1019630', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'방화대교', station:'서울시(행주대교)', code:'1019630', note:'확인된 대표 관측소 기준 매칭'},
+  {bridge:'행주대교', station:'서울시(행주대교)', code:'1019630', note:'확인된 대표 관측소 기준 매칭'}
 ];
 
 function init(){
@@ -172,9 +180,9 @@ function updateStation(){
  const x=bridgeMap[document.getElementById('bridge').value];
  document.getElementById('stationBox').innerHTML=`<span class="pill">${x.bridge}</span><br>대표 수위관측소: <b>${x.station}</b><br>관측소 코드: <b>${x.code}</b><br><span class="small">${x.note}</span>`;
 }
-function saveKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value)); const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">저장 완료</span> 인증키가 이 브라우저에 저장됐습니다.';}
-function loadKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>{const v=localStorage.getItem(id); if(v) document.getElementById(id).value=v;});}
-function clearKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.removeItem(id)); document.getElementById('hrKey').value=''; document.getElementById('tideKey').value=''; const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill warn">삭제 완료</span> 저장된 인증키를 삭제했습니다.';}
+function saveKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value)); const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">저장 완료</span> 인증키가 이 브라우저에 저장됐습니다.';}
+function loadKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>{const v=localStorage.getItem(id); if(v) document.getElementById(id).value=v;});}
+function clearKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>localStorage.removeItem(id)); document.getElementById('hrKey').value=''; document.getElementById('tideKey').value=''; const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill warn">삭제 완료</span> 저장된 인증키를 삭제했습니다.';}
 function cleanKey(k){return (k||'').trim();}
 async function fetchJson(url){
   const r=await fetch(url); const text=await r.text();
@@ -224,7 +232,7 @@ function closest(items, dt){
 }
 async function runAll(){
   saveKeys();
-  const hr=cleanKey(document.getElementById('hrKey').value); const tide=cleanKey(document.getElementById('tideKey').value);
+  const hr=cleanKey(document.getElementById('hrKey').value); const tide=cleanKey(document.getElementById('tideKey').value); const kma=cleanKey(document.getElementById('kmaKey').value);
   if(!hr){alert('한강홍수통제소 인증키를 입력하세요.');return;}
   const x=bridgeMap[document.getElementById('bridge').value]; const interval=document.getElementById('interval').value; const damCode=document.getElementById('damCode').value.trim();
   const inc=document.getElementById('incidentAt').value, cur=document.getElementById('searchAt').value;
@@ -245,7 +253,9 @@ async function runAll(){
     document.getElementById('currentDam').textContent=curD?`${formatNumber(curDamVal)||'값 확인 필요'} ㎥/s`:'조회 실패';
     document.getElementById('raw').textContent=`[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
     if(tide) await loadTide(tide, inc, cur);
-    else {document.getElementById('incidentTide').textContent='조석키 미입력';document.getElementById('currentTide').textContent='조석키 미입력';}
+    else {applyManualTide('조석키 미입력');}
+    if(kma) await loadWind(kma, cur);
+    else {applyManualWind();}
     document.getElementById('status').innerHTML=`<span class="pill ok">조회 완료</span> ${x.bridge} / 대표관측소 ${x.station}(${x.code}) 기준입니다.`;
     makeRecommendation();
   }catch(e){
@@ -268,15 +278,56 @@ async function loadTide(key, inc, cur){
     document.getElementById('currentTide').textContent=fmt(b.c);
     document.getElementById('raw').textContent += `\n\n[조석 URL 예시]\n${a.url.replace(key,'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.j,null,2).slice(0,3000)}`;
   }catch(e){
-    document.getElementById('incidentTide').textContent='조회 실패'; document.getElementById('currentTide').textContent='조회 실패';
-    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}`;
+    applyManualTide('자동조회 실패');
+    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}\n※ GitHub Pages에서 국립해양조사원 API가 CORS로 차단될 수 있습니다. 이 경우 물때는 수동 입력값을 사용합니다.`;
   }
 }
+
+function applyManualTide(reason){
+  const a=(document.getElementById('manualIncidentTide')?.value||'').trim();
+  const b=(document.getElementById('manualCurrentTide')?.value||'').trim();
+  document.getElementById('incidentTide').textContent = a || reason || '수동 입력 전';
+  document.getElementById('currentTide').textContent = b || reason || '수동 입력 전';
+}
+function applyManualWind(){
+  const wd=(document.getElementById('manualWindDir')?.value||'').trim();
+  const ws=(document.getElementById('manualWindSpd')?.value||'').trim();
+  document.getElementById('windDir').textContent=wd||'수동 입력 전';
+  document.getElementById('windSpd').textContent=ws||'수동 입력 전';
+}
+function vecToDir(deg){
+  const dirs=['북','북북동','북동','동북동','동','동남동','남동','남남동','남','남남서','남서','서남서','서','서북서','북서','북북서'];
+  const n=Number(deg); if(!Number.isFinite(n)) return deg||'';
+  return dirs[Math.round(n/22.5)%16]+`(${Math.round(n)}°)`;
+}
+function kmaBase(dt){
+  const d=new Date(dt||Date.now());
+  d.setMinutes(d.getMinutes()-70); // 초단기실황 발표 지연을 피하기 위해 70분 전 기준
+  const yyyy=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  const hh=String(d.getHours()).padStart(2,'0')+'00';
+  return {date:`${yyyy}${mm}${dd}`, time:hh};
+}
+async function loadWind(key, cur){
+  try{
+    const [nx,ny]=(document.getElementById('kmaGrid').value||'60,127').split(',').map(x=>x.trim());
+    const bt=kmaBase(cur); const url=`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(key)}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${bt.date}&base_time=${bt.time}&nx=${nx}&ny=${ny}`;
+    const j=await fetchJson(url); const items=arrFrom(j);
+    let vec='', wsd='';
+    for(const it of items){ if(it.category==='VEC') vec=it.obsrValue; if(it.category==='WSD') wsd=it.obsrValue; }
+    document.getElementById('windDir').textContent=vec?vecToDir(vec):'값 확인 필요';
+    document.getElementById('windSpd').textContent=wsd?`${wsd} m/s`:'값 확인 필요';
+    document.getElementById('raw').textContent += `\n\n[기상청 URL]\n${url.replace(key,'[SERVICE_KEY]')}\n\n[기상청 응답 일부]\n${JSON.stringify(j,null,2).slice(0,3000)}`;
+  }catch(e){
+    applyManualWind();
+    document.getElementById('raw').textContent += `\n\n[기상청 오류]\n${String(e)}\n※ 기상청 API 키 미승인, URL 오류, 또는 CORS 차단 시 풍향·풍속은 수동 입력값을 사용합니다.`;
+  }
+}
+
 function makeRecommendation(){
   const idx=getBridgeIndex();
   const x=bridgeMap[idx]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
-  const wd=document.getElementById('manualWindDir').value.trim(); const ws=document.getElementById('manualWindSpd').value.trim();
-  document.getElementById('windDir').textContent=wd||'수동 입력 전'; document.getElementById('windSpd').textContent=ws||'수동 입력 전';
+  const wd=document.getElementById('windDir').textContent==='수동 입력 전' ? document.getElementById('manualWindDir').value.trim() : document.getElementById('windDir').textContent; const ws=document.getElementById('windSpd').textContent==='수동 입력 전' ? document.getElementById('manualWindSpd').value.trim() : document.getElementById('windSpd').textContent;
+  if(document.getElementById('windDir').textContent==='수동 입력 전'||document.getElementById('manualWindDir').value.trim()) applyManualWind();
   const env=window.lastEnv||{};
   const dam=Number(String(env.currentDam||'').replace(/,/g,''));
   let damText='방류량 조회 전입니다. 조회 후 하류 이동 가능성을 다시 판단하세요.';
@@ -300,7 +351,8 @@ function makeRecommendation(){
     <b>1차 판단:</b> ${uncertainty}<br>
     <b>방류량 판단:</b> <span class="pill ${damClass}">${damText}</span><br>
     <b>흐름 참고:</b> ${flowText}<br>
-    <b>바람 참고:</b> ${wd||'풍향 미입력'} / ${ws||'풍속 미입력'}<br><br>
+    <b>바람 참고:</b> ${document.getElementById('windDir').textContent||'풍향 미입력'} / ${document.getElementById('windSpd').textContent||'풍속 미입력'}<br>
+    <b>물때 참고:</b> 투신 당시 ${document.getElementById('incidentTide').textContent} / 현재 ${document.getElementById('currentTide').textContent}<br><br>
     <b>수색 우선구역:</b><br>
     ① ${zone}<br>
     ② 사고지점 직하류 교각 및 와류 가능 구간<br>

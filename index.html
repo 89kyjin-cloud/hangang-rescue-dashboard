@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v9</title>
+<title>한강 수난사고 환경조회 대시보드 v10</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v9</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v10</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -296,10 +296,10 @@ async function loadTide(key, inc, cur){
     ];
   }
   function tideTimeValue(o){
-    return o.tph_time||o.pred_time||o.fcstTime||o.predictionTime||o.ymdhm||o.YMDHM||o.time||o.tm||o.dateTime||o.datetime||o.dt||getTimeValue(o)||'';
+    return o.predcDt||o.tdlvDt||o.tph_time||o.pred_time||o.fcstTime||o.predictionTime||o.ymdhm||o.YMDHM||o.time||o.tm||o.dateTime||o.datetime||o.dt||getTimeValue(o)||'';
   }
   function tideLevelValue(o){
-    const candidates=['tph_level','pred_level','tide_level','tideLevel','tide','level','wl','predTide','value','fcstValue'];
+    const candidates=['tdlvHgt','tph_level','pred_level','tide_level','tideLevel','tide','level','wl','predTide','value','fcstValue'];
     for(const k of candidates){ if(o[k]!==undefined && o[k]!==null && o[k]!=='' && !Number.isNaN(Number(String(o[k]).replace(/,/g,'')))) return o[k]; }
     for(const [k,v] of Object.entries(o||{})){
       const kk=k.toLowerCase();

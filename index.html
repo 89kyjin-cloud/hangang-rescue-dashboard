@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v18</title>
+<title>한강 수난사고 환경조회 대시보드 v19</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,8 +21,8 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v18</h1>
-  <p>투신 시각·위치 기준 수위·방류량·실측 수위 변화·교량별 보정 물때·풍향·풍속을 확인하는 시제품</p>
+  <h1>한강 수난사고 환경조회 대시보드 v19</h1>
+  <p>투신 시각·위치 기준 수위·방류량·실측 수위 변화·관측시각 검증·교량별 보정 물때·그래프를 확인하는 시제품</p>
 </header>
 <main>
   <section class="card wide">
@@ -291,7 +291,7 @@ function updateWaterTrend(wlItems, targetText, bridge){
 }
 function updateAccuracyBox(){
   const box=document.getElementById('accuracyBox'); if(!box) return;
-  box.innerHTML='정확도 우선순위: <b>실측 수위 변화</b> → 팔당 방류량 → 기상 → 인천 조석 보정. 교량별 시간차는 실측 보정 전까지 추정값으로 표시합니다.';
+  box.innerHTML='정확도 우선순위: <b>실측 수위 변화와 관측시각</b> → 팔당 방류량 → 기상 → 인천 조석 보정. 수치마다 관측시각을 확인하고, 요청시각과 30분 이상 차이나면 검증필요로 처리합니다.';
 }
 async function fetchJson(url){
   const r=await fetch(url); const text=await r.text();
@@ -332,16 +332,45 @@ function getSearchZone(idx, flow){
   return `상·하류 동시 확인: ${both}`;
 }
 function closest(items, dt){
- if(!items.length) return null;
- const target=new Date(dt).getTime();
- let best=items[0], bd=Infinity;
+ const r=closestWithDiff(items, dt);
+ return r ? r.item : null;
+}
+function closestWithDiff(items, dt){
+ if(!items||!items.length) return null;
+ const target=parseLocalDateTime(dt);
+ if(Number.isNaN(target.getTime())) return null;
+ let best=null, bd=Infinity, bestObs=null;
  for(const it of items){
-   const tstr=String(getTimeValue(it)).replace(/[^0-9]/g,'');
-   let d=Infinity;
-   if(tstr.length>=12){ const y=tstr.slice(0,4),mo=tstr.slice(4,6),da=tstr.slice(6,8),h=tstr.slice(8,10),mi=tstr.slice(10,12); d=Math.abs(new Date(`${y}-${mo}-${da}T${h}:${mi}`).getTime()-target); }
-   if(d<bd){bd=d;best=it}
+   const od=parseObsDate(it);
+   if(!od) continue;
+   const d=Math.abs(od.getTime()-target.getTime());
+   if(d<bd){bd=d;best=it;bestObs=od;}
  }
- return best;
+ return best ? {item:best, obsDate:bestObs, diffMs:bd, targetDate:target} : null;
+}
+function fmtDateTimeKo(d){
+  if(!(d instanceof Date)||Number.isNaN(d.getTime())) return '-';
+  const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);
+  const s=x.toISOString().slice(0,16).replace('T',' ');
+  return s;
+}
+function fmtDiffMin(ms){
+  if(!Number.isFinite(ms)) return '-';
+  const m=Math.round(ms/60000);
+  if(m<60) return `${m}분 차이`;
+  return `${Math.floor(m/60)}시간 ${m%60}분 차이`;
+}
+function verifiedMetricText(label, found, valueGetter, unit, maxDiffMin=30){
+  if(!found||!found.item) return `조회 실패\n관측시각 확인불가`;
+  const val=valueGetter(found.item);
+  const diffMin=Math.round(found.diffMs/60000);
+  const valueText=(val!==undefined&&val!==null&&val!=='') ? `${formatNumber(val)}${unit}` : '값 확인 필요';
+  const obs=`관측 ${fmtDateTimeKo(found.obsDate)}`;
+  const gap=`요청시각과 ${fmtDiffMin(found.diffMs)}`;
+  if(diffMin>maxDiffMin){
+    return `${valueText}\n검증필요: ${obs}\n${gap}`;
+  }
+  return `${valueText}\n${obs}`;
 }
 async function runAll(){
   saveKeys();
@@ -356,16 +385,33 @@ async function runAll(){
     const wl=await fetchJson(wlUrl); const dam=await fetchJson(damUrl);
     const wlItems=arrFrom(wl), damItems=arrFrom(dam);
     updateWaterTrend(wlItems, cur, x); updateAccuracyBox();
-    const incW=closest(wlItems,inc) || wlItems[0]; const curW=closest(wlItems,cur) || wlItems[0];
-    const incD=closest(damItems,inc) || damItems[0]; const curD=closest(damItems,cur) || damItems[0];
-    document.getElementById('incidentWater').textContent=incW?`${getWaterValue(incW)||'값 확인 필요'} m`:'조회 실패';
-    document.getElementById('currentWater').textContent=curW?`${getWaterValue(curW)||'값 확인 필요'} m`:'조회 실패';
-    const incDamVal = incD ? getDamOut(incD) : '';
-    const curDamVal = curD ? getDamOut(curD) : '';
-    window.lastEnv = {bridge:x.bridge, station:x.station, code:x.code, incidentWater:getWaterValue(incW)||'', currentWater:getWaterValue(curW)||'', incidentDam:incDamVal||'', currentDam:curDamVal||''};
-    document.getElementById('incidentDam').textContent=incD?`${formatNumber(incDamVal)||'값 확인 필요'} ㎥/s`:'조회 실패';
-    document.getElementById('currentDam').textContent=curD?`${formatNumber(curDamVal)||'값 확인 필요'} ㎥/s`:'조회 실패';
-    document.getElementById('raw').textContent=`[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
+    const incW=closestWithDiff(wlItems,inc); const curW=closestWithDiff(wlItems,cur);
+    const incD=closestWithDiff(damItems,inc); const curD=closestWithDiff(damItems,cur);
+    document.getElementById('incidentWater').textContent=verifiedMetricText('투신 당시 수위',incW,getWaterValue,' m',30);
+    document.getElementById('currentWater').textContent=verifiedMetricText('현재 수위',curW,getWaterValue,' m',30);
+    const incDamVal = incD ? getDamOut(incD.item) : '';
+    const curDamVal = curD ? getDamOut(curD.item) : '';
+    window.lastEnv = {bridge:x.bridge, station:x.station, code:x.code, incidentWater:incW?getWaterValue(incW.item)||'':'', currentWater:curW?getWaterValue(curW.item)||'':'', incidentDam:incDamVal||'', currentDam:curDamVal||'', incidentWaterTime:incW?fmtDateTimeKo(incW.obsDate):'', currentWaterTime:curW?fmtDateTimeKo(curW.obsDate):''};
+    document.getElementById('incidentDam').textContent=verifiedMetricText('투신 당시 방류량',incD,getDamOut,' ㎥/s',30);
+    document.getElementById('currentDam').textContent=verifiedMetricText('현재 방류량',curD,getDamOut,' ㎥/s',30);
+    document.getElementById('raw').textContent=`[검증 요약]
+투신 수위 요청 ${inc} → 관측 ${incW?fmtDateTimeKo(incW.obsDate):'없음'} / ${incW?fmtDiffMin(incW.diffMs):'확인불가'} / 값 ${incW?getWaterValue(incW.item):'-'}m
+현재 수위 요청 ${cur} → 관측 ${curW?fmtDateTimeKo(curW.obsDate):'없음'} / ${curW?fmtDiffMin(curW.diffMs):'확인불가'} / 값 ${curW?getWaterValue(curW.item):'-'}m
+투신 방류량 요청 ${inc} → 관측 ${incD?fmtDateTimeKo(incD.obsDate):'없음'} / ${incD?fmtDiffMin(incD.diffMs):'확인불가'} / 값 ${incD?getDamOut(incD.item):'-'}㎥/s
+현재 방류량 요청 ${cur} → 관측 ${curD?fmtDateTimeKo(curD.obsDate):'없음'} / ${curD?fmtDiffMin(curD.diffMs):'확인불가'} / 값 ${curD?getDamOut(curD.item):'-'}㎥/s
+※ 요청시각과 관측시각이 30분 이상 차이나면 검증필요로 표시합니다.
+
+[수위 URL]
+${wlUrl.replace(hr,'[SERVICE_KEY]')}
+
+[댐 URL]
+${damUrl.replace(hr,'[SERVICE_KEY]')}
+
+[수위 응답]
+${JSON.stringify(wl,null,2).slice(0,6000)}
+
+[댐 응답]
+${JSON.stringify(dam,null,2).slice(0,6000)}`;
     if(tide) await loadTide(tide, inc, cur);
     else {applyManualTide('조석키 미입력');}
     if(kma) await loadWind(kma, cur);
@@ -551,7 +597,21 @@ async function loadTide(key, inc, cur){
     const a=await one(inc), b=await one(cur);
     document.getElementById('incidentTide').textContent=formatResult(a);
     document.getElementById('currentTide').textContent=formatResult(b);
-    document.getElementById('raw').textContent += `\n\n[교량별 보정 조석 v18]\n선택교량: ${selectedBridge.bridge}\n기준조석: ${stationName}\n시간차: 기준 물때 ${fmtOffset(offsetMin)}\n정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.\n※ 교량별 시간차는 초기 추정값입니다. 90% 이상 정확도는 실측 수위 변화로 보정 후 달성 가능합니다.\n\n[조석 API 호출 URL 예시]\n${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.json,null,2).slice(0,4000)}`;
+    if(b.ok) drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge); else drawLineChart('tideChart',[],{});
+    document.getElementById('raw').textContent += `
+
+[교량별 보정 조석 v19]
+선택교량: ${selectedBridge.bridge}
+기준조석: ${stationName}
+시간차: 기준 물때 ${fmtOffset(offsetMin)}
+정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.
+※ 교량별 시간차는 초기 추정값입니다. 실측 수위 변화가 우선입니다.
+
+[조석 API 호출 URL 예시]
+${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}
+
+[조석 응답 일부]
+${JSON.stringify(a.json,null,2).slice(0,4000)}`;
   }catch(e){
     applyManualTide('자동조회 실패');
     const sampleDate=parseLocalDateTime(inc); const baseDate=addMinutes(sampleDate, -offsetMin);

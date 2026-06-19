@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v22</title>
+<title>한강 수난사고 환경조회 대시보드 v23</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -15,13 +15,13 @@
   label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px} input,select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:15px;background:#fff;color:var(--text)} textarea{min-height:76px;resize:vertical}
   button{border:none;border-radius:10px;padding:12px 14px;font-size:15px;font-weight:700;background:var(--accent);color:#fff;cursor:pointer} button.secondary{background:#374151} button.ghost{background:#eef2ff;color:#1e40af}
   .pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:700;margin:2px 4px 2px 0}.warn{background:#fff7ed;color:var(--warn)}.danger{background:#fef2f2;color:var(--danger)}.ok{background:#ecfdf5;color:var(--ok)}
-  .result{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafafa}.metric b{display:block;font-size:18px;margin-top:4px;white-space:pre-line;line-height:1.35}.small{font-size:12px;color:var(--muted);line-height:1.5}.note{font-size:13px;line-height:1.55;background:#f9fafb;border-left:4px solid #9ca3af;padding:10px;border-radius:8px}.hidden{display:none}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;white-space:pre-wrap}.chartBox{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;margin-top:10px}.chartTitle{font-size:13px;font-weight:800;margin:0 0 6px}.chartCanvas{width:100%;height:280px;display:block}.trendGrid{display:grid;grid-template-columns:1fr;gap:10px}.trendCard{border:1px solid var(--line);border-radius:12px;background:#fafafa;padding:12px}.trendCard b{font-size:18px}.badgeUp{color:#047857;font-weight:800}.badgeDown{color:#b91c1c;font-weight:800}.badgeFlat{color:#6b7280;font-weight:800}.explain{font-size:12px;line-height:1.55;color:#374151;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}.chartHelp{font-size:12px;color:#4b5563;line-height:1.55;margin:4px 0 8px}.metric b{font-size:17px}.metric .small b{font-size:12px;display:inline}
+  .result{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafafa}.metric b{display:block;font-size:18px;margin-top:4px;white-space:pre-line;line-height:1.35}.small{font-size:12px;color:var(--muted);line-height:1.5}.note{font-size:13px;line-height:1.55;background:#f9fafb;border-left:4px solid #9ca3af;padding:10px;border-radius:8px}.hidden{display:none}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;white-space:pre-wrap}.chartBox{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;margin-top:10px}.chartTitle{font-size:13px;font-weight:800;margin:0 0 6px}.chartCanvas{width:100%;height:320px;display:block}.trendGrid{display:grid;grid-template-columns:1fr;gap:10px}.trendCard{border:1px solid var(--line);border-radius:12px;background:#fafafa;padding:12px}.trendCard b{font-size:18px}.badgeUp{color:#047857;font-weight:800}.badgeDown{color:#b91c1c;font-weight:800}.badgeFlat{color:#6b7280;font-weight:800}.explain{font-size:12px;line-height:1.55;color:#374151;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}.chartHelp{font-size:13px;color:#374151;line-height:1.6;margin:4px 0 8px;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:8px}.datumHelp{font-size:12px;line-height:1.55;color:#374151;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;padding:9px;margin-top:8px}.metric b{font-size:17px}.metric .small b{font-size:12px;display:inline}
   @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1 / -1}.row{grid-template-columns:1fr 1fr}.row.one{grid-template-columns:1fr}.result{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v22</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v23</h1>
   <p>투신 시각·위치 기준 수위·방류량·실측 수위 변화·관측시각 검증·교량별 보정 물때·그래프를 확인하는 시제품</p>
 </header>
 <main>
@@ -124,12 +124,12 @@
     </div>
     <div class="chartBox">
       <p class="chartTitle">실측 수위 변화 그래프</p>
-      <p id="waterGraphHelp" class="chartHelp">대표 수위관측소의 실제 관측 수위입니다. 빨간 점선은 수색 시작/현재 시각, 파란선은 관측 수위 변화입니다.</p>
+      <p id="waterGraphHelp" class="chartHelp">대표 수위관측소의 실제 관측 수위(m)입니다. 수위 m는 관측소 수위표 기준면에서 물 표면까지의 높이이며, 강바닥 수심이나 해발고도가 아닙니다. 빨간 점선은 수색 시작/현재 시각입니다.</p>
       <canvas id="waterChart" class="chartCanvas"></canvas>
     </div>
     <div class="chartBox">
       <p class="chartTitle">대교 기준 보정 물때 그래프</p>
-      <p id="tideGraphHelp" class="chartHelp">기준 조석관측소(예: 인천)의 조위곡선을 선택 대교 시간차만큼 이동한 추정 그래프입니다. 빨간 점선은 선택 대교 기준 조회시각입니다.</p>
+      <p id="tideGraphHelp" class="chartHelp">인천 등 기준 조석관측소의 바다 조위(cm)를 선택 대교 시간차만큼 이동한 보정 추정 그래프입니다. 실제 한강 수위가 아니라 물때 흐름 참고용입니다.</p>
       <canvas id="tideChart" class="chartCanvas"></canvas>
       <p class="small">※ 이 그래프는 “바다 조석 보정값”입니다. 최종 판단은 위의 실측 수위 변화가 우선입니다.</p>
     </div>
@@ -252,26 +252,42 @@ function fmtHm(d){
 function drawLineChart(canvasId, points, opts={}){
   const canvas=document.getElementById(canvasId); if(!canvas) return;
   const rect=canvas.getBoundingClientRect(); const dpr=window.devicePixelRatio||1;
-  const w=Math.max(320, Math.floor(rect.width||canvas.clientWidth||640)); const h=Math.max(200, Math.floor(rect.height||220));
+  const w=Math.max(320, Math.floor(rect.width||canvas.clientWidth||640)); const h=Math.max(230, Math.floor(rect.height||260));
   canvas.width=w*dpr; canvas.height=h*dpr; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  const pad={l:46,r:14,t:16,b:34}; const xs=points.map(p=>p.x), ys=points.map(p=>p.y).filter(Number.isFinite);
-  if(points.length<2 || !ys.length){ ctx.fillStyle='#6b7280'; ctx.font='13px sans-serif'; ctx.fillText('그래프 데이터 부족', pad.l, h/2); return; }
-  const minX=Math.min(...xs), maxX=Math.max(...xs); let minY=Math.min(...ys), maxY=Math.max(...ys); if(minY===maxY){minY-=1;maxY+=1;}
+  const clean=(points||[])
+    .filter(p=>Number.isFinite(p?.x) && Number.isFinite(p?.y))
+    .sort((a,b)=>a.x-b.x);
+  const pad={l:56,r:18,t:22,b:38};
+  if(clean.length<2){ ctx.fillStyle='#6b7280'; ctx.font='14px sans-serif'; ctx.fillText('그래프 데이터 부족', pad.l, h/2); return; }
+  const xs=clean.map(p=>p.x), ys=clean.map(p=>p.y);
+  const minX=Math.min(...xs), maxX=Math.max(...xs); let minY=Math.min(...ys), maxY=Math.max(...ys);
+  const yr=Math.max(0.01, maxY-minY); minY-=yr*0.12; maxY+=yr*0.12;
+  if(minY===maxY){minY-=1;maxY+=1;}
   const gx=pad.l, gy=pad.t, gw=w-pad.l-pad.r, gh=h-pad.t-pad.b;
   const sx=x=>gx+(x-minX)/(maxX-minX||1)*gw; const sy=y=>gy+gh-(y-minY)/(maxY-minY||1)*gh;
   ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1;
   for(let i=0;i<=4;i++){ const yy=gy+gh*i/4; ctx.beginPath(); ctx.moveTo(gx,yy); ctx.lineTo(gx+gw,yy); ctx.stroke(); }
-  ctx.fillStyle='#6b7280'; ctx.font='11px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  for(let i=0;i<=4;i++){ const val=maxY-(maxY-minY)*i/4; ctx.fillText(val.toFixed(opts.decimals??1)+(opts.unit||''), gx-6, gy+gh*i/4); }
+  ctx.fillStyle='#6b7280'; ctx.font='12px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){ const val=maxY-(maxY-minY)*i/4; ctx.fillText(val.toFixed(opts.decimals??1)+(opts.unit||''), gx-8, gy+gh*i/4); }
   ctx.strokeStyle='#1f6feb'; ctx.lineWidth=3; ctx.beginPath();
-  points.forEach((p,i)=>{ const x=sx(p.x), y=sy(p.y); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y); }); ctx.stroke();
-  if(opts.nowX){ const nx=sx(opts.nowX); ctx.strokeStyle='#b91c1c'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(nx,gy); ctx.lineTo(nx,gy+gh); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='#b91c1c'; ctx.textAlign='center'; ctx.font='12px sans-serif'; ctx.fillText(opts.nowLabel||'기준시각', nx, gy+10); }
-  ctx.fillStyle='#374151'; ctx.textAlign='center'; ctx.textBaseline='top';
-  const ticks=[0,0.25,0.5,0.75,1]; ticks.forEach(t=>{ const x=gx+gw*t; const d=new Date(minX+(maxX-minX)*t); ctx.fillText(fmtHm(d), x, gy+gh+8); });
+  let started=false; const maxGap=(opts.maxGapMinutes||45)*60000;
+  clean.forEach((p,i)=>{
+    const x=sx(p.x), y=sy(p.y);
+    const prev=clean[i-1];
+    if(!started || (prev && p.x-prev.x>maxGap)){ ctx.moveTo(x,y); started=true; }
+    else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // point markers make sparse data easier to read
+  ctx.fillStyle='#1f6feb';
+  clean.forEach(p=>{ const x=sx(p.x), y=sy(p.y); ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill(); });
+  if(opts.nowX){ const nx=sx(opts.nowX); if(nx>=gx && nx<=gx+gw){ ctx.strokeStyle='#b91c1c'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(nx,gy); ctx.lineTo(nx,gy+gh); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='#b91c1c'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.font='12px sans-serif'; ctx.fillText(opts.nowLabel||'기준시각', nx, gy+4); } }
+  ctx.fillStyle='#374151'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.font='12px sans-serif';
+  const ticks=[0,0.25,0.5,0.75,1]; ticks.forEach(t=>{ const x=gx+gw*t; const d=new Date(minX+(maxX-minX)*t); ctx.fillText(fmtHm(d), x, gy+gh+10); });
 }
 function analyzeWaterTrend(wlItems, targetText){
   const target=parseLocalDateTime(targetText); const rows=[];
-  for(const it of wlItems||[]){ const d=parseObsDate(it); const v=Number(String(getWaterValue(it)).replace(/,/g,'')); if(d && Number.isFinite(v)) rows.push({d,v,o:it}); }
+  for(const it of wlItems||[]){ const d=parseObsDate(it); const raw=getWaterValue(it); const v=Number(String(raw).replace(/,/g,'')); if(d && Number.isFinite(v) && v>0.05) rows.push({d,v,o:it}); }
   rows.sort((a,b)=>a.d-b.d); if(!rows.length) return null;
   const nearest=(dt)=>{let best=null,bd=Infinity; for(const r of rows){const dd=Math.abs(r.d-dt); if(dd<bd){bd=dd;best=r;}} return best?{...best,diff:bd}:null;};
   const cur=nearest(target); const m10=nearest(new Date(target.getTime()-10*60000)); const m30=nearest(new Date(target.getTime()-30*60000)); const m60=nearest(new Date(target.getTime()-60*60000));
@@ -285,23 +301,23 @@ function analyzeWaterTrend(wlItems, targetText){
 function updateWaterTrend(wlItems, targetText, bridge){
   const res=analyzeWaterTrend(wlItems,targetText); const box=document.getElementById('waterTrendBox'); if(!box) return;
   const help=document.getElementById('waterGraphHelp');
-  if(help) help.innerHTML=`<b>그래프 기준:</b> ${bridge.bridge}의 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b> · 빨간 점선 = 수색 시작/현재 시각 · 파란선 = 실제 관측 수위(m)`;
+  if(help) help.innerHTML=`<b>실측 수위 그래프 기준</b><br>선택 대교 <b>${bridge.bridge}</b> 주변 직접 센서가 아니라, 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b>의 실제 관측 수위입니다.<br><b>m 의미:</b> 관측소 수위표 기준면에서 물 표면까지의 높이입니다. 강바닥 수심·해발고도·교량 하부 높이가 아닙니다.<br><b>보는 법:</b> 파란선이 올라가면 수위 상승, 내려가면 수위 하강. 빨간 점선은 수색 시작/현재 시각입니다.`;
   if(!res||!res.cur){ box.innerHTML='수위 변화 데이터 부족'; drawLineChart('waterChart',[],{}); return; }
   const f=x=>Number.isFinite(x)?`${x>=0?'+':''}${x.toFixed(3)}m`:'-';
   const target=parseLocalDateTime(targetText).getTime();
   const diffMin=Math.round((res.cur.diff||0)/60000);
-  const basis=`<span class="small">기준: ${bridge.bridge} 주변 직접값이 아니라 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b>의 실측 수위입니다.</span>`;
+  const basis=`<div class="datumHelp"><b>수위 기준 설명</b><br>${bridge.bridge} 직접 측정값이 아니라 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b>의 실측 수위입니다.<br><b>m</b>는 관측소 수위표 기준면에서 물 표면까지의 높이입니다. 강바닥으로부터의 수심이 아니므로 절대값보다 <b>10분·30분·1시간 변화량</b>이 더 중요합니다.</div>`;
   if(diffMin>30){
     box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="badgeFlat">변화 판정 보류</span><br>요청시각 근처 실측 수위가 없습니다.<br>가장 가까운 관측 ${fmtDateTimeKo(res.cur.d)} (${diffMin}분 차이)<br>${basis}`;
     drawLineChart('waterChart',[],{}); return;
   }
-  box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="${res.cls}">${res.judge}</span><br>현재 기준 관측시각 ${fmtDateTimeKo(res.cur.d)}: <b>${res.cur.v.toFixed(3)}m</b><br>10분 ${f(res.d10)} · 30분 ${f(res.d30)} · 1시간 ${f(res.d60)}<br>${basis}`;
+  box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="${res.cls}">${res.judge}</span><br>현재 기준 관측시각 ${fmtDateTimeKo(res.cur.d)}: <b>${res.cur.v.toFixed(2)}m</b><br>10분 ${f(res.d10)} · 30분 ${f(res.d30)} · 1시간 ${f(res.d60)}<br><span class="small">판정 기준: 1시간 변화량이 +0.03m 초과면 상승, -0.03m 미만이면 하강, 그 사이면 정체/변화 미미.</span><br>${basis}`;
   const pts=res.rows.filter(r=>Math.abs(r.d-target)<=2*3600*1000).map(r=>({x:r.d.getTime(),y:r.v}));
-  drawLineChart('waterChart',pts,{unit:'m',decimals:2,nowX:target, nowLabel:'현재/수색시각'});
+  drawLineChart('waterChart',pts,{unit:'m',decimals:2,nowX:target, nowLabel:'현재/수색시각', maxGapMinutes:40});
 }
 function updateAccuracyBox(){
   const box=document.getElementById('accuracyBox'); if(!box) return;
-  box.innerHTML='<b>판단 우선순위</b><br>1) 선택 대교의 대표 수위관측소 실측 변화량<br>2) 팔당댐 방류량<br>3) 풍향·풍속<br>4) 인천 조석을 대교 시간차로 보정한 추정 물때<br><br><span class="small">물때 그래프는 보조자료이고, 실제 물이 오르내리는지는 실측 수위 그래프를 우선 봅니다.</span>';
+  box.innerHTML='<b>판단 우선순위</b><br>1) 선택 대교의 대표 수위관측소 실측 변화량<br>2) 팔당댐 방류량<br>3) 풍향·풍속<br>4) 인천 조석을 대교 시간차로 보정한 추정 물때<br><br><span class="small">물때 그래프는 보조자료이고, 실제 물이 오르내리는지는 실측 수위 그래프를 우선 봅니다. 수위(m)는 관측소 기준면 대비 물 표면 높이입니다.</span>';
 }
 async function fetchJson(url){
   const r=await fetch(url); const text=await r.text();
@@ -321,7 +337,7 @@ function arrFrom(obj){
   return [obj];
 }
 function getTimeValue(o){return o.ymdhm||o.obsymdhm||o.datetime||o.time||o.date||o.tm||o.YMDHM||o.ymd||''}
-function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.swl||o.SWL||o.value||''}
+function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.WATERLEVEL||o.swl||o.SWL||o.wlobs||o.WLOBS||''}
 function getDamOut(o){return o.tototf||o.TOTOTF||o.otf||o.OTF||o.edq||o.outflow||o.discharge||''}
 function formatNumber(v, digits=1){
   if(v===undefined||v===null||v==='') return '';
@@ -659,7 +675,7 @@ async function loadTide(key, inc, cur){
     const a=await one(inc), b=await one(cur);
     document.getElementById('incidentTide').textContent=formatResult(a);
     document.getElementById('currentTide').textContent=formatResult(b);
-    if(b.ok){ drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge); const th=document.getElementById('tideGraphHelp'); if(th) th.innerHTML=`<b>그래프 기준:</b> ${stationName} 조위(cm)를 ${selectedBridge.bridge} 시간차 <b>기준 물때 ${fmtOffset(offsetMin)}</b> 만큼 이동한 추정 곡선입니다. 빨간 점선 = ${selectedBridge.bridge} 기준 현재/수색시각.`; }
+    if(b.ok){ drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge); const th=document.getElementById('tideGraphHelp'); if(th) th.innerHTML=`<b>대교 기준 보정 물때 그래프 기준</b><br>파란선은 <b>${stationName}</b> 바다 조위(cm)를 ${selectedBridge.bridge} 시간차 <b>기준 물때 ${fmtOffset(offsetMin)}</b> 만큼 뒤로 이동한 <b>추정 물때 곡선</b>입니다.<br>이 그래프는 실제 한강 수위(m)가 아니라, 만조·간조 흐름을 이해하기 위한 보조자료입니다. 최종 판단은 위 실측 수위 그래프를 우선합니다.`; }
     else drawLineChart('tideChart',[],{});
     document.getElementById('raw').textContent += `\n\n[교량별 보정 조석 v21]\n선택교량: ${selectedBridge.bridge}\n기준조석: ${stationName}\n시간차: 기준 물때 ${fmtOffset(offsetMin)}\n정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.\n※ 교량별 시간차는 초기 추정값입니다. 90% 이상 정확도는 실측 수위 변화로 보정 후 달성 가능합니다.\n\n[조석 API 호출 URL 예시]\n${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.json,null,2).slice(0,4000)}`;
   }catch(e){
@@ -778,6 +794,6 @@ function makeRecommendation(){
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', init);}else{init();}
 </script>
-<!-- v22: separate incident/current HRFCO range queries, precise metric formatting, clearer graph explanations -->
+<!-- v23: filter invalid water-level points, clarify water-level datum, improve chart readability and graph descriptions -->
 </body>
 </html>

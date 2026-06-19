@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v6</title>
+<title>한강 수난사고 환경조회 대시보드 v7</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v6</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v7</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -121,6 +121,7 @@
       <div><label>투신 당시 물때 수동 입력</label><input id="manualIncidentTide" placeholder="예: 간조 후 밀물 시작"></div>
       <div><label>현재 물때 수동 입력</label><input id="manualCurrentTide" placeholder="예: 만조 전 정체"></div>
       <div><label>기상청 격자(nx,ny)</label><input id="kmaGrid" value="60,127" placeholder="예: 60,127"></div>
+      <div><button class="ghost" onclick="openTideLinks()">조석 직접조회 링크 열기</button></div>
     </div>
     <button class="secondary" onclick="makeRecommendation()">수색 참고 의견 생성</button>
     <div id="recommendation" class="note" style="margin-top:10px">수색 참고 의견이 여기에 표시됩니다.</div>
@@ -265,22 +266,51 @@ async function runAll(){
 }
 async function loadTide(key, inc, cur){
   const station=document.getElementById('tideStation').value;
-  async function one(dt){
+  function urlsFor(dt){
     const d=new Date(dt); const ymd=d.toISOString().slice(0,10).replace(/-/g,'');
-    const url=`https://www.khoa.go.kr/api/oceangrid/tideObsPre/search.do?ServiceKey=${encodeURIComponent(key)}&ObsCode=${station}&Date=${ymd}&ResultType=json`;
-    const j=await fetchJson(url); const items=arrFrom(j.result||j);
-    const c=closest(items,dt); return {url,j,c};
+    const k=encodeURIComponent(key);
+    return [
+      `https://www.khoa.go.kr/api/oceangrid/tideObsPre/search.do?ServiceKey=${k}&ObsCode=${station}&Date=${ymd}&ResultType=json`,
+      `https://www.khoa.go.kr/api/oceangrid/tideObsPre/search.do?serviceKey=${k}&obsCode=${station}&date=${ymd}&resultType=json`,
+      `https://www.khoa.go.kr/api/oceangrid/tideFcst/search.do?ServiceKey=${k}&ObsCode=${station}&Date=${ymd}&ResultType=json`
+    ];
+  }
+  async function one(dt){
+    let lastErr=null;
+    for(const url of urlsFor(dt)){
+      try{
+        const j=await fetchJson(url);
+        const base=j.result||j.response?.body||j;
+        const items=arrFrom(base);
+        if(items.length){ const c=closest(items,dt) || items[0]; return {url,j,c,ok:true}; }
+        lastErr={url,j};
+      }catch(e){ lastErr={url,error:String(e)}; }
+    }
+    return {ok:false,lastErr,urls:urlsFor(dt)};
   }
   try{
     const a=await one(inc), b=await one(cur);
-    const fmt=(o)=>{ if(!o) return '값 확인 필요'; const h=o.tph_time||o.pred_time||getTimeValue(o)||''; const v=o.tph_level||o.pred_level||o.tide_level||o.level||''; return `${h} / ${v? v+' cm':''}`; };
+    if(!a.ok || !b.ok) throw new Error('조석 응답을 읽지 못했습니다. CORS 또는 API 응답 형식 문제일 수 있습니다.');
+    const fmt=(o)=>{ if(!o) return '값 확인 필요'; const h=o.tph_time||o.pred_time||o.record_time||getTimeValue(o)||''; const v=o.tph_level||o.pred_level||o.tide_level||o.level||''; return `${h} / ${v? v+' cm':''}`; };
     document.getElementById('incidentTide').textContent=fmt(a.c);
     document.getElementById('currentTide').textContent=fmt(b.c);
     document.getElementById('raw').textContent += `\n\n[조석 URL 예시]\n${a.url.replace(key,'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.j,null,2).slice(0,3000)}`;
   }catch(e){
     applyManualTide('자동조회 실패');
-    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}\n※ GitHub Pages에서 국립해양조사원 API가 CORS로 차단될 수 있습니다. 이 경우 물때는 수동 입력값을 사용합니다.`;
+    const incUrls=urlsFor(inc).map(u=>u.replace(key,'[SERVICE_KEY]')).join('\n');
+    const curUrls=urlsFor(cur).map(u=>u.replace(key,'[SERVICE_KEY]')).join('\n');
+    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}\n\n[조석 직접조회 URL 후보 - 투신시각]\n${incUrls}\n\n[조석 직접조회 URL 후보 - 현재시각]\n${curUrls}\n\n※ GitHub Pages에서 국립해양조사원 API가 CORS로 차단되면 브라우저가 응답을 읽지 못합니다. 이 경우 위 직접조회 링크를 새 탭에서 열어 물때 값을 확인한 뒤 수동 입력칸에 넣어 사용하세요.`;
   }
+}
+
+function openTideLinks(){
+  const key=cleanKey(document.getElementById('tideKey').value);
+  if(!key){ alert('조석 API 인증키를 먼저 입력하세요.'); return; }
+  const station=document.getElementById('tideStation').value;
+  const dt=document.getElementById('incidentAt').value || document.getElementById('searchAt').value;
+  const d=new Date(dt); const ymd=d.toISOString().slice(0,10).replace(/-/g,'');
+  const url=`https://www.khoa.go.kr/api/oceangrid/tideObsPre/search.do?ServiceKey=${encodeURIComponent(key)}&ObsCode=${station}&Date=${ymd}&ResultType=json`;
+  window.open(url,'_blank');
 }
 
 function applyManualTide(reason){

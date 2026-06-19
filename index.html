@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v11</title>
+<title>한강 수난사고 환경조회 대시보드 v12</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v11</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v12</h1>
   <p>투신 시각·위치 기준으로 수위·방류량·물때·풍향·풍속을 한 화면에서 확인하는 1차 시제품</p>
 </header>
 <main>
@@ -277,26 +277,17 @@ async function loadTide(key, inc, cur){
     const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);
     return local.toISOString().slice(0,10).replace(/-/g,'');
   }
-  function timeNum(dt){
+  function targetMs(dt){
     const d=new Date(dt);
-    if(Number.isNaN(d.getTime())) return 0;
-    const local=new Date(d.getTime()-d.getTimezoneOffset()*60000);
-    return Number(local.toISOString().slice(11,16).replace(':',''));
+    if(Number.isNaN(d.getTime())) return Date.now();
+    return d.getTime();
   }
-  function urlsFor(dt){
+  function urlsFor(dt, pageNo=1){
     const ymd=ymdOf(dt);
     const k=encodeURIComponent(key);
-    const common=`serviceKey=${k}&pageNo=1&numOfRows=300&type=json&obsCode=${encodeURIComponent(station)}&date=${ymd}&interval=10`;
-    const common2=`ServiceKey=${k}&pageNo=1&numOfRows=300&type=json&obsCode=${encodeURIComponent(station)}&date=${ymd}&interval=10`;
-    const common3=`serviceKey=${k}&pageNo=1&numOfRows=300&type=json&obsCode=${encodeURIComponent(station)}&baseDate=${ymd}&interval=10`;
+    const common=`serviceKey=${k}&pageNo=${pageNo}&numOfRows=300&type=json&obsCode=${encodeURIComponent(station)}&date=${ymd}&interval=10`;
     return [
-      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${common}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime/getTideFcstTimeApiService?${common}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime/getTideFcstTime?${common}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTime?${common}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime?${common}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${common2}`,
-      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${common3}`
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${common}`
     ];
   }
   function tideTimeValue(o){
@@ -307,63 +298,90 @@ async function loadTide(key, inc, cur){
     for(const k of candidates){ if(o[k]!==undefined && o[k]!==null && o[k]!=='' && !Number.isNaN(Number(String(o[k]).replace(/,/g,'')))) return o[k]; }
     for(const [k,v] of Object.entries(o||{})){
       const kk=k.toLowerCase();
-      if((kk.includes('level')||kk.includes('tide')||kk==='wl') && !Number.isNaN(Number(String(v).replace(/,/g,'')))) return v;
+      if((kk.includes('hgt')||kk.includes('level')||kk.includes('tide')||kk==='wl') && !Number.isNaN(Number(String(v).replace(/,/g,'')))) return v;
     }
     return '';
   }
-  function timeScore(o, dt){
-    const raw=String(tideTimeValue(o)).replace(/[^0-9]/g,'');
-    const targetTime=timeNum(dt);
-    if(raw.length>=12){
-      const hhmm=Number(raw.slice(8,12));
-      return Math.abs(hhmm-targetTime);
+  function parseTideMs(o, dt){
+    const raw=String(tideTimeValue(o));
+    let nums=raw.replace(/[^0-9]/g,'');
+    if(nums.length>=12){
+      const y=nums.slice(0,4), mo=nums.slice(4,6), da=nums.slice(6,8), hh=nums.slice(8,10), mi=nums.slice(10,12);
+      return new Date(`${y}-${mo}-${da}T${hh}:${mi}:00`).getTime();
     }
-    if(raw.length>=4){ return Math.abs(Number(raw.slice(-4))-targetTime); }
-    return Infinity;
+    if(nums.length>=4){
+      const ymd=ymdOf(dt); const hh=nums.slice(-4,-2), mi=nums.slice(-2);
+      return new Date(`${ymd.slice(0,4)}-${ymd.slice(4,6)}-${ymd.slice(6,8)}T${hh}:${mi}:00`).getTime();
+    }
+    return NaN;
+  }
+  function arrFromAny(j){
+    return arrFrom(j);
+  }
+  async function getAllItems(dt){
+    const all=[]; let usedUrl=''; let sample=null;
+    for(let page=1; page<=5; page++){
+      const url=urlsFor(dt,page)[0];
+      usedUrl ||= url;
+      const j=await fetchJson(url);
+      if(!sample) sample=j;
+      const items=arrFromAny(j);
+      if(!items.length) break;
+      all.push(...items);
+      if(items.length<300) break;
+    }
+    return {items:all, url:usedUrl, j:sample};
   }
   function choose(items, dt){
-    const valid=(items||[]).filter(o=>tideLevelValue(o)!=='');
-    if(!valid.length) return {c:null, prev:null, next:null};
-    const sorted=[...valid].sort((a,b)=>timeScore(a,dt)-timeScore(b,dt));
-    const c=sorted[0];
-    // 흐름 판단용: 목표시각 전후의 가까운 2개를 찾는다.
-    const target=timeNum(dt);
-    const withT=valid.map(o=>({o,t:Number(String(tideTimeValue(o)).replace(/[^0-9]/g,'').slice(-4))})).filter(x=>Number.isFinite(x.t));
-    const prev=[...withT].filter(x=>x.t<=target).sort((a,b)=>b.t-a.t)[0]?.o || null;
-    const next=[...withT].filter(x=>x.t>=target).sort((a,b)=>a.t-b.t)[0]?.o || null;
-    return {c,prev,next};
+    const tgt=targetMs(dt);
+    const valid=(items||[]).map(o=>({o, ms:parseTideMs(o,dt), lv:Number(String(tideLevelValue(o)).replace(/,/g,''))}))
+      .filter(x=>Number.isFinite(x.ms)&&Number.isFinite(x.lv))
+      .sort((a,b)=>a.ms-b.ms);
+    if(!valid.length) return {c:null, prev:null, next:null, high:null, low:null};
+    const c=valid.reduce((best,x)=>Math.abs(x.ms-tgt)<Math.abs(best.ms-tgt)?x:best, valid[0]);
+    const idx=valid.findIndex(x=>x===c);
+    const prev=valid[Math.max(0, idx-1)] || null;
+    const next=valid[Math.min(valid.length-1, idx+1)] || null;
+    const high=valid.reduce((a,b)=>b.lv>a.lv?b:a, valid[0]);
+    const low=valid.reduce((a,b)=>b.lv<a.lv?b:a, valid[0]);
+    return {c,prev,next,high,low,valid};
   }
   async function one(dt){
-    let lastErr=null;
-    for(const url of urlsFor(dt)){
-      try{
-        const j=await fetchJson(url);
-        const items=arrFrom(j);
-        if(items.length){
-          const picked=choose(items,dt);
-          if(picked.c) return {url,j,items,picked,ok:true};
-        }
-        lastErr={url,j};
-      }catch(e){ lastErr={url,error:String(e)}; }
+    try{
+      const {items,url,j}=await getAllItems(dt);
+      const picked=choose(items,dt);
+      if(picked.c) return {url,j,items,picked,ok:true};
+      return {ok:false,lastErr:{url,j,items}};
+    }catch(e){
+      return {ok:false,lastErr:{error:String(e)},urls:urlsFor(dt)};
     }
-    return {ok:false,lastErr,urls:urlsFor(dt)};
+  }
+  function hhmm(ms){
+    const d=new Date(ms); if(Number.isNaN(d.getTime())) return '';
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   }
   function fmt(res, dt){
     if(!res?.picked?.c) return '값 확인 필요';
-    const c=res.picked.c, p=res.picked.prev, n=res.picked.next;
-    const h=String(tideTimeValue(c));
-    const lv=Number(String(tideLevelValue(c)).replace(/,/g,''));
+    const {c,prev,next,high,low}=res.picked;
+    const lv=c.lv;
     let flow='흐름 확인';
-    if(p && n){
-      const pv=Number(String(tideLevelValue(p)).replace(/,/g,''));
-      const nv=Number(String(tideLevelValue(n)).replace(/,/g,''));
-      if(Number.isFinite(pv)&&Number.isFinite(nv)){
-        if(nv>pv) flow='밀물/상승'; else if(nv<pv) flow='썰물/하강'; else flow='정체';
-      }
+    if(prev && next){
+      const delta=next.lv-prev.lv;
+      const per=Math.abs(delta).toFixed(1);
+      if(delta>0.2) flow=`밀물 진행중 ↑ (+${per}cm)`;
+      else if(delta<-0.2) flow=`썰물 진행중 ↓ (-${per}cm)`;
+      else flow='정체 구간';
     }
-    const hhmm=String(h).replace(/[^0-9]/g,'');
-    const showTime=hhmm.length>=12?`${hhmm.slice(8,10)}:${hhmm.slice(10,12)}`:(hhmm.length>=4?`${hhmm.slice(-4,-2)}:${hhmm.slice(-2)}`:h);
-    return `${stationName} ${showTime} / ${Number.isFinite(lv)?lv+' cm':'조위 확인'} / ${flow}`;
+    let phase='';
+    if(high && low){
+      const minHigh=Math.abs(c.ms-high.ms)/60000;
+      const minLow=Math.abs(c.ms-low.ms)/60000;
+      if(minHigh<=20) phase=' / 만조 전후';
+      else if(minLow<=20) phase=' / 간조 전후';
+      else if(c.ms<high.ms && c.ms>low.ms) phase=' / 만조 접근';
+      else if(c.ms>high.ms || c.ms<low.ms) phase=' / 간조 접근';
+    }
+    return `${stationName} ${hhmm(c.ms)} / ${lv.toFixed(1)} cm / ${flow}${phase}`;
   }
   try{
     const a=await one(inc), b=await one(cur);

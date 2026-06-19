@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v19</title>
+<title>한강 수난사고 환경조회 대시보드 v21</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -21,7 +21,7 @@
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v19</h1>
+  <h1>한강 수난사고 환경조회 대시보드 v21</h1>
   <p>투신 시각·위치 기준 수위·방류량·실측 수위 변화·관측시각 검증·교량별 보정 물때·그래프를 확인하는 시제품</p>
 </header>
 <main>
@@ -284,8 +284,13 @@ function updateWaterTrend(wlItems, targetText, bridge){
   const res=analyzeWaterTrend(wlItems,targetText); const box=document.getElementById('waterTrendBox'); if(!box) return;
   if(!res||!res.cur){ box.innerHTML='수위 변화 데이터 부족'; drawLineChart('waterChart',[],{}); return; }
   const f=x=>Number.isFinite(x)?`${x>=0?'+':''}${x.toFixed(3)}m`:'-';
-  box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="${res.cls}">${res.judge}</span><br>현재 기준 ${fmtHm(res.cur.d)}: <b>${res.cur.v.toFixed(3)}m</b><br>10분 변화 ${f(res.d10)} · 30분 변화 ${f(res.d30)} · 1시간 변화 ${f(res.d60)}<br><span class="small">※ 실제 수위관측소 변화량 기준. 물때 보정값보다 우선 판단.</span>`;
   const target=parseLocalDateTime(targetText).getTime();
+  const diffMin=Math.round((res.cur.diff||0)/60000);
+  if(diffMin>30){
+    box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="badgeFlat">변화 판정 보류</span><br>요청시각 근처 실측 수위가 없습니다.<br>가장 가까운 관측 ${fmtDateTimeKo(res.cur.d)} (${diffMin}분 차이)<br><span class="small">※ 30분 이상 차이나는 수위는 판정에 사용하지 않습니다.</span>`;
+    drawLineChart('waterChart',[],{}); return;
+  }
+  box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="${res.cls}">${res.judge}</span><br>현재 기준 ${fmtHm(res.cur.d)}: <b>${res.cur.v.toFixed(3)}m</b><br>10분 변화 ${f(res.d10)} · 30분 변화 ${f(res.d30)} · 1시간 변화 ${f(res.d60)}<br><span class="small">※ 실제 수위관측소 변화량 기준. 물때 보정값보다 우선 판단.</span>`;
   const pts=res.rows.filter(r=>Math.abs(r.d-target)<=2*3600*1000).map(r=>({x:r.d.getTime(),y:r.v}));
   drawLineChart('waterChart',pts,{unit:'m',decimals:2,nowX:target});
 }
@@ -360,6 +365,24 @@ function fmtDiffMin(ms){
   if(m<60) return `${m}분 차이`;
   return `${Math.floor(m/60)}시간 ${m%60}분 차이`;
 }
+function formatYmdhm(d){
+  if(!(d instanceof Date)||Number.isNaN(d.getTime())) return '';
+  const y=d.getFullYear();
+  const mo=String(d.getMonth()+1).padStart(2,'0');
+  const da=String(d.getDate()).padStart(2,'0');
+  const h=String(d.getHours()).padStart(2,'0');
+  const mi=String(Math.floor(d.getMinutes()/10)*10).padStart(2,'0');
+  return `${y}${mo}${da}${h}${mi}`;
+}
+function queryRangeAround(aText,bText,padHours=3){
+  const a=parseLocalDateTime(aText), b=parseLocalDateTime(bText);
+  const times=[a,b].filter(d=>d instanceof Date&&!Number.isNaN(d.getTime()));
+  const now=new Date();
+  if(!times.length) times.push(now);
+  const min=new Date(Math.min(...times.map(d=>d.getTime()))-padHours*3600000);
+  const max=new Date(Math.max(...times.map(d=>d.getTime()))+padHours*3600000);
+  return {s:formatYmdhm(min), e:formatYmdhm(max), min, max};
+}
 function verifiedMetricText(label, found, valueGetter, unit, maxDiffMin=30){
   if(!found||!found.item) return `조회 실패\n관측시각 확인불가`;
   const val=valueGetter(found.item);
@@ -380,8 +403,11 @@ async function runAll(){
   const inc=document.getElementById('incidentAt').value, cur=document.getElementById('searchAt').value;
   document.getElementById('status').innerHTML='조회 중입니다...'; document.getElementById('raw').textContent='';
   try{
-    const wlUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}.json`;
-    const damUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}.json`;
+    const range=queryRangeAround(inc,cur,3);
+    // 한강홍수통제소 기간조회 형식: /waterlevel/list/10M/{code}/{sdate}/{edate}.json
+    // 현재값만 조회하면 투신 당시/현재 수위가 같아지는 문제가 생기므로 반드시 기간조회로 호출한다.
+    const wlUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}/${range.s}/${range.e}.json`;
+    const damUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}/${range.s}/${range.e}.json`;
     const wl=await fetchJson(wlUrl); const dam=await fetchJson(damUrl);
     const wlItems=arrFrom(wl), damItems=arrFrom(dam);
     updateWaterTrend(wlItems, cur, x); updateAccuracyBox();
@@ -394,24 +420,7 @@ async function runAll(){
     window.lastEnv = {bridge:x.bridge, station:x.station, code:x.code, incidentWater:incW?getWaterValue(incW.item)||'':'', currentWater:curW?getWaterValue(curW.item)||'':'', incidentDam:incDamVal||'', currentDam:curDamVal||'', incidentWaterTime:incW?fmtDateTimeKo(incW.obsDate):'', currentWaterTime:curW?fmtDateTimeKo(curW.obsDate):''};
     document.getElementById('incidentDam').textContent=verifiedMetricText('투신 당시 방류량',incD,getDamOut,' ㎥/s',30);
     document.getElementById('currentDam').textContent=verifiedMetricText('현재 방류량',curD,getDamOut,' ㎥/s',30);
-    document.getElementById('raw').textContent=`[검증 요약]
-투신 수위 요청 ${inc} → 관측 ${incW?fmtDateTimeKo(incW.obsDate):'없음'} / ${incW?fmtDiffMin(incW.diffMs):'확인불가'} / 값 ${incW?getWaterValue(incW.item):'-'}m
-현재 수위 요청 ${cur} → 관측 ${curW?fmtDateTimeKo(curW.obsDate):'없음'} / ${curW?fmtDiffMin(curW.diffMs):'확인불가'} / 값 ${curW?getWaterValue(curW.item):'-'}m
-투신 방류량 요청 ${inc} → 관측 ${incD?fmtDateTimeKo(incD.obsDate):'없음'} / ${incD?fmtDiffMin(incD.diffMs):'확인불가'} / 값 ${incD?getDamOut(incD.item):'-'}㎥/s
-현재 방류량 요청 ${cur} → 관측 ${curD?fmtDateTimeKo(curD.obsDate):'없음'} / ${curD?fmtDiffMin(curD.diffMs):'확인불가'} / 값 ${curD?getDamOut(curD.item):'-'}㎥/s
-※ 요청시각과 관측시각이 30분 이상 차이나면 검증필요로 표시합니다.
-
-[수위 URL]
-${wlUrl.replace(hr,'[SERVICE_KEY]')}
-
-[댐 URL]
-${damUrl.replace(hr,'[SERVICE_KEY]')}
-
-[수위 응답]
-${JSON.stringify(wl,null,2).slice(0,6000)}
-
-[댐 응답]
-${JSON.stringify(dam,null,2).slice(0,6000)}`;
+    document.getElementById('raw').textContent=`[기간조회 범위]\n${range.s} ~ ${range.e}\n※ 투신시각과 현재시각을 모두 포함하도록 ±3시간 범위로 조회합니다.\n\n[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
     if(tide) await loadTide(tide, inc, cur);
     else {applyManualTide('조석키 미입력');}
     if(kma) await loadWind(kma, cur);
@@ -446,7 +455,9 @@ async function loadTide(key, inc, cur){
 
   function buildUrl(baseDate, pageNo=1, rows=1440){
     const ymd=ymdOfDate(baseDate);
-    const params=`serviceKey=${encodeURIComponent(key)}&pageNo=${pageNo}&numOfRows=${rows}&type=json&obsCode=${encodeURIComponent(station)}&date=${ymd}`;
+    // 공공데이터포털 조석예보(시계열)는 예보지점 코드, 요청일자, 시간 간격을 파라미터로 사용한다.
+    // 포털/기관 문서에서 날짜 파라미터명이 혼재할 수 있어 date/searchDate/reqDate/baseDate를 함께 전달한다.
+    const params=`serviceKey=${encodeURIComponent(key)}&pageNo=${pageNo}&numOfRows=${rows}&type=json&obsCode=${encodeURIComponent(station)}&date=${ymd}&searchDate=${ymd}&reqDate=${ymd}&baseDate=${ymd}&interval=1`;
     return `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${params}`;
   }
 
@@ -597,21 +608,9 @@ async function loadTide(key, inc, cur){
     const a=await one(inc), b=await one(cur);
     document.getElementById('incidentTide').textContent=formatResult(a);
     document.getElementById('currentTide').textContent=formatResult(b);
-    if(b.ok) drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge); else drawLineChart('tideChart',[],{});
-    document.getElementById('raw').textContent += `
-
-[교량별 보정 조석 v19]
-선택교량: ${selectedBridge.bridge}
-기준조석: ${stationName}
-시간차: 기준 물때 ${fmtOffset(offsetMin)}
-정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.
-※ 교량별 시간차는 초기 추정값입니다. 실측 수위 변화가 우선입니다.
-
-[조석 API 호출 URL 예시]
-${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}
-
-[조석 응답 일부]
-${JSON.stringify(a.json,null,2).slice(0,4000)}`;
+    if(b.ok) drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge);
+    else drawLineChart('tideChart',[],{});
+    document.getElementById('raw').textContent += `\n\n[교량별 보정 조석 v21]\n선택교량: ${selectedBridge.bridge}\n기준조석: ${stationName}\n시간차: 기준 물때 ${fmtOffset(offsetMin)}\n정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.\n※ 교량별 시간차는 초기 추정값입니다. 90% 이상 정확도는 실측 수위 변화로 보정 후 달성 가능합니다.\n\n[조석 API 호출 URL 예시]\n${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.json,null,2).slice(0,4000)}`;
   }catch(e){
     applyManualTide('자동조회 실패');
     const sampleDate=parseLocalDateTime(inc); const baseDate=addMinutes(sampleDate, -offsetMin);
@@ -728,6 +727,6 @@ function makeRecommendation(){
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', init);}else{init();}
 </script>
-<!-- v18: measured water-level trend, readability improvements, tide/water graphs -->
+<!-- v21: HRFCO historical range query, stricter timestamp validation, tide date params expanded, graph rendering fixed -->
 </body>
 </html>

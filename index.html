@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>한강 수난사고 환경조회 대시보드 v37</title>
+<title>한강 수난사고 환경조회 대시보드 v39</title>
 <style>
   :root{--bg:#f6f7f9;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#1f6feb;--warn:#b45309;--danger:#b91c1c;--ok:#047857;}
   *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif;background:var(--bg);color:var(--text);}
@@ -15,14 +15,14 @@
   label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px} input,select,textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:15px;background:#fff;color:var(--text)} textarea{min-height:76px;resize:vertical}
   button{border:none;border-radius:10px;padding:12px 14px;font-size:15px;font-weight:700;background:var(--accent);color:#fff;cursor:pointer} button.secondary{background:#374151} button.ghost{background:#eef2ff;color:#1e40af}
   .pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:700;margin:2px 4px 2px 0}.warn{background:#fff7ed;color:var(--warn)}.danger{background:#fef2f2;color:var(--danger)}.ok{background:#ecfdf5;color:var(--ok)}
-  .result{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafafa}.metric b{display:block;font-size:18px;margin-top:4px;white-space:pre-line;line-height:1.35}.small{font-size:12px;color:var(--muted);line-height:1.5}.note{font-size:13px;line-height:1.55;background:#f9fafb;border-left:4px solid #9ca3af;padding:10px;border-radius:8px}.hidden{display:none}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;white-space:pre-wrap}.chartBox{border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px;margin-top:10px}.chartTitle{font-size:13px;font-weight:800;margin:0 0 6px}.chartCanvas{width:100%;height:320px;display:block}.trendGrid{display:grid;grid-template-columns:1fr;gap:10px}.trendCard{border:1px solid var(--line);border-radius:12px;background:#fafafa;padding:12px}.trendCard b{font-size:18px}.badgeUp{color:#047857;font-weight:800}.badgeDown{color:#b91c1c;font-weight:800}.badgeFlat{color:#6b7280;font-weight:800}.explain{font-size:12px;line-height:1.55;color:#374151;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}.chartHelp{font-size:13px;color:#374151;line-height:1.6;margin:4px 0 8px;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:8px}.datumHelp{font-size:12px;line-height:1.55;color:#374151;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:8px;padding:9px;margin-top:8px}.metric b{font-size:17px}.metric .small b{font-size:12px;display:inline}
+  .result{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafafa}.metric b{display:block;font-size:20px;margin-top:4px}.small{font-size:12px;color:var(--muted);line-height:1.5}.note{font-size:13px;line-height:1.55;background:#f9fafb;border-left:4px solid #9ca3af;padding:10px;border-radius:8px}.hidden{display:none}.table{width:100%;border-collapse:collapse;font-size:13px}.table th,.table td{border-bottom:1px solid var(--line);padding:8px;text-align:left}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;white-space:pre-wrap}.invalid{border-color:#b91c1c!important;background:#fff5f5!important}
   @media(min-width:760px){.grid{grid-template-columns:1fr 1fr}.wide{grid-column:1 / -1}.row{grid-template-columns:1fr 1fr}.row.one{grid-template-columns:1fr}.result{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
 <header>
-  <h1>한강 수난사고 환경조회 대시보드 v37</h1>
-  <p>투신 시각·위치 기준 수위·방류량·실측 수위 변화·관측시각 검증·교량별 보정 물때·그래프를 확인하는 시제품</p>
+  <h1>한강 수난사고 환경조회 대시보드 v39</h1>
+  <p>시간 자동 콜론·숫자 키패드·tideFcstTime 재연결·인천 물때표·조류방향 표시</p>
 </header>
 <main>
   <section class="card wide">
@@ -30,7 +30,6 @@
     <div class="row">
       <div><label>한강홍수통제소 인증키</label><input id="hrKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
       <div><label>국립해양조사원 조석 API 인증키</label><input id="tideKey" type="password" placeholder="여기에 인증키 입력" autocomplete="off"></div>
-      <div><label>기상청 단기예보 API 인증키(선택)</label><input id="kmaKey" type="password" placeholder="풍향·풍속 자동조회용" autocomplete="off"></div>
     </div>
     <div class="row3">
       <div><label>팔당댐 코드</label><input id="damCode" value="1017310"></div>
@@ -49,28 +48,27 @@
       <div class="row one">
         <div><label>교량 선택</label><select id="bridge">
 <option value="0">강동대교 → 서울시(광진교) (1018640)</option>
-<option value="1">구리암사대교 → 서울시(광진교) (1018640)</option>
-<option value="2">천호대교 → 서울시(광진교) (1018640)</option>
-<option value="3">올림픽대교 → 서울시(광진교) (1018640)</option>
-<option value="4">광진교 → 서울시(광진교) (1018640)</option>
-<option value="5">잠실대교 → 서울시(광진교) (1018640)</option>
-<option value="6">청담대교 → 서울시(광진교) (1018640)</option>
-<option value="7">영동대교 → 서울시(광진교) (1018640)</option>
-<option value="8">성수대교 → 서울시(광진교) (1018640)</option>
-<option value="9">동호대교 → 서울시(잠수교) (1018680)</option>
-<option value="10">한남대교 → 서울시(잠수교) (1018680)</option>
+<option value="1">천호대교 → 서울시(광진교) (1018640)</option>
+<option value="2">광진교 → 서울시(광진교) (1018640)</option>
+<option value="3">잠실대교 → 서울시(청담대교) (1018662)</option>
+<option value="4">잠실철교 → 서울시(청담대교) (1018662)</option>
+<option value="5">청담대교 → 서울시(청담대교) (1018662)</option>
+<option value="6">영동대교 → 청담 (1018660)</option>
+<option value="7">성수대교 → 뚝도 (1018664)</option>
+<option value="8">동호대교 → 뚝도 (1018664)</option>
+<option value="9">한남대교 → 서울시(잠수교) (1018680)</option>
+<option value="10">반포대교 → 서울시(반포2교) (1018681)</option>
 <option value="11">잠수교 → 서울시(잠수교) (1018680)</option>
-<option value="12">반포대교 → 서울시(반포2교) (1018681)</option>
-<option value="13">동작대교 → 서울시(한강대교) (1018683)</option>
-<option value="14" selected>한강대교 → 서울시(한강대교) (1018683)</option>
-<option value="15">원효대교 → 서울시(한강대교) (1018683)</option>
-<option value="16">마포대교 → 서울시(한강대교) (1018683)</option>
-<option value="17">서강대교 → 서울시(한강대교) (1018683)</option>
-<option value="18">양화대교 → 서울시(한강대교) (1018683)</option>
-<option value="19">성산대교 → 서울시(행주대교) (1019630)</option>
-<option value="20">가양대교 → 서울시(행주대교) (1019630)</option>
-<option value="21">방화대교 → 서울시(행주대교) (1019630)</option>
-<option value="22">행주대교 → 서울시(행주대교) (1019630)</option>
+<option value="12">동작대교 → 서울시(한강대교) (1018683)</option>
+<option value="13" selected>한강대교 → 서울시(한강대교) (1018683)</option>
+<option value="14">원효대교 → 구용산 (1018685)</option>
+<option value="15">마포대교 → 구용산 (1018685)</option>
+<option value="16">서강대교 → 구용산 (1018685)</option>
+<option value="17">양화대교 → 서울시(행주대교) (1019630)</option>
+<option value="18">성산대교 → 서울시(행주대교) (1019630)</option>
+<option value="19">가양대교 → 서울시(행주대교) (1019630)</option>
+<option value="20">방화대교 → 서울시(행주대교) (1019630)</option>
+<option value="21">행주대교 → 서울시(행주대교) (1019630)</option>
 </select></div>
       </div>
       <div class="row">
@@ -78,10 +76,11 @@
         <div><label>위치 정확도</label><select id="accuracy"><option>정확</option><option selected>추정</option><option>불명확</option></select></div>
       </div>
       <div class="row">
-        <div><label>투신 시각</label><input id="incidentAt" type="text" inputmode="numeric" placeholder="예: 2026-06-19 23:30 (24시간)"></div>
-        <div><label>수색 시작/현재 시각</label><input id="searchAt" type="text" inputmode="numeric" placeholder="예: 2026-06-19 23:30 (24시간)"></div>
+        <div><label>투신 시각</label><input id="incidentAt" class="dtAuto" type="text" inputmode="numeric" maxlength="16" placeholder="예: 202606192330 → 2026-06-19 23:30"></div>
+        <div><label>수색 시작/현재 시각</label><input id="searchAt" class="dtAuto" type="text" inputmode="numeric" maxlength="16" placeholder="예: 202606232240 → 2026-06-23 22:40"></div>
       </div>
       <button id="runBtn" onclick="runAll()">환경조회 실행</button>
+      <p class="small">날짜·시간은 숫자만 입력해도 자동 변환됩니다. 예: <b>202606232240</b> → <b>2026-06-23 22:40</b>, 시간만 <b>2240</b> 입력하면 기존 날짜의 <b>22:40</b>로 보정됩니다.</p>
       <button id="nowBtn" class="ghost" onclick="fillNow()">현재시각 입력</button>
     </section>
 
@@ -89,7 +88,7 @@
       <h2>③ 선택된 관측소</h2>
       <div id="stationBox" class="note"></div>
       <table class="table">
-        <thead><tr><th>교량</th><th>대표 수위관측소</th><th>코드</th><th>물때 보정</th></tr></thead>
+        <thead><tr><th>교량</th><th>대표 수위관측소</th><th>코드</th></tr></thead>
         <tbody id="mapTable"></tbody>
       </table>
     </section>
@@ -103,36 +102,16 @@
       <div class="metric"><span class="small">현재 수위</span><b id="currentWater">-</b></div>
       <div class="metric"><span class="small">투신 당시 방류량</span><b id="incidentDam">-</b></div>
       <div class="metric"><span class="small">현재 방류량</span><b id="currentDam">-</b></div>
-      <div class="metric"><span class="small">투신 당시 물때<br><small>선택 대교 기준</small></span><b id="incidentTide">-</b></div>
-      <div class="metric"><span class="small">현재 물때<br><small>선택 대교 기준</small></span><b id="currentTide">-</b></div>
+      <div class="metric"><span class="small">투신 당시 물때</span><b id="incidentTide">-</b></div>
+      <div class="metric"><span class="small">현재 물때</span><b id="currentTide">-</b></div>
       <div class="metric"><span class="small">풍향</span><b id="windDir">수동 입력 전</b></div>
       <div class="metric"><span class="small">풍속</span><b id="windSpd">수동 입력 전</b></div>
     </div>
   </section>
 
   <section class="card wide">
-    <h2>⑤ 실측 수위 변화 및 물때 그래프</h2>
-    <div class="trendGrid">
-      <div class="trendCard">
-        <span class="small">선택 관측소 실측 수위 변화</span>
-        <div id="waterTrendBox" style="margin-top:6px">조회 전</div>
-      </div>
-      <div class="trendCard">
-        <span class="small">판단 기준</span>
-        <div id="accuracyBox" style="margin-top:6px">수위 변화량은 실제 관측소 데이터 기준입니다. 조석 보정값보다 우선 참고합니다.</div>
-      </div>
-    </div>
-    <div class="chartBox">
-      <p class="chartTitle">실측 수위 변화 그래프</p>
-      <p id="waterGraphHelp" class="chartHelp">대표 수위관측소의 실제 관측 수위(m)입니다. 수위 m는 관측소 수위표 기준면에서 물 표면까지의 높이이며, 강바닥 수심이나 해발고도가 아닙니다. 빨간 점선은 수색 시작/현재 시각입니다.</p>
-      <canvas id="waterChart" class="chartCanvas"></canvas>
-    </div>
-    <div class="chartBox">
-      <p class="chartTitle">대교 기준 보정 물때 그래프</p>
-      <p id="tideGraphHelp" class="chartHelp">인천 등 기준 조석관측소의 바다 조위(cm)를 선택 대교 시간차만큼 이동한 보정 추정 그래프입니다. 실제 한강 수위가 아니라 물때 흐름 참고용입니다.</p>
-      <canvas id="tideChart" class="chartCanvas"></canvas>
-      <p class="small">※ 이 그래프는 “바다 조석 보정값”입니다. 최종 판단은 위의 실측 수위 변화가 우선입니다.</p>
-    </div>
+    <h2>⑤ 인천 물때표 예비자료</h2>
+    <div class="note"><b>물때표 참고:</b> 1~3물은 조금권 이후 약한 흐름, 4~5물은 보통, 6~8물은 사리권 강한 흐름, 9~12물은 보통~강, 13~15물은 조금권 접근으로 봅니다.<br><span class="small">※ 예비자료입니다. 최종 판단은 실측 수위 변화·팔당 방류량·조석 조위 변화 순으로 봅니다.</span></div>
   </section>
 
   <section class="card wide">
@@ -141,12 +120,6 @@
       <div><label>풍향 수동 입력</label><input id="manualWindDir" placeholder="예: 서풍, 북서풍"></div>
       <div><label>풍속 수동 입력</label><input id="manualWindSpd" placeholder="예: 3.2 m/s"></div>
       <div><label>현장 육안 흐름</label><select id="manualFlow"><option value="unknown">불명확</option><option value="down">하류 방향 우세</option><option value="up">상류 방향 우세</option><option value="still">정체/와류 의심</option></select></div>
-    </div>
-    <div class="row3">
-      <div><label>투신 당시 물때 수동 입력</label><input id="manualIncidentTide" placeholder="예: 간조 후 밀물 시작"></div>
-      <div><label>현재 물때 수동 입력</label><input id="manualCurrentTide" placeholder="예: 만조 전 정체"></div>
-      <div><label>기상청 격자(nx,ny)</label><input id="kmaGrid" value="60,127" placeholder="예: 60,127"></div>
-      <div><button class="ghost" onclick="openTideLinks()">조석 직접조회 링크 열기</button></div>
     </div>
     <button class="secondary" onclick="makeRecommendation()">수색 참고 의견 생성</button>
     <div id="recommendation" class="note" style="margin-top:10px">수색 참고 의견이 여기에 표시됩니다.</div>
@@ -159,29 +132,28 @@
 </main>
 <script>
 const bridgeMap = [
-  {bridge:'강동대교', station:'서울시(광진교)', code:'1018640', tide:false, tideBase:'수중보 상류', tideCode:null, tideOffset:null, note:'잠실수중보 상류: 조석/물때 적용 제외. 수위·방류량·풍향 중심 판단'},
-  {bridge:'구리암사대교', station:'서울시(광진교)', code:'1018640', tide:false, tideBase:'수중보 상류', tideCode:null, tideOffset:null, note:'잠실수중보 상류: 조석/물때 적용 제외. 수위·방류량·풍향 중심 판단'},
-  {bridge:'천호대교', station:'서울시(광진교)', code:'1018640', tide:false, tideBase:'수중보 상류', tideCode:null, tideOffset:null, note:'잠실수중보 상류: 조석/물때 적용 제외. 수위·방류량·풍향 중심 판단'},
-  {bridge:'올림픽대교', station:'서울시(광진교)', code:'1018640', tide:false, tideBase:'수중보 상류', tideCode:null, tideOffset:null, note:'잠실수중보 상류: 조석/물때 적용 제외. 수위·방류량·풍향 중심 판단'},
-  {bridge:'광진교', station:'서울시(광진교)', code:'1018640', tide:false, tideBase:'수중보 상류', tideCode:null, tideOffset:null, note:'잠실수중보 상류: 조석/물때 적용 제외. 수위·방류량·풍향 중심 판단'},
-  {bridge:'잠실대교', station:'서울시(광진교)', code:'1018640', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:270, note:'잠실수중보 하류 경계. 인천 기준 +4시간30분 보정 추정'},
-  {bridge:'청담대교', station:'서울시(광진교)', code:'1018640', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:250, note:'인천 기준 +4시간10분 보정 추정'},
-  {bridge:'영동대교', station:'서울시(광진교)', code:'1018640', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:240, note:'인천 기준 +4시간00분 보정 추정'},
-  {bridge:'성수대교', station:'서울시(광진교)', code:'1018640', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:230, note:'인천 기준 +3시간50분 보정 추정'},
-  {bridge:'동호대교', station:'서울시(잠수교)', code:'1018680', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:220, note:'인천 기준 +3시간40분 보정 추정'},
-  {bridge:'한남대교', station:'서울시(잠수교)', code:'1018680', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:210, note:'인천 기준 +3시간30분 보정 추정'},
-  {bridge:'잠수교', station:'서울시(잠수교)', code:'1018680', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:190, note:'인천 기준 +3시간10분 보정 추정'},
-  {bridge:'반포대교', station:'서울시(반포2교)', code:'1018681', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:190, note:'인천 기준 +3시간10분 보정 추정'},
-  {bridge:'동작대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:180, note:'인천 기준 +3시간00분 보정 추정'},
-  {bridge:'한강대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:160, note:'인천 기준 +2시간40분 보정 추정'},
-  {bridge:'원효대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:145, note:'인천 기준 +2시간25분 보정 추정'},
-  {bridge:'마포대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:130, note:'인천 기준 +2시간10분 보정 추정'},
-  {bridge:'서강대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:120, note:'인천 기준 +2시간00분 보정 추정'},
-  {bridge:'양화대교', station:'서울시(한강대교)', code:'1018683', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:100, note:'인천 기준 +1시간40분 보정 추정'},
-  {bridge:'성산대교', station:'서울시(행주대교)', code:'1019630', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:80, note:'인천 기준 +1시간20분 보정 추정'},
-  {bridge:'가양대교', station:'서울시(행주대교)', code:'1019630', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:60, note:'인천 기준 +1시간00분 보정 추정'},
-  {bridge:'방화대교', station:'서울시(행주대교)', code:'1019630', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:50, note:'인천 기준 +50분 보정 추정'},
-  {bridge:'행주대교', station:'서울시(행주대교)', code:'1019630', tide:true, tideBase:'인천', tideCode:'DT_0001', tideOffset:40, note:'인천 기준 +40분 보정 추정'}
+  {bridge:'강동대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 상류 대표값'},
+  {bridge:'천호대교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소 없음: 광진교 대표값'},
+  {bridge:'광진교', station:'서울시(광진교)', code:'1018640', note:'직접 관측소'},
+  {bridge:'잠실대교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
+  {bridge:'잠실철교', station:'청담 / 서울시(청담대교)', code:'1018662', note:'직접 관측소 없음: 청담대교 대표값'},
+  {bridge:'청담대교', station:'서울시(청담대교)', code:'1018662', note:'직접 관측소'},
+  {bridge:'영동대교', station:'청담', code:'1018660', note:'직접 관측소 없음: 청담 대표값'},
+  {bridge:'성수대교', station:'뚝도', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
+  {bridge:'동호대교', station:'뚝도 / 잠수교', code:'1018664', note:'직접 관측소 없음: 뚝도 대표값'},
+  {bridge:'한남대교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소 없음: 잠수교 대표값'},
+  {bridge:'반포대교', station:'서울시(반포2교)', code:'1018681', note:'반포 구간 대표값'},
+  {bridge:'잠수교', station:'서울시(잠수교)', code:'1018680', note:'직접 관측소'},
+  {bridge:'동작대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소 없음: 한강대교 대표값'},
+  {bridge:'한강대교', station:'서울시(한강대교)', code:'1018683', note:'직접 관측소'},
+  {bridge:'원효대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'마포대교', station:'구용산', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'서강대교', station:'구용산 / 행주대교', code:'1018685', note:'직접 관측소 없음: 구용산 대표값'},
+  {bridge:'양화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
+  {bridge:'성산대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 하류 대표값'},
+  {bridge:'가양대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
+  {bridge:'방화대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소 없음: 행주대교 대표값'},
+  {bridge:'행주대교', station:'서울시(행주대교)', code:'1019630', note:'직접 관측소'}
 ];
 
 function init(){
@@ -193,132 +165,57 @@ function init(){
     b.value=13;
   }
   b.addEventListener('change',updateStation);
-  document.getElementById('mapTable').innerHTML=bridgeMap.map(x=>`<tr><td>${x.bridge}</td><td>${x.station}</td><td>${x.code}</td><td>${x.tide ? x.tideBase+' '+fmtOffset(x.tideOffset) : '조석 제외'}</td></tr>`).join('');
-  loadKeys(); fillNow(); updateStation();
+  document.getElementById('mapTable').innerHTML=bridgeMap.map(x=>`<tr><td>${x.bridge}</td><td>${x.station}</td><td>${x.code}</td></tr>`).join('');
+  loadKeys(); bindDateInputs(); fillNow(); updateStation();
+}
+function fmtLocalInput(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 function fillNow(){
   const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">현재시각 입력</span> 시간 입력칸에 현재시각을 넣었습니다.';
-  const now=new Date(); const local=toDateTimeInputValue(now);
+  const now=new Date(); const local=fmtLocalInput(now);
   document.getElementById('searchAt').value=local;
   if(!document.getElementById('incidentAt').value) document.getElementById('incidentAt').value=local;
 }
-function fmtOffset(min){
-  if(min===null || min===undefined) return '적용 제외';
-  const sign=min>=0?'+':'-'; const m=Math.abs(min); const h=Math.floor(m/60), r=m%60;
-  return `${sign}${h? h+'시간 ':''}${r? r+'분':''}`.trim();
+function normalizeDateTimeInput(el){
+  let raw=(el.value||'').trim(); if(!raw) return false;
+  let digits=raw.replace(/[^0-9]/g,'');
+  if(digits.length===4){
+    const base=(document.getElementById('searchAt')?.value||document.getElementById('incidentAt')?.value||fmtLocalInput(new Date())).replace(/[^0-9]/g,'').slice(0,8);
+    digits=base+digits;
+  }
+  if(digits.length>=12){
+    const y=digits.slice(0,4), m=digits.slice(4,6), d=digits.slice(6,8), h=digits.slice(8,10), mi=digits.slice(10,12);
+    el.value=`${y}-${m}-${d} ${h}:${mi}`;
+  }
+  return validateDateTimeInput(el);
+}
+function validateDateTimeInput(el){
+  const m=(el.value||'').match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  let ok=false;
+  if(m){ const hh=Number(m[4]), mm=Number(m[5]); const d=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`); ok=Number.isFinite(d.getTime()) && hh>=0 && hh<=23 && mm>=0 && mm<=59; }
+  el.classList.toggle('invalid', !ok);
+  return ok;
+}
+function bindDateInputs(){
+  document.querySelectorAll('.dtAuto').forEach(el=>{
+    el.addEventListener('input',()=>{
+      const cur=el.value; const digits=cur.replace(/[^0-9]/g,'');
+      if(digits.length===12) normalizeDateTimeInput(el);
+      else if(digits.length===4 && !cur.includes('-')){ el.value=digits.slice(0,2)+':'+digits.slice(2); }
+    });
+    el.addEventListener('blur',()=>normalizeDateTimeInput(el));
+  });
 }
 function updateStation(){
- const x=bridgeMap[getBridgeIndex ? getBridgeIndex() : document.getElementById('bridge').value];
- const tideInfo=x.tide
-   ? `<br>기준 물때: <b>${x.tideBase}</b> / 시간차: <b>기준 물때 ${fmtOffset(x.tideOffset)}</b><br><span class="small">※ 선택 대교 기준 보정 표시. 초기 추정값이며 방류량·수중보·현장 유속에 따라 차이 가능.</span>`
-   : `<br><span class="pill danger">조석 적용 제외</span><br><b>잠실수중보 상류 구간</b><br><span class="small">물때 대신 수위·팔당 방류량·풍향·풍속 중심으로 판단.</span>`;
- document.getElementById('stationBox').innerHTML=`<span class="pill">${x.bridge}</span><br>대표 수위관측소: <b>${x.station}</b><br>관측소 코드: <b>${x.code}</b>${tideInfo}<br><span class="small">${x.note}</span>`;
+ const x=bridgeMap[document.getElementById('bridge').value];
+ document.getElementById('stationBox').innerHTML=`<span class="pill">${x.bridge}</span><br>대표 수위관측소: <b>${x.station}</b><br>관측소 코드: <b>${x.code}</b><br><span class="small">${x.note}</span>`;
 }
-function saveKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value)); const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">저장 완료</span> 인증키가 이 브라우저에 저장됐습니다.';}
-function loadKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>{const v=localStorage.getItem(id); if(v) document.getElementById(id).value=v;});}
-function clearKeys(){['hrKey','tideKey','kmaKey','damCode','tideStation','kmaGrid'].forEach(id=>localStorage.removeItem(id)); document.getElementById('hrKey').value=''; document.getElementById('tideKey').value=''; document.getElementById('kmaKey').value=''; const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill warn">삭제 완료</span> 저장된 인증키를 삭제했습니다.';}
+function saveKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value)); const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill ok">저장 완료</span> 인증키가 이 브라우저에 저장됐습니다.';}
+function loadKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>{const v=localStorage.getItem(id); if(v) document.getElementById(id).value=v;});}
+function clearKeys(){['hrKey','tideKey','damCode','tideStation'].forEach(id=>localStorage.removeItem(id)); document.getElementById('hrKey').value=''; document.getElementById('tideKey').value=''; const ks=document.getElementById('keyStatus'); if(ks) ks.innerHTML='<span class="pill warn">삭제 완료</span> 저장된 인증키를 삭제했습니다.';}
 function cleanKey(k){return (k||'').trim();}
-
-function parseLocalDateTime(v){
-  if(v instanceof Date) return v;
-  const raw=String(v||'').trim();
-  if(!raw) return new Date(NaN);
-  const nums=raw.replace('T',' ').match(/\d+/g)||[];
-  if(nums.length>=5){
-    const y=nums[0].padStart(4,'0'), mo=nums[1].padStart(2,'0'), da=nums[2].padStart(2,'0'), h=nums[3].padStart(2,'0'), mi=nums[4].padStart(2,'0');
-    return new Date(`${y}-${mo}-${da}T${h}:${mi}:00`);
-  }
-  const d=new Date(raw);
-  return d;
-}
-function toDateTimeInputValue(d){
-  const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);
-  return x.toISOString().slice(0,16).replace('T',' ');
-}
-function parseObsDate(o){
-  const raw=String(getTimeValue(o)).replace(/[^0-9]/g,'');
-  if(raw.length>=12){
-    const y=raw.slice(0,4),mo=raw.slice(4,6),da=raw.slice(6,8),h=raw.slice(8,10),mi=raw.slice(10,12);
-    const d=new Date(`${y}-${mo}-${da}T${h}:${mi}:00`);
-    if(!Number.isNaN(d.getTime())) return d;
-  }
-  return null;
-}
-function fmtHm(d){
-  if(!(d instanceof Date)||Number.isNaN(d.getTime())) return '-';
-  const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);
-  return x.toISOString().slice(11,16);
-}
-function drawLineChart(canvasId, points, opts={}){
-  const canvas=document.getElementById(canvasId); if(!canvas) return;
-  const rect=canvas.getBoundingClientRect(); const dpr=window.devicePixelRatio||1;
-  const w=Math.max(320, Math.floor(rect.width||canvas.clientWidth||640)); const h=Math.max(230, Math.floor(rect.height||260));
-  canvas.width=w*dpr; canvas.height=h*dpr; const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  const clean=(points||[])
-    .filter(p=>Number.isFinite(p?.x) && Number.isFinite(p?.y))
-    .sort((a,b)=>a.x-b.x);
-  const pad={l:56,r:18,t:22,b:38};
-  if(clean.length<2){ ctx.fillStyle='#6b7280'; ctx.font='14px sans-serif'; ctx.fillText('그래프 데이터 부족', pad.l, h/2); return; }
-  const xs=clean.map(p=>p.x), ys=clean.map(p=>p.y);
-  const minX=Math.min(...xs), maxX=Math.max(...xs); let minY=Math.min(...ys), maxY=Math.max(...ys);
-  const yr=Math.max(0.01, maxY-minY); minY-=yr*0.12; maxY+=yr*0.12;
-  if(minY===maxY){minY-=1;maxY+=1;}
-  const gx=pad.l, gy=pad.t, gw=w-pad.l-pad.r, gh=h-pad.t-pad.b;
-  const sx=x=>gx+(x-minX)/(maxX-minX||1)*gw; const sy=y=>gy+gh-(y-minY)/(maxY-minY||1)*gh;
-  ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){ const yy=gy+gh*i/4; ctx.beginPath(); ctx.moveTo(gx,yy); ctx.lineTo(gx+gw,yy); ctx.stroke(); }
-  ctx.fillStyle='#6b7280'; ctx.font='12px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';
-  for(let i=0;i<=4;i++){ const val=maxY-(maxY-minY)*i/4; ctx.fillText(val.toFixed(opts.decimals??1)+(opts.unit||''), gx-8, gy+gh*i/4); }
-  ctx.strokeStyle='#1f6feb'; ctx.lineWidth=3; ctx.beginPath();
-  let started=false; const maxGap=(opts.maxGapMinutes||45)*60000;
-  clean.forEach((p,i)=>{
-    const x=sx(p.x), y=sy(p.y);
-    const prev=clean[i-1];
-    if(!started || (prev && p.x-prev.x>maxGap)){ ctx.moveTo(x,y); started=true; }
-    else ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-  // point markers make sparse data easier to read
-  ctx.fillStyle='#1f6feb';
-  clean.forEach(p=>{ const x=sx(p.x), y=sy(p.y); ctx.beginPath(); ctx.arc(x,y,2.4,0,Math.PI*2); ctx.fill(); });
-  if(opts.nowX){ const nx=sx(opts.nowX); if(nx>=gx && nx<=gx+gw){ ctx.strokeStyle='#b91c1c'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(nx,gy); ctx.lineTo(nx,gy+gh); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle='#b91c1c'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.font='12px sans-serif'; ctx.fillText(opts.nowLabel||'기준시각', nx, gy+4); } }
-  ctx.fillStyle='#374151'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.font='12px sans-serif';
-  const ticks=[0,0.25,0.5,0.75,1]; ticks.forEach(t=>{ const x=gx+gw*t; const d=new Date(minX+(maxX-minX)*t); ctx.fillText(fmtHm(d), x, gy+gh+10); });
-}
-function analyzeWaterTrend(wlItems, targetText){
-  const target=parseLocalDateTime(targetText); const rows=[];
-  for(const it of wlItems||[]){ const d=parseObsDate(it); const raw=getWaterValue(it); const v=Number(String(raw).replace(/,/g,'')); if(d && Number.isFinite(v) && v>0.05) rows.push({d,v,o:it}); }
-  rows.sort((a,b)=>a.d-b.d); if(!rows.length) return null;
-  const nearest=(dt)=>{let best=null,bd=Infinity; for(const r of rows){const dd=Math.abs(r.d-dt); if(dd<bd){bd=dd;best=r;}} return best?{...best,diff:bd}:null;};
-  const cur=nearest(target); const m10=nearest(new Date(target.getTime()-10*60000)); const m30=nearest(new Date(target.getTime()-30*60000)); const m60=nearest(new Date(target.getTime()-60*60000));
-  const delta=(a,b)=>a&&b?b.v-a.v:null;
-  const d10=delta(m10,cur), d30=delta(m30,cur), d60=delta(m60,cur);
-  let judge='판단 보류', cls='badgeFlat';
-  const main=Number.isFinite(d60)?d60:d30;
-  if(Number.isFinite(main)){ if(main>0.03){judge='실측 수위 상승 중 ↑'; cls='badgeUp';} else if(main<-0.03){judge='실측 수위 하강 중 ↓'; cls='badgeDown';} else {judge='정체/변화 미미'; cls='badgeFlat';} }
-  return {rows,cur,m10,m30,m60,d10,d30,d60,judge,cls};
-}
-function updateWaterTrend(wlItems, targetText, bridge){
-  const res=analyzeWaterTrend(wlItems,targetText); const box=document.getElementById('waterTrendBox'); if(!box) return;
-  const help=document.getElementById('waterGraphHelp');
-  if(help) help.innerHTML=`<b>실측 수위 그래프 기준</b><br>선택 대교 <b>${bridge.bridge}</b> 주변 직접 센서가 아니라, 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b>의 실제 관측 수위입니다.<br><b>m 의미:</b> 관측소 수위표 기준면에서 물 표면까지의 높이입니다. 강바닥 수심·해발고도·교량 하부 높이가 아닙니다.<br><b>보는 법:</b> 파란선이 올라가면 수위 상승, 내려가면 수위 하강. 빨간 점선은 수색 시작/현재 시각입니다.`;
-  if(!res||!res.cur){ box.innerHTML='수위 변화 데이터 부족'; drawLineChart('waterChart',[],{}); return; }
-  const f=x=>Number.isFinite(x)?`${x>=0?'+':''}${x.toFixed(3)}m`:'-';
-  const target=parseLocalDateTime(targetText).getTime();
-  const diffMin=Math.round((res.cur.diff||0)/60000);
-  const basis=`<div class="datumHelp"><b>수위 기준 설명</b><br>${bridge.bridge} 직접 측정값이 아니라 대표 수위관측소 <b>${bridge.station}(${bridge.code})</b>의 실측 수위입니다.<br><b>m</b>는 관측소 수위표 기준면에서 물 표면까지의 높이입니다. 강바닥으로부터의 수심이 아니므로 절대값보다 <b>10분·30분·1시간 변화량</b>이 더 중요합니다.</div>`;
-  if(diffMin>30){
-    box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="badgeFlat">변화 판정 보류</span><br>요청시각 근처 실측 수위가 없습니다.<br>가장 가까운 관측 ${fmtDateTimeKo(res.cur.d)} (${diffMin}분 차이)<br>${basis}`;
-    drawLineChart('waterChart',[],{}); return;
-  }
-  box.innerHTML=`<b>${bridge.bridge} / ${bridge.station}</b><br><span class="${res.cls}">${res.judge}</span><br>현재 기준 관측시각 ${fmtDateTimeKo(res.cur.d)}: <b>${res.cur.v.toFixed(2)}m</b><br>10분 ${f(res.d10)} · 30분 ${f(res.d30)} · 1시간 ${f(res.d60)}<br><span class="small">판정 기준: 1시간 변화량이 +0.03m 초과면 상승, -0.03m 미만이면 하강, 그 사이면 정체/변화 미미.</span><br>${basis}`;
-  const pts=res.rows.filter(r=>Math.abs(r.d-target)<=2*3600*1000).map(r=>({x:r.d.getTime(),y:r.v}));
-  drawLineChart('waterChart',pts,{unit:'m',decimals:2,nowX:target, nowLabel:'현재/수색시각', maxGapMinutes:40});
-}
-function updateAccuracyBox(){
-  const box=document.getElementById('accuracyBox'); if(!box) return;
-  box.innerHTML='<b>판단 우선순위</b><br>1) 선택 대교의 대표 수위관측소 실측 변화량<br>2) 팔당댐 방류량<br>3) 풍향·풍속<br>4) 인천 조석을 대교 시간차로 보정한 추정 물때<br><br><span class="small">물때 그래프는 보조자료이고, 실제 물이 오르내리는지는 실측 수위 그래프를 우선 봅니다. 수위(m)는 관측소 기준면 대비 물 표면 높이입니다.</span>';
-}
+function toIsoLocal(text){ const v=(text||'').trim().replace('T',' '); const m=v.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/); return m?`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`:v; }
 async function fetchJson(url){
   const r=await fetch(url); const text=await r.text();
   try{return JSON.parse(text)}catch(e){return {raw:text}}
@@ -327,172 +224,51 @@ function arrFrom(obj){
   if(!obj) return [];
   if(Array.isArray(obj)) return obj;
   if(Array.isArray(obj.content)) return obj.content;
-  // data.go.kr APIs may return either response.body.items.item or body.items.item
-  const directItem=obj.body?.items?.item;
-  if(directItem) return Array.isArray(directItem)?directItem:[directItem];
-  const wrappedItem=obj.response?.body?.items?.item;
-  if(wrappedItem) return Array.isArray(wrappedItem)?wrappedItem:[wrappedItem];
+  if(obj.response?.body?.items?.item) return Array.isArray(obj.response.body.items.item)?obj.response.body.items.item:[obj.response.body.items.item];
   if(obj.result?.data) return Array.isArray(obj.result.data)?obj.result.data:[obj.result.data];
   if(obj.raw) return [];
   return [obj];
 }
 function getTimeValue(o){return o.ymdhm||o.obsymdhm||o.datetime||o.time||o.date||o.tm||o.YMDHM||o.ymd||''}
-function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.WATERLEVEL||o.swl||o.SWL||o.wlobs||o.WLOBS||''}
+function getWaterValue(o){return o.wl||o.WL||o.waterlevel||o.swl||o.SWL||o.value||''}
 function getDamOut(o){return o.tototf||o.TOTOTF||o.otf||o.OTF||o.edq||o.outflow||o.discharge||''}
-function formatNumber(v, digits=1){
-  if(v===undefined||v===null||v==='') return '';
-  const n=Number(String(v).replace(/,/g,''));
-  if(!Number.isFinite(n)) return v;
-  return n.toLocaleString('ko-KR',{minimumFractionDigits:digits, maximumFractionDigits:digits});
-}
-function formatMetricValue(v, unit){
-  if(v===undefined||v===null||v==='') return '값 확인 필요';
-  const n=Number(String(v).replace(/,/g,''));
-  if(!Number.isFinite(n)) return `${v}${unit}`;
-  // 수위는 0.01m 차이가 중요하므로 2자리까지 표시한다.
-  if(String(unit).includes('m') && !String(unit).includes('㎥')) return `${n.toFixed(2)}${unit}`;
-  // 방류량은 0.1㎥/s 단위로 표시한다.
-  return `${n.toLocaleString('ko-KR',{maximumFractionDigits:1})}${unit}`;
-}
-function getBridgeIndex(){return Number(document.getElementById('bridge').value||0)}
-function getSearchZone(idx, flow){
-  const names=bridgeMap.map(x=>x.bridge);
-  const start=Math.max(0,idx-2), end=Math.min(names.length-1,idx+2);
-  const up=names.slice(Math.max(0,idx-2), idx+1).join(' → ');
-  const down=names.slice(idx, Math.min(names.length,idx+3)).join(' → ');
-  const both=names.slice(start,end+1).join(' → ');
-  if(flow==='down') return `하류 우선: ${down}`;
-  if(flow==='up') return `상류/역류 우선: ${up}`;
-  if(flow==='still') return `정체·와류 우선: ${names[idx]} 주변 교각/저류부 + ${both}`;
-  return `상·하류 동시 확인: ${both}`;
-}
 function closest(items, dt){
- const r=closestWithDiff(items, dt);
- return r ? r.item : null;
-}
-function closestWithDiff(items, dt){
- if(!items||!items.length) return null;
- const target=parseLocalDateTime(dt);
- if(Number.isNaN(target.getTime())) return null;
- let best=null, bd=Infinity, bestObs=null;
+ if(!items.length) return null;
+ const target=new Date(toIsoLocal(dt)).getTime();
+ let best=items[0], bd=Infinity;
  for(const it of items){
-   const od=parseObsDate(it);
-   if(!od) continue;
-   const d=Math.abs(od.getTime()-target.getTime());
-   if(d<bd){bd=d;best=it;bestObs=od;}
+   const tstr=String(getTimeValue(it)).replace(/[^0-9]/g,'');
+   let d=Infinity;
+   if(tstr.length>=12){ const y=tstr.slice(0,4),mo=tstr.slice(4,6),da=tstr.slice(6,8),h=tstr.slice(8,10),mi=tstr.slice(10,12); d=Math.abs(new Date(`${y}-${mo}-${da}T${h}:${mi}`).getTime()-target); }
+   if(d<bd){bd=d;best=it}
  }
- return best ? {item:best, obsDate:bestObs, diffMs:bd, targetDate:target} : null;
-}
-function fmtDateTimeKo(d){
-  if(!(d instanceof Date)||Number.isNaN(d.getTime())) return '-';
-  const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);
-  const s=x.toISOString().slice(0,16).replace('T',' ');
-  return s;
-}
-function fmtDiffMin(ms){
-  if(!Number.isFinite(ms)) return '-';
-  const m=Math.round(ms/60000);
-  if(m<60) return `${m}분 차이`;
-  return `${Math.floor(m/60)}시간 ${m%60}분 차이`;
-}
-function formatYmdhm(d){
-  if(!(d instanceof Date)||Number.isNaN(d.getTime())) return '';
-  const y=d.getFullYear();
-  const mo=String(d.getMonth()+1).padStart(2,'0');
-  const da=String(d.getDate()).padStart(2,'0');
-  const h=String(d.getHours()).padStart(2,'0');
-  const mi=String(Math.floor(d.getMinutes()/10)*10).padStart(2,'0');
-  return `${y}${mo}${da}${h}${mi}`;
-}
-function queryRangeAround(aText,bText,padHours=3){
-  const a=parseLocalDateTime(aText), b=parseLocalDateTime(bText);
-  const times=[a,b].filter(d=>d instanceof Date&&!Number.isNaN(d.getTime()));
-  const now=new Date();
-  if(!times.length) times.push(now);
-  const min=new Date(Math.min(...times.map(d=>d.getTime()))-padHours*3600000);
-  const max=new Date(Math.max(...times.map(d=>d.getTime()))+padHours*3600000);
-  return {s:formatYmdhm(min), e:formatYmdhm(max), min, max};
-}
-function queryRangeSingle(text,padHours=3){
-  const d=parseLocalDateTime(text);
-  const base=(d instanceof Date&&!Number.isNaN(d.getTime()))?d:new Date();
-  const min=new Date(base.getTime()-padHours*3600000);
-  const max=new Date(base.getTime()+padHours*3600000);
-  return {s:formatYmdhm(min), e:formatYmdhm(max), min, max};
-}
-function verifiedMetricText(label, found, valueGetter, unit, maxDiffMin=30){
-  if(!found||!found.item) return `조회 실패\n관측시각 확인불가`;
-  const val=valueGetter(found.item);
-  const diffMin=Math.round(found.diffMs/60000);
-  const valueText=(val!==undefined&&val!==null&&val!=='') ? `${formatNumber(val)}${unit}` : '값 확인 필요';
-  const obs=`관측 ${fmtDateTimeKo(found.obsDate)}`;
-  const gap=`요청시각과 ${fmtDiffMin(found.diffMs)}`;
-  if(diffMin>maxDiffMin){
-    return `${valueText}\n검증필요: ${obs}\n${gap}`;
-  }
-  return `${valueText}\n${obs}`;
+ return best;
 }
 async function runAll(){
   saveKeys();
-  const hr=cleanKey(document.getElementById('hrKey').value); const tide=cleanKey(document.getElementById('tideKey').value); const kma=cleanKey(document.getElementById('kmaKey').value);
+  const hr=cleanKey(document.getElementById('hrKey').value); const tide=cleanKey(document.getElementById('tideKey').value);
   if(!hr){alert('한강홍수통제소 인증키를 입력하세요.');return;}
   const x=bridgeMap[document.getElementById('bridge').value]; const interval=document.getElementById('interval').value; const damCode=document.getElementById('damCode').value.trim();
-  const inc=document.getElementById('incidentAt').value, cur=document.getElementById('searchAt').value;
+  const incEl=document.getElementById('incidentAt'), curEl=document.getElementById('searchAt');
+  const okInc=normalizeDateTimeInput(incEl), okCur=normalizeDateTimeInput(curEl);
+  if(!okInc || !okCur){alert('날짜·시간을 2026-06-23 22:40 형식으로 입력하세요. 숫자만 202606232240처럼 입력해도 됩니다.');return;}
+  const inc=incEl.value, cur=curEl.value;
   document.getElementById('status').innerHTML='조회 중입니다...'; document.getElementById('raw').textContent='';
   try{
-    // v22: 투신시각과 현재시각을 하나의 긴 기간으로 묶지 않는다.
-    // 긴 기간조회는 API 결과 제한 때문에 과거/현재가 섞이거나 누락될 수 있어서 각각 ±3시간으로 따로 조회한다.
-    const incRange=queryRangeSingle(inc,3);
-    const curRange=queryRangeSingle(cur,3);
-    const wlIncUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}/${incRange.s}/${incRange.e}.json`;
-    const wlCurUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}/${curRange.s}/${curRange.e}.json`;
-    const damIncUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}/${incRange.s}/${incRange.e}.json`;
-    const damCurUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}/${curRange.s}/${curRange.e}.json`;
-    const [wlInc,wlCur,damInc,damCur]=await Promise.all([fetchJson(wlIncUrl),fetchJson(wlCurUrl),fetchJson(damIncUrl),fetchJson(damCurUrl)]);
-    const wlIncItems=arrFrom(wlInc), wlCurItems=arrFrom(wlCur), damIncItems=arrFrom(damInc), damCurItems=arrFrom(damCur);
-    updateWaterTrend(wlCurItems, cur, x); updateAccuracyBox();
-    const incW=closestWithDiff(wlIncItems,inc); const curW=closestWithDiff(wlCurItems,cur);
-    const incD=closestWithDiff(damIncItems,inc); const curD=closestWithDiff(damCurItems,cur);
-    document.getElementById('incidentWater').textContent=verifiedMetricText('투신 당시 수위',incW,getWaterValue,' m',30);
-    document.getElementById('currentWater').textContent=verifiedMetricText('현재 수위',curW,getWaterValue,' m',30);
-    const incDamVal = incD ? getDamOut(incD.item) : '';
-    const curDamVal = curD ? getDamOut(curD.item) : '';
-    window.lastEnv = {bridge:x.bridge, station:x.station, code:x.code, incidentWater:incW?getWaterValue(incW.item)||'':'', currentWater:curW?getWaterValue(curW.item)||'':'', incidentDam:incDamVal||'', currentDam:curDamVal||'', incidentWaterTime:incW?fmtDateTimeKo(incW.obsDate):'', currentWaterTime:curW?fmtDateTimeKo(curW.obsDate):''};
-    document.getElementById('incidentDam').textContent=verifiedMetricText('투신 당시 방류량',incD,getDamOut,' ㎥/s',30);
-    document.getElementById('currentDam').textContent=verifiedMetricText('현재 방류량',curD,getDamOut,' ㎥/s',30);
-    document.getElementById('raw').textContent=`[수위/방류량 조회 방식 v22]
-투신시각과 현재시각을 각각 ±3시간으로 따로 조회합니다. 긴 기간조회 결과 제한으로 값이 섞이는 문제를 방지합니다.
-
-[투신 수위 범위]
-${incRange.s} ~ ${incRange.e}
-[현재 수위 범위]
-${curRange.s} ~ ${curRange.e}
-
-[투신 수위 URL]
-${wlIncUrl.replace(hr,'[SERVICE_KEY]')}
-
-[현재 수위 URL]
-${wlCurUrl.replace(hr,'[SERVICE_KEY]')}
-
-[투신 방류량 URL]
-${damIncUrl.replace(hr,'[SERVICE_KEY]')}
-
-[현재 방류량 URL]
-${damCurUrl.replace(hr,'[SERVICE_KEY]')}
-
-[투신 수위 응답 일부]
-${JSON.stringify(wlInc,null,2).slice(0,3500)}
-
-[현재 수위 응답 일부]
-${JSON.stringify(wlCur,null,2).slice(0,3500)}
-
-[현재 방류량 응답 일부]
-${JSON.stringify(damCur,null,2).slice(0,2500)}`;
+    const wlUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/waterlevel/list/${interval}/${x.code}.json`;
+    const damUrl=`https://api.hrfco.go.kr/${encodeURIComponent(hr)}/dam/list/${interval}/${damCode}.json`;
+    const wl=await fetchJson(wlUrl); const dam=await fetchJson(damUrl);
+    const wlItems=arrFrom(wl), damItems=arrFrom(dam);
+    const incW=closest(wlItems,inc) || wlItems[0]; const curW=closest(wlItems,cur) || wlItems[0];
+    const incD=closest(damItems,inc) || damItems[0]; const curD=closest(damItems,cur) || damItems[0];
+    document.getElementById('incidentWater').textContent=incW?`${getWaterValue(incW)||'값 확인 필요'} m`:'조회 실패';
+    document.getElementById('currentWater').textContent=curW?`${getWaterValue(curW)||'값 확인 필요'} m`:'조회 실패';
+    document.getElementById('incidentDam').textContent=incD?`${getDamOut(incD)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    document.getElementById('currentDam').textContent=curD?`${getDamOut(curD)||'값 확인 필요'} ㎥/s`:'조회 실패';
+    document.getElementById('raw').textContent=`[수위 URL]\n${wlUrl.replace(hr,'[SERVICE_KEY]')}\n\n[댐 URL]\n${damUrl.replace(hr,'[SERVICE_KEY]')}\n\n[수위 응답]\n${JSON.stringify(wl,null,2).slice(0,6000)}\n\n[댐 응답]\n${JSON.stringify(dam,null,2).slice(0,6000)}`;
     if(tide) await loadTide(tide, inc, cur);
-    else {applyManualTide('조석키 미입력'); drawLineChart('tideChart',[],{});}
-    if(kma) await loadWind(kma, cur);
-    else {applyManualWind();}
-    document.getElementById('status').innerHTML=`<span class="pill ok">조회 완료</span> ${x.bridge} 기준입니다. 실측 수위는 <b>${x.station}(${x.code})</b> 관측소 자료입니다.`;
+    else {document.getElementById('incidentTide').textContent='조석키 미입력';document.getElementById('currentTide').textContent='조석키 미입력';}
+    document.getElementById('status').innerHTML=`<span class="pill ok">조회 완료</span> ${x.bridge} / 대표관측소 ${x.station}(${x.code}) 기준입니다.`;
     makeRecommendation();
   }catch(e){
     document.getElementById('status').innerHTML=`<span class="pill danger">조회 실패</span> 브라우저 CORS 또는 API 주소 문제일 수 있습니다. 아래 로그를 확인하세요.`;
@@ -500,300 +276,96 @@ ${JSON.stringify(damCur,null,2).slice(0,2500)}`;
   }
 }
 async function loadTide(key, inc, cur){
-  const selectedBridge=bridgeMap[getBridgeIndex()];
-  if(!selectedBridge.tide){
-    const msg=`${selectedBridge.bridge}\n수중보 상류 구간\n조석/물때 적용 제외\n수위·방류량 기준 판단`;
-    document.getElementById('incidentTide').textContent=msg;
-    document.getElementById('currentTide').textContent=msg;
-    document.getElementById('raw').textContent += `\n\n[조석 보정]\n${selectedBridge.bridge}: 잠실수중보 상류 구간으로 조석/물때 적용 제외`;
-    return;
+  const station=document.getElementById('tideStation').value;
+  const stationName=document.getElementById('tideStation').selectedOptions?.[0]?.textContent || station;
+  function ymdOf(dt){ const d=new Date(toIsoLocal(dt)); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; }
+  function urlsFor(dt){
+    const ymd=ymdOf(dt); const k=encodeURIComponent(key); const obs=encodeURIComponent(station);
+    const p1=`serviceKey=${k}&pageNo=1&numOfRows=1000&type=json&obsCode=${obs}&reqDate=${ymd}&min=10`;
+    const p2=`ServiceKey=${k}&pageNo=1&numOfRows=1000&type=json&obsCode=${obs}&reqDate=${ymd}&min=10`;
+    const p3=`serviceKey=${k}&pageNo=1&numOfRows=1000&type=JSON&obsCode=${obs}&reqDate=${ymd}&min=10`;
+    const fallback=`serviceKey=${k}&pageNo=1&numOfRows=1000&type=json&obsCode=${obs}&date=${ymd}&interval=10`;
+    return [
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${p1}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/getTideFcstTimeApiService?${p1}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTime?${p1}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/getTideFcstTime?${p1}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime?${p1}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${p2}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${p3}`,
+      `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${fallback}`
+    ];
   }
-
-  const station=selectedBridge.tideCode || document.getElementById('tideStation').value;
-  const stationName=`${selectedBridge.tideBase} ${station}`;
-  const offsetMin=Number(selectedBridge.tideOffset||0);
-
-  function addMinutes(dt, min){ const d=new Date(dt); return new Date(d.getTime()+min*60000); }
-  function ymdOfDate(d){ const local=new Date(d.getTime()-d.getTimezoneOffset()*60000); return local.toISOString().slice(0,10).replace(/-/g,''); }
-  function dtDisplay(d){ if(!(d instanceof Date)||Number.isNaN(d.getTime())) return ''; const local=new Date(d.getTime()-d.getTimezoneOffset()*60000); return local.toISOString().slice(11,16); }
-  function dayStart(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0,0,0,0); }
-  function dayEnd(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59,999); }
-  function minutesText(ms){ const m=Math.round(Math.abs(ms)/60000); const h=Math.floor(m/60), r=m%60; return `${h? h+'시간 ':''}${r? r+'분':'0분'}`; }
-
-  function buildUrl(baseDate, pageNo=1, rows=300){
-    const ymd=ymdOfDate(baseDate);
-    const safeRows=Math.min(Number(rows)||300,300);
-    // 조석예보(시계열) 공식 요청변수: obsCode, reqDate(yyyyMMdd), min(시간간격)
-    const params=`serviceKey=${encodeURIComponent(key)}&pageNo=${pageNo}&numOfRows=${safeRows}&type=json&obsCode=${encodeURIComponent(station)}&reqDate=${ymd}&min=10`;
-    return `https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?${params}`;
-  }
-
-  function tideTimeValue(o){ return o.predcDt||o.tdlvDt||o.tph_time||o.pred_time||o.fcstTime||o.predictionTime||o.ymdhm||o.YMDHM||o.time||o.tm||o.dateTime||o.datetime||o.dt||getTimeValue(o)||''; }
+  function tideTimeValue(o){return o.predcDt||o.tdlvDt||o.tph_time||o.pred_time||o.fcstTime||o.predictionTime||o.ymdhm||o.YMDHM||o.time||o.tm||o.dateTime||o.datetime||o.dt||getTimeValue(o)||'';}
   function tideLevelValue(o){
-    const candidates=['tdlvHgt','tph_level','pred_level','tide_level','tideLevel','tide','level','wl','predTide','value','fcstValue'];
-    for(const k of candidates){ if(o[k]!==undefined && o[k]!==null && o[k]!=='' && !Number.isNaN(Number(String(o[k]).replace(/,/g,'')))) return o[k]; }
+    for(const k of ['tdlvHgt','tph_level','pred_level','tide_level','tideLevel','tide','level','wl','predTide','value','fcstValue']){ if(o[k]!==undefined && o[k]!==null && o[k]!=='' && !Number.isNaN(Number(String(o[k]).replace(/,/g,'')))) return o[k]; }
     for(const [k,v] of Object.entries(o||{})){ const kk=k.toLowerCase(); if((kk.includes('hgt')||kk.includes('height')||kk.includes('level')||kk.includes('tide')||kk==='wl') && !Number.isNaN(Number(String(v).replace(/,/g,'')))) return v; }
     return '';
   }
   function itemDate(o){
     const raw=String(tideTimeValue(o)).replace(/[^0-9]/g,'');
-    if(raw.length>=12){
-      const y=raw.slice(0,4), mo=raw.slice(4,6), da=raw.slice(6,8), h=raw.slice(8,10), mi=raw.slice(10,12);
-      const d=new Date(`${y}-${mo}-${da}T${h}:${mi}:00`);
-      if(!Number.isNaN(d.getTime())) return d;
-    }
+    if(raw.length>=12) return new Date(`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}T${raw.slice(8,10)}:${raw.slice(10,12)}`);
     return null;
   }
-
-  function tideStageLabel(date){
-    // 몇물은 지역 물때표와 차이가 날 수 있어 '간이 추정'으로 표시한다.
-    const synodic=29.53058867;
-    const ref=Date.UTC(2000,0,6,18,14,0)/86400000 + 2440587.5;
-    const jd=date.getTime()/86400000 + 2440587.5;
-    let age=(jd-ref)%synodic; if(age<0) age+=synodic;
-    let half=age; if(half>14.765) half-=14.765;
-    let n=Math.round(half); if(n<0) n=0; if(n>14) n=14;
-    let label=n===0?'조금':n===1?'무시':`${n-1}물`;
-    let strength='보통';
-    if(n===0||n===1) strength='조금권';
-    else if(n>=7&&n<=9) strength='사리권';
-    else if(n>=6&&n<=10) strength='사리 전후';
-    return `${label} (${strength}, 간이 추정)`;
-  }
-
-  async function fetchDay(baseDate){
-    const tried=[];
-    let items=[];
-    // 1순위: 하루 전체를 한 번에 요청한다. 일부 API는 300 제한 표시와 달리 1440개를 반환한다.
-    try{
-      const url=buildUrl(baseDate,1,300); tried.push(url);
-      const j=await fetchJson(url); items=arrFrom(j);
-      if(items.length>=10) return {items,json:j,tried};
-    }catch(e){ tried.push(String(e)); }
-    // 2순위: 300개 단위 페이지 요청. pageNo가 실제 동작하는 경우를 대비한다.
-    let pageItems=[]; let firstJson=null;
-    for(let page=1; page<=6; page++){
+  function approxMoonAge(date){const syn=29.530588853, ref=Date.UTC(2000,0,6,18,14); let age=((Date.UTC(date.getFullYear(),date.getMonth(),date.getDate(),12)-ref)/86400000)%syn; if(age<0) age+=syn; return age;}
+  function tideMulLabel(date){const n=Math.round(approxMoonAge(date))%15; const mul=n===0?15:n; let z='보통'; if(mul>=6&&mul<=8) z='사리권'; if(mul>=13||mul<=1) z='조금권'; return `${mul}물 (${z}, 간이 추정)`;}
+  function tideRef(){return '인천 물때표 참고: 1~3물 약함 / 4~5물 보통 / 6~8물 사리권 강함 / 9~12물 보통~강 / 13~15물 조금권 접근';}
+  async function one(dt){
+    let tried=[], last=null;
+    for(const url of urlsFor(dt)){
       try{
-        const url=buildUrl(baseDate,page,300); tried.push(url);
-        const j=await fetchJson(url); if(!firstJson) firstJson=j;
-        const a=arrFrom(j);
-        if(!a.length) break;
-        pageItems=pageItems.concat(a);
-        if(a.length<300) break;
-      }catch(e){ tried.push(String(e)); break; }
+        const j=await fetchJson(url); const items=arrFrom(j); tried.push(`${url.replace(encodeURIComponent(key),'[SERVICE_KEY]')} rows=${items.length} msg=${j?.response?.header?.resultMsg||j?.header?.resultMsg||j?.resultMsg||''}`);
+        const valid=items.map(o=>({o,d:itemDate(o),lv:Number(String(tideLevelValue(o)).replace(/,/g,''))})).filter(x=>x.d && Number.isFinite(x.lv)).sort((a,b)=>a.d-b.d);
+        if(valid.length){
+          const target=new Date(toIsoLocal(dt)); let best=valid[0], bd=Infinity;
+          for(const r of valid){const dd=Math.abs(r.d-target); if(dd<bd){bd=dd; best=r;}}
+          const idx=valid.indexOf(best); const prev=valid[Math.max(0,idx-1)], next=valid[Math.min(valid.length-1,idx+1)];
+          return {ok:true,url,j,items,valid,best,prev,next,diff:bd,tried};
+        }
+        last=j;
+      }catch(e){tried.push(`${url.replace(encodeURIComponent(key),'[SERVICE_KEY]')} ERROR ${String(e)}`);}
     }
-    return {items: pageItems.length?pageItems:items, json:firstJson, tried};
+    return {ok:false,tried,last};
   }
-
-  function normalize(rawItems){
-    const out=[];
-    const seen=new Set();
-    for(const o of rawItems||[]){
-      const d=itemDate(o); const lv=Number(String(tideLevelValue(o)).replace(/,/g,''));
-      if(!d || !Number.isFinite(lv)) continue;
-      const key=`${d.getTime()}`;
-      if(seen.has(key)) continue;
-      seen.add(key); out.push({d,lv,o});
-    }
-    out.sort((a,b)=>a.d-b.d);
-    return out;
+  function fmt(res, dt){
+    if(!res.ok) return '조석 API 미조회';
+    if(res.diff>30*60000) return `해당시각 근처 조석값 부족 (${Math.round(res.diff/60000)}분 차이)`;
+    let flow='흐름 확인';
+    if(res.prev&&res.next){ if(res.next.lv>res.prev.lv) flow='밀물 진행중 ↑'; else if(res.next.lv<res.prev.lv) flow='썰물 진행중 ↓'; else flow='정체'; }
+    const d=res.best.d; const hh=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${stationName} ${hh}\n${tideMulLabel(d)}\n${res.best.lv.toFixed(1)}cm / ${flow}`;
   }
-
-  function findExtrema(valid){
-    const extrema=[];
-    for(let i=1;i<valid.length-1;i++){
-      const a=valid[i-1], b=valid[i], c=valid[i+1];
-      if(b.lv>=a.lv && b.lv>=c.lv) extrema.push({...b,type:'만조'});
-      if(b.lv<=a.lv && b.lv<=c.lv) extrema.push({...b,type:'간조'});
-    }
-    // 긴 평탄구간/중복값으로 극값이 빠질 때를 대비해 방향전환도 한 번 더 확인
-    for(let i=2;i<valid.length-2;i++){
-      const d1=valid[i].lv-valid[i-1].lv;
-      const d2=valid[i+1].lv-valid[i].lv;
-      if(d1>0 && d2<0 && !extrema.some(e=>Math.abs(e.d-valid[i].d)<60000)) extrema.push({...valid[i],type:'만조'});
-      if(d1<0 && d2>0 && !extrema.some(e=>Math.abs(e.d-valid[i].d)<60000)) extrema.push({...valid[i],type:'간조'});
-    }
-    return extrema.sort((a,b)=>a.d-b.d);
-  }
-
-  async function one(bridgeDtText){
-    const bridgeDate=parseLocalDateTime(bridgeDtText);
-    if(Number.isNaN(bridgeDate.getTime())) throw new Error('날짜/시간 형식 오류');
-    const baseDate=addMinutes(bridgeDate, -offsetMin);
-    const days=[addMinutes(baseDate,-1440), baseDate, addMinutes(baseDate,1440)];
-    let all=[]; let firstJson=null; let tried=[];
-    for(const d of days){
-      const r=await fetchDay(d); tried=tried.concat(r.tried||[]); if(!firstJson && r.json) firstJson=r.json;
-      all=all.concat(r.items||[]);
-    }
-    const valid=normalize(all);
-    if(valid.length<10){
-      return {ok:false, reason:`조석 데이터가 부족합니다(${valid.length}건). 조석예보(시계열) 응답 확인이 필요합니다.`, tried, bridgeDate, baseDate, json:firstJson};
-    }
-    let nearest=valid[0], best=Infinity;
-    for(const x of valid){ const diff=Math.abs(x.d-baseDate); if(diff<best){best=diff; nearest=x;} }
-    // 정확도 보호: 기준시각에서 20분 이상 떨어진 값은 표시하지 않는다.
-    if(best>20*60000){
-      return {ok:false, reason:`기준시각 근처 조석값 없음. 가장 가까운 값 ${dtDisplay(nearest.d)} (${Math.round(best/60000)}분 차이)`, tried, bridgeDate, baseDate, json:firstJson};
-    }
-    const before=valid.filter(x=>x.d<nearest.d).slice(-1)[0];
-    const after=valid.find(x=>x.d>nearest.d);
-    const extrema=findExtrema(valid);
-    return {ok:true, valid, nearest, before, after, extrema, tried, bridgeDate, baseDate, json:firstJson};
-  }
-
-  function formatResult(res){
-    if(!res.ok) return `${selectedBridge.bridge} 기준\n계산불가 / 검증필요\n${res.reason}\n기준 물때: ${stationName} ${fmtOffset(offsetMin)}`;
-    const c=res.nearest, before=res.before, after=res.after;
-    let flow='흐름 확인'; let flowDir='flat';
-    if(before && after){
-      const diff=after.lv-before.lv;
-      const delta=`${diff>=0?'+':''}${diff.toFixed(1)}cm`;
-      if(diff>0.5){ flow=`밀물 진행중 ↑ (${delta})`; flowDir='up'; }
-      else if(diff<-0.5){ flow=`썰물 진행중 ↓ (${delta})`; flowDir='down'; }
-      else flow=`정체/전환부근 (${delta})`;
-    }
-    const future=res.extrema.filter(x=>x.d>=res.baseDate).sort((a,b)=>a.d-b.d);
-    let target=null;
-    if(flowDir==='up') target=future.find(x=>x.type==='만조') || future[0];
-    else if(flowDir==='down') target=future.find(x=>x.type==='간조') || future[0];
-    else target=future[0];
-    let extreme='다음 만조/간조 계산불가';
-    if(target){
-      const diff=target.d-res.baseDate;
-      // 정확도 보호: 다음 만조/간조가 13시간을 넘으면 잘못된 계산으로 보고 표시하지 않는다.
-      if(diff>=0 && diff<=13*60*60000){
-        extreme=`다음 ${target.type}까지 약 ${minutesText(diff)} (${dtDisplay(addMinutes(target.d, offsetMin))} ${selectedBridge.bridge} 기준)`;
-      }else{
-        extreme='다음 만조/간조 계산불가 / 검증필요';
-      }
-    }
-    return `${selectedBridge.bridge} 기준 ${dtDisplay(res.bridgeDate)}\n${tideStageLabel(res.bridgeDate)}\n${c.lv.toFixed(1)}cm / ${flow}\n${extreme}\n기준 물때: ${stationName} ${fmtOffset(offsetMin)} (기준시각 ${dtDisplay(res.baseDate)})`;
-  }
-
-  try{
-    const a=await one(inc), b=await one(cur);
-    document.getElementById('incidentTide').textContent=formatResult(a);
-    document.getElementById('currentTide').textContent=formatResult(b);
-    if(b.ok){ drawTideGraph(b.valid,b.baseDate,offsetMin,selectedBridge); const th=document.getElementById('tideGraphHelp'); if(th) th.innerHTML=`<b>대교 기준 보정 물때 그래프 기준</b><br>파란선은 <b>${stationName}</b> 바다 조위(cm)를 ${selectedBridge.bridge} 시간차 <b>기준 물때 ${fmtOffset(offsetMin)}</b> 만큼 뒤로 이동한 <b>추정 물때 곡선</b>입니다.<br>이 그래프는 실제 한강 수위(m)가 아니라, 만조·간조 흐름을 이해하기 위한 보조자료입니다. 최종 판단은 위 실측 수위 그래프를 우선합니다.`; }
-    else drawLineChart('tideChart',[],{});
-    document.getElementById('raw').textContent += `\n\n[교량별 보정 조석 v21]\n선택교량: ${selectedBridge.bridge}\n기준조석: ${stationName}\n시간차: 기준 물때 ${fmtOffset(offsetMin)}\n정확도 보호: 기준시각 ±20분 밖의 조석값, 13시간 초과 만조/간조 계산은 표시하지 않음.\n※ 교량별 시간차는 초기 추정값입니다. 90% 이상 정확도는 실측 수위 변화로 보정 후 달성 가능합니다.\n\n[조석 API 호출 URL 예시]\n${(a.tried?.[0]||'').replace(encodeURIComponent(key),'[SERVICE_KEY]')}\n\n[조석 응답 일부]\n${JSON.stringify(a.json,null,2).slice(0,4000)}`;
-  }catch(e){
-    applyManualTide('자동조회 실패');
-    const sampleDate=parseLocalDateTime(inc); const baseDate=addMinutes(sampleDate, -offsetMin);
-    document.getElementById('raw').textContent += `\n\n[조석 오류]\n${String(e)}\n[조석예보(시계열) 직접조회 URL 후보]\n${buildUrl(baseDate,1,1440).replace(encodeURIComponent(key),'[SERVICE_KEY]')}`;
-  }
-}
-
-
-function drawTideGraph(valid, baseDate, offsetMin, selectedBridge){
-  if(!valid||!valid.length){ drawLineChart('tideChart',[],{}); return; }
-  const start=new Date(baseDate.getTime()-6*3600*1000), end=new Date(baseDate.getTime()+6*3600*1000);
-  const pts=valid.filter(x=>x.d>=start&&x.d<=end).map(x=>({x:x.d.getTime()+offsetMin*60000,y:x.lv}));
-  drawLineChart('tideChart',pts,{unit:'cm',decimals:0,nowX:baseDate.getTime()+offsetMin*60000, nowLabel:selectedBridge.bridge+' 기준'});
-}
-
-function openTideLinks(){
-  const key=cleanKey(document.getElementById('tideKey').value);
-  if(!key){ alert('조석 API 인증키를 먼저 입력하세요.'); return; }
-  const x=bridgeMap[getBridgeIndex()];
-  if(!x.tide){ alert(`${x.bridge}는 잠실수중보 상류 구간으로 조석 직접조회 대상에서 제외합니다.`); return; }
-  const dt=document.getElementById('incidentAt').value || document.getElementById('searchAt').value;
-  const d=parseLocalDateTime(dt);
-  const baseDate=new Date(d.getTime()-(x.tideOffset||0)*60000);
-  const local=new Date(baseDate.getTime()-baseDate.getTimezoneOffset()*60000);
-  const ymd=local.toISOString().slice(0,10).replace(/-/g,'');
-  const station=x.tideCode || document.getElementById('tideStation').value;
-  const url=`https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService?serviceKey=${encodeURIComponent(key)}&pageNo=1&numOfRows=300&type=json&obsCode=${encodeURIComponent(station)}&reqDate=${ymd}&min=10`;
-  window.open(url,'_blank');
-}
-
-function applyManualTide(reason){
-  const a=(document.getElementById('manualIncidentTide')?.value||'').trim();
-  const b=(document.getElementById('manualCurrentTide')?.value||'').trim();
-  document.getElementById('incidentTide').textContent = a || reason || '수동 입력 전';
-  document.getElementById('currentTide').textContent = b || reason || '수동 입력 전';
-}
-function applyManualWind(){
-  const wd=(document.getElementById('manualWindDir')?.value||'').trim();
-  const ws=(document.getElementById('manualWindSpd')?.value||'').trim();
-  document.getElementById('windDir').textContent=wd||'수동 입력 전';
-  document.getElementById('windSpd').textContent=ws||'수동 입력 전';
-}
-function vecToDir(deg){
-  const dirs=['북','북북동','북동','동북동','동','동남동','남동','남남동','남','남남서','남서','서남서','서','서북서','북서','북북서'];
-  const n=Number(deg); if(!Number.isFinite(n)) return deg||'';
-  return dirs[Math.round(n/22.5)%16]+`(${Math.round(n)}°)`;
-}
-function kmaBase(dt){
-  const d=new Date(dt||Date.now());
-  d.setMinutes(d.getMinutes()-70); // 초단기실황 발표 지연을 피하기 위해 70분 전 기준
-  const yyyy=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const hh=String(d.getHours()).padStart(2,'0')+'00';
-  return {date:`${yyyy}${mm}${dd}`, time:hh};
-}
-async function loadWind(key, cur){
-  try{
-    const [nx,ny]=(document.getElementById('kmaGrid').value||'60,127').split(',').map(x=>x.trim());
-    const bt=kmaBase(cur); const url=`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${encodeURIComponent(key)}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${bt.date}&base_time=${bt.time}&nx=${nx}&ny=${ny}`;
-    const j=await fetchJson(url); const items=arrFrom(j);
-    let vec='', wsd='', t1h='', rn1='', pty='';
-    for(const it of items){
-      if(it.category==='VEC') vec=it.obsrValue;
-      if(it.category==='WSD') wsd=it.obsrValue;
-      if(it.category==='T1H') t1h=it.obsrValue;
-      if(it.category==='RN1') rn1=it.obsrValue;
-      if(it.category==='PTY') pty=it.obsrValue;
-    }
-    const ptyMap={'0':'없음','1':'비','2':'비/눈','3':'눈','5':'빗방울','6':'빗방울눈날림','7':'눈날림'};
-    document.getElementById('windDir').textContent=vec?vecToDir(vec):'값 확인 필요';
-    document.getElementById('windSpd').textContent=wsd?`${wsd} m/s${t1h?` / ${t1h}℃`:''}${rn1?` / 강수 ${rn1}mm`:''}${pty?` / ${ptyMap[pty]||pty}`:''}`:'값 확인 필요';
-    document.getElementById('raw').textContent += `\n\n[기상청 URL]\n${url.replace(key,'[SERVICE_KEY]')}\n\n[기상청 응답 일부]\n${JSON.stringify(j,null,2).slice(0,3000)}`;
-  }catch(e){
-    applyManualWind();
-    document.getElementById('raw').textContent += `\n\n[기상청 오류]\n${String(e)}\n※ 기상청 API 키 미승인, URL 오류, 또는 CORS 차단 시 풍향·풍속은 수동 입력값을 사용합니다.`;
-  }
+  const a=await one(inc), b=await one(cur);
+  document.getElementById('incidentTide').textContent=fmt(a,inc);
+  document.getElementById('currentTide').textContent=fmt(b,cur);
+  const success=a.ok||b.ok;
+  document.getElementById('raw').textContent += `\n\n[조석예보(시계열) v39]\n요청변수 우선: obsCode=${station}, reqDate=YYYYMMDD, min=10, type=json\n[조석 행 수] 투신 ${a.items?.length||0} / 현재 ${b.items?.length||0}\n[${success?'조석 성공 URL':'조석 실패 후보'}]\n${(a.tried||[]).concat(b.tried||[]).join('\n')}\n\n[인천 물때표 예비자료]\n${tideRef()}\n\n[조석 응답 일부]\n${JSON.stringify((a.ok?a.j:b.j)||a.last||b.last||{},null,2).slice(0,4000)}`;
 }
 
 function makeRecommendation(){
-  const idx=getBridgeIndex();
-  const x=bridgeMap[idx]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
-  const wd=document.getElementById('windDir').textContent==='수동 입력 전' ? document.getElementById('manualWindDir').value.trim() : document.getElementById('windDir').textContent; const ws=document.getElementById('windSpd').textContent==='수동 입력 전' ? document.getElementById('manualWindSpd').value.trim() : document.getElementById('windSpd').textContent;
-  if(document.getElementById('windDir').textContent==='수동 입력 전'||document.getElementById('manualWindDir').value.trim()) applyManualWind();
-  const env=window.lastEnv||{};
-  const dam=Number(String(env.currentDam||'').replace(/,/g,''));
-  let damText='방류량 조회 전입니다. 조회 후 하류 이동 가능성을 다시 판단하세요.';
-  let damClass='warn';
-  if(Number.isFinite(dam)){
-    if(dam<500){damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 낮음~보통 수준으로 보고, 조석·교각 와류·현장 육안 흐름을 더 크게 반영합니다.`; damClass='ok';}
-    else if(dam<2000){damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 하류 이동 가능성을 기본값으로 두되, 조석 역전 시 상류/정체 구간도 확인합니다.`; damClass='warn';}
-    else {damText=`현재 팔당댐 방류량 ${formatNumber(dam)}㎥/s: 하류 이동 가능성 가중. 하류 교각·와류·굴곡부를 우선 확인합니다.`; damClass='danger';}
-  }
-  let flowText='현장 흐름 미입력: API 값만으로 실제 유속과 정확한 이동거리를 확정할 수 없습니다.';
-  if(flow==='down') flowText='현장 관찰상 하류 방향 흐름 우세: 하류 방향 수색구역에 가중치를 둡니다.';
-  if(flow==='up') flowText='현장 관찰상 상류 방향 또는 조석 역류 가능성: 상류측 정체·와류 구간도 1차에 포함합니다.';
-  if(flow==='still') flowText='정체·와류 의심: 교각 주변, 저류부, 구조물 주변 체류 가능성을 우선 확인합니다.';
-  const uncertainty = acc==='정확' ? '위치 정확도 높음: 사고지점 기준 ±1개 교량 구간부터 확인.' : acc==='추정' ? '위치 추정: 사고지점 기준 상·하류 모두 열어두고 ±1~2개 교량 구간 확인.' : '위치 불명확: 신고지점 주변 넓은 구간을 수색 우선구역으로 설정.';
-  const zone=getSearchZone(idx,flow);
+  const x=bridgeMap[document.getElementById('bridge').value]; const acc=document.getElementById('accuracy').value; const flow=document.getElementById('manualFlow').value;
+  const wd=document.getElementById('manualWindDir').value.trim(); const ws=document.getElementById('manualWindSpd').value.trim();
+  document.getElementById('windDir').textContent=wd||'수동 입력 전'; document.getElementById('windSpd').textContent=ws||'수동 입력 전';
+  let flowText='현재 API 값만으로는 실제 유속과 정확한 이동거리를 확정할 수 없습니다.';
+  if(flow==='down') flowText='현장 관찰상 하류 방향 흐름이 우세하므로, 1차 수색은 사고지점 하류 교각·와류 구간부터 설정합니다.';
+  if(flow==='up') flowText='현장 관찰상 상류 방향 또는 조석 역류 가능성이 있으므로, 사고지점 상류측 정체·와류 구간도 함께 확인합니다.';
+  if(flow==='still') flowText='정체·와류가 의심되므로, 교각 주변·잠수교/보 구조물 주변 체류 가능 구간을 우선 확인합니다.';
+  const uncertainty = acc==='정확' ? '위치 정확도가 높아 사고지점 기준 ±1개 교량 구간부터 확인합니다.' : acc==='추정' ? '위치가 추정이므로 사고지점 기준 상·하류 모두 열어두고 ±1~2개 교량 구간을 확인합니다.' : '위치가 불명확하므로 신고지점 주변 넓은 구간을 수색 우선구역으로 잡아야 합니다.';
   document.getElementById('recommendation').innerHTML=`
     <span class="pill warn">주의</span> 이 결과는 수색 참고자료이며, 정확한 잠수 위치를 확정하는 자료가 아닙니다.<br><br>
     <b>선택 위치:</b> ${x.bridge} / ${document.getElementById('pole').value||'폴대 미입력'}<br>
-    <b>대표 수위관측소:</b> ${x.station} (${x.code})<br>
-    <b>현재 수위/유량 참고:</b> ${env.currentWater?env.currentWater+'m':'조회 전'} / 수위 API의 fw 값은 유량 참고값입니다.<br><br>
+    <b>대표 수위관측소:</b> ${x.station} (${x.code})<br><br>
     <b>1차 판단:</b> ${uncertainty}<br>
-    <b>방류량 판단:</b> <span class="pill ${damClass}">${damText}</span><br>
     <b>흐름 참고:</b> ${flowText}<br>
-    <b>바람 참고:</b> ${document.getElementById('windDir').textContent||'풍향 미입력'} / ${document.getElementById('windSpd').textContent||'풍속 미입력'}<br>
-    <b>물때 참고:</b><br>투신 당시 ${document.getElementById('incidentTide').textContent.replace(/\n/g, ' / ')}<br>현재 ${document.getElementById('currentTide').textContent.replace(/\n/g, ' / ')}<br><br>
-    <b>수색 우선구역:</b><br>
-    ① ${zone}<br>
-    ② 사고지점 직하류 교각 및 와류 가능 구간<br>
-    ③ 사고지점 직상류 정체 가능 구간<br>
-    ④ 조석 역전 시각 전후라면 상·하류 양방향 재확인
+    <b>바람 참고:</b> ${wd||'풍향 미입력'} / ${ws||'풍속 미입력'}<br><br>
+    <b>권장 수색 구분:</b><br>
+    ① 사고지점 직하류 교각 및 와류 가능 구간<br>
+    ② 사고지점 직상류 정체 가능 구간<br>
+    ③ 조석 역전 시각 전후라면 상·하류 양방향 재확인<br>
+    ④ 방류량 증가 시 하류 이동 가능성 가중
   `;
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', init);}else{init();}
 </script>
-<!-- v23: filter invalid water-level points, clarify water-level datum, improve chart readability and graph descriptions -->
 </body>
 </html>

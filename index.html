@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>HanRiver Environment Dashboard v1.0 Phase 1</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>HanRiver Environment Dashboard</h1>
+    <p>v1.0 Phase 1 · 데이터 엔진 검증판</p>
+  </div>
+  <span class="badge">검증 우선</span>
+</header>
+
+<main>
+  <section class="card warning">
+    <strong>사용 원칙</strong>
+    <p>이 화면은 수위·방류량·조석·기상 데이터를 검증하기 위한 분석 보조 도구입니다. 실제 수색 지시나 작전 범위 결정은 현장 지휘·공식 절차를 따르세요.</p>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>① API 키</h2>
+      <label>한강홍수통제소 인증키</label>
+      <input id="hrfcoKey" placeholder="HRFCO API Key" autocomplete="off" />
+      <label>조석 API 인증키</label>
+      <input id="tideKey" placeholder="KHOA/Data.go.kr Tide API Key" autocomplete="off" />
+      <label>기상청 인증키</label>
+      <input id="weatherKey" placeholder="KMA API Key" autocomplete="off" />
+      <div class="row">
+        <button id="saveKeys">키 저장</button>
+        <button id="clearKeys" class="secondary">키 삭제</button>
+      </div>
+      <p id="keyStatus" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>② 조회 조건</h2>
+      <label>교량</label>
+      <select id="bridgeSelect"></select>
+      <div class="grid two compact">
+        <div>
+          <label>사고 날짜</label>
+          <input id="incidentDate" inputmode="numeric" placeholder="20260621" />
+        </div>
+        <div>
+          <label>사고 시간</label>
+          <input id="incidentTime" inputmode="numeric" placeholder="1300" />
+        </div>
+      </div>
+      <div class="grid two compact">
+        <div>
+          <label>조회 날짜</label>
+          <input id="searchDate" inputmode="numeric" placeholder="20260622" />
+        </div>
+        <div>
+          <label>조회 시간</label>
+          <input id="searchTime" inputmode="numeric" placeholder="1100" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="setNow" class="secondary">현재시각 입력</button>
+        <button id="runQuery">환경조회</button>
+      </div>
+      <p id="inputStatus" class="muted"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>③ 데이터 신뢰도</h2>
+    <div id="qualityGrid" class="quality-grid"></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card result-card">
+      <h2>선택 교량 환경</h2>
+      <div id="summary"></div>
+    </div>
+    <div class="card result-card">
+      <h2>대표 관측소·모델 근거</h2>
+      <div id="modelInfo"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>투신시점 → 조회시점 수위 변화</h2>
+    <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.</p>
+    <canvas id="waterChart" height="220"></canvas>
+    <div id="waterChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>방류량 변화</h2>
+    <canvas id="damChart" height="220"></canvas>
+    <div id="damChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>조석 검증</h2>
+    <div id="tideSummary"></div>
+    <canvas id="tideChart" height="220"></canvas>
+    <div id="tideChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>한강 전체 교량 현황판</h2>
+    <div id="bridgeBoard" class="bridge-board"></div>
+  </section>
+
+  <section class="card">
+    <h2>원자료 로그</h2>
+    <pre id="rawLog"></pre>
+  </section>
+</main>
+
+<script src="js/app.js" type="module"></script>
+</body>
+</html>

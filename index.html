@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>HanRiver Environment Dashboard v1.0 Phase 1</title>
+  <title>HanRiver Environment Dashboard v1.0 Phase 2</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1>HanRiver Environment Dashboard</h1>
-    <p>v1.0 Phase 1 · 데이터 엔진 검증판</p>
+    <p>v1.0 Phase 2 · 교량 확대 · 데이터 검증 · 그래프 강화</p>
   </div>
   <span class="badge">검증 우선</span>
 </header>
@@ -24,12 +24,26 @@
   <section class="grid two">
     <div class="card">
       <h2>① API 키</h2>
+      <p class="muted">기본값은 숨김입니다. 필요할 때만 보기 버튼을 누르세요. 원자료 로그에는 키가 자동 마스킹됩니다.</p>
+
       <label>한강홍수통제소 인증키</label>
-      <input id="hrfcoKey" placeholder="HRFCO API Key" autocomplete="off" />
+      <div class="key-row">
+        <input id="hrfcoKey" type="password" placeholder="HRFCO API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="hrfcoKey">보기</button>
+      </div>
+
       <label>조석 API 인증키</label>
-      <input id="tideKey" placeholder="KHOA/Data.go.kr Tide API Key" autocomplete="off" />
+      <div class="key-row">
+        <input id="tideKey" type="password" placeholder="KHOA/Data.go.kr Tide API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="tideKey">보기</button>
+      </div>
+
       <label>기상청 인증키</label>
-      <input id="weatherKey" placeholder="KMA API Key" autocomplete="off" />
+      <div class="key-row">
+        <input id="weatherKey" type="password" placeholder="KMA API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="weatherKey">보기</button>
+      </div>
+
       <div class="row">
         <button id="saveKeys">키 저장</button>
         <button id="clearKeys" class="secondary">키 삭제</button>
@@ -41,6 +55,7 @@
       <h2>② 조회 조건</h2>
       <label>교량</label>
       <select id="bridgeSelect"></select>
+      <p id="bridgeCount" class="muted"></p>
       <div class="grid two compact">
         <div>
           <label>사고 날짜</label>
@@ -86,6 +101,13 @@
   </section>
 
   <section class="card">
+    <h2>통합 변화 그래프</h2>
+    <p class="muted">투신시점부터 조회시점까지의 흐름을 한 화면에 비교합니다. 각 지표는 서로 단위가 달라 0~100 정규화값으로 표시합니다.</p>
+    <canvas id="combinedChart" height="260"></canvas>
+    <div id="combinedChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
     <h2>투신시점 → 조회시점 수위 변화</h2>
     <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.</p>
     <canvas id="waterChart" height="220"></canvas>
@@ -116,6 +138,6 @@
   </section>
 </main>
 
-<script src="js/app.js" type="module"></script>
+<script src="js/app.js" defer></script>
 </body>
 </html>

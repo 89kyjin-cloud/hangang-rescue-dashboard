@@ -1,5 +1,6 @@
-/* HanRiver Environment Dashboard v1.0 Phase 2
+/* HanRiver Environment Dashboard v1.0 Phase 2.1 TideFix
  * 원칙: 데이터 실패를 임의값으로 덮지 않는다. API 키는 화면/로그에서 기본 마스킹한다.
+ * 조석예보(시계열) 상세기능명: /GetTideFcstTimeApiService, numOfRows 최대 300 반영.
  */
 const $ = (id) => document.getElementById(id);
 const logLines = [];
@@ -111,10 +112,18 @@ function normalizeRows(data){
   return [];
 }
 function parseObsTime(row){
-  const raw = row.obstm || row.obsTime || row.ymdhm || row.tm || row.datetime || row.time || row.obsvDt || row.predcDt || row.fcstDateTime;
-  if(!raw) return null;
-  const nums=String(raw).replace(/\D/g,'');
+  const raw = row.obstm || row.obsTime || row.obs_time || row.ymdhm || row.tm || row.datetime || row.dateTime || row.fcstDateTime || row.predcDt || row.obsvDt || row.tideTime || row.tide_time || row.tphTime || row.tph_time || row.tdlvTime || row.tdlv_time || row.time;
+  let nums = raw ? String(raw).replace(/\D/g,'') : '';
   if(nums.length>=12){ const y=+nums.slice(0,4), mo=+nums.slice(4,6), d=+nums.slice(6,8), h=+nums.slice(8,10), m=+nums.slice(10,12); return new Date(y,mo-1,d,h,m); }
+  const dateRaw = row.reqDate || row.fcstDate || row.date || row.tideDate || row.tide_date || row.ymd;
+  const timeRaw = row.hm || row.hhmm || row.tideTime || row.tide_time || row.tphTime || row.tph_time || row.time;
+  const dnums = dateRaw ? String(dateRaw).replace(/\D/g,'') : '';
+  const tnums = timeRaw ? String(timeRaw).replace(/\D/g,'') : '';
+  if(dnums.length>=8 && tnums.length>=3){
+    const y=+dnums.slice(0,4), mo=+dnums.slice(4,6), d=+dnums.slice(6,8);
+    const hhmm = tnums.padStart(4,'0');
+    return new Date(y,mo-1,d,+hhmm.slice(0,2),+hhmm.slice(2,4));
+  }
   return null;
 }
 function val(row, keys){ for(const k of keys){ if(row[k]!==undefined && row[k]!==null && row[k]!=='' && !Number.isNaN(Number(row[k]))) return Number(row[k]); } return null; }
@@ -146,14 +155,16 @@ async function getDamSeries(key, start, end){
 async function getTideRowsForDate(key, date){
   if(!key) throw new Error('조석 키 없음');
   const reqDate=ymd(date);
-  const base='https://apis.data.go.kr/1192136/tideFcstTime';
+  // 공공데이터포털 캡처 기준 확정값:
+  // End Point: https://apis.data.go.kr/1192136/tideFcstTime
+  // 상세기능: /GetTideFcstTimeApiService
+  // numOfRows 최대값: 300, min 최대값: 60
+  const base='https://apis.data.go.kr/1192136/tideFcstTime/GetTideFcstTimeApiService';
   const variants=[key, encodeURIComponent(key), decodeURIComponentSafe(key)];
   const urls=[];
   for(const k of [...new Set(variants)]){
-    urls.push(`${base}/gettideFcstTime?serviceKey=${k}&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10&type=json&numOfRows=2000&pageNo=1`);
-    urls.push(`${base}/GetTideFcstTime?serviceKey=${k}&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10&type=json&numOfRows=2000&pageNo=1`);
-    urls.push(`${base}?serviceKey=${k}&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10&type=json&numOfRows=2000&pageNo=1`);
-    urls.push(`${base}/gettideFcstTime?serviceKey=${k}&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10&_type=json&numOfRows=2000&pageNo=1`);
+    urls.push(`${base}?serviceKey=${k}&pageNo=1&numOfRows=300&type=json&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10`);
+    urls.push(`${base}?serviceKey=${k}&pageNo=1&numOfRows=300&_type=json&obsCode=${TIDE_STATION}&reqDate=${reqDate}&min=10`);
   }
   let lastErr='';
   for(const u of urls){
@@ -180,7 +191,7 @@ async function getTideRowsRange(key,start,end){
     try{
       const r=await getTideRowsForDate(key,d);
       success++;
-      for(const row of r){ const t=parseObsTime(row); const k=t?`${t.getTime()}_${val(row,['tdlvHgt','tideHeight','tphLevel','tide_level','level'])}`:JSON.stringify(row); if(!seen.has(k)){seen.add(k); rows.push(row);} }
+      for(const row of r){ const t=parseObsTime(row); const k=t?`${t.getTime()}_${val(row,['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level'])}`:JSON.stringify(row); if(!seen.has(k)){seen.add(k); rows.push(row);} }
     }catch(e){ errors.push(e.message); }
   }
   log('[조석 기간조회]', `성공일=${success}`, `총행=${rows.length}`, errors.length?`오류=${errors.slice(0,2).join(' / ')}`:'');
@@ -191,7 +202,7 @@ function decodeURIComponentSafe(s){ try{return decodeURIComponent(s);}catch{retu
 function tideAt(rows,target,offsetMin=0){
   const shifted = new Date(target.getTime()-offsetMin*60000);
   const items=[];
-  for(const r of rows){ const t=parseObsTime(r); const h=val(r,['tdlvHgt','tideHeight','tphLevel','tide_level','level']); if(t&&h!==null) items.push({time:t,value:h,row:r}); }
+  for(const r of rows){ const t=parseObsTime(r); const h=val(r,['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level']); if(t&&h!==null) items.push({time:t,value:h,row:r}); }
   items.sort((a,b)=>a.time-b.time);
   if(!items.length) return null;
   let best=null,bestDiff=Infinity,bestIdx=-1;
@@ -337,7 +348,7 @@ async function runQuery(){
   renderSummary(b,incidentWater,currentWater,damNow,tide,decision); renderModelInfo(b);
   const waterPts=rowsToPoints(waterRows,['wl','waterLevel','level']);
   const damPts=rowsToPoints(damRows,['tototf','fw','discharge','outflow']);
-  const tidePts=rowsToPoints(tideRows,['tdlvHgt','tideHeight','tphLevel','tide_level','level']);
+  const tidePts=rowsToPoints(tideRows,['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level']);
   drawMultiLine($('combinedChart'), [
     {name:'수위',points:normalizePoints(waterPts)},
     {name:'방류',points:normalizePoints(damPts)},

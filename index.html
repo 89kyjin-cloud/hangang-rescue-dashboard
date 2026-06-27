@@ -10,7 +10,7 @@
 <header class="topbar">
   <div>
     <h1>HanRiver Environment Dashboard</h1>
-    <p>v1.0 Phase 2.4 WeatherAssist · 수위/방류/조석/기상 통합판정</p>
+    <p>v1.0 Phase 2.5 ValidValueScan · 수위/방류 유효값 탐색 · 시점별 흐름판정</p>
   </div>
   <span class="badge">검증 우선</span>
 </header>
@@ -139,17 +139,12 @@
     <div id="bridgeBoard" class="bridge-board"></div>
   </section>
 
-  
-<section class="card warning">
-<p><strong>중요:</strong> 물 방향·물살은 실측 유속이 아닌 참고판정입니다. 수위·방류량·조석·기상자료를 조합한 보조 정보이며 실제 유속계 측정값이 아닙니다.</p>
-</section>
-
-<section class="card">
+  <section class="card">
     <h2>원자료 로그</h2>
     <pre id="rawLog"></pre>
   </section>
 </main>
 
-<script src="js/app.js?v=20260627-weatherassist" defer></script>
+<script src="js/app.js?v=20260627-validscan" defer></script>
 </body>
 </html>

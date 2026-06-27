@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HRFCO 수위·방류 원자료 검증기</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;margin:0;background:#f4f6fa;color:#111827}
+    header{background:#111827;color:white;padding:18px 16px}
+    header h1{font-size:20px;margin:0 0 6px}
+    header p{margin:0;color:#cbd5e1;font-size:13px}
+    main{max-width:1120px;margin:0 auto;padding:16px}
+    .card{background:white;border:1px solid #e5e7eb;border-radius:16px;padding:16px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+    label{font-weight:700;font-size:13px;display:block;margin-bottom:6px}
+    input,select,button{font-size:16px;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px}
+    input,select{width:100%;box-sizing:border-box;background:white}
+    button{background:#2563eb;color:white;border:0;font-weight:800}
+    button.secondary{background:#e5e7eb;color:#111827}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .pill{display:inline-block;background:#eef2ff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700;color:#3730a3}
+    .ok{color:#059669;font-weight:800}.bad{color:#dc2626;font-weight:800}.warn{color:#d97706;font-weight:800}
+    pre{background:#0f172a;color:#e5e7eb;border-radius:12px;padding:12px;overflow:auto;max-height:420px;font-size:12px;line-height:1.45}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;white-space:nowrap}
+    th{background:#f8fafc;position:sticky;top:0}
+    .tablewrap{overflow:auto;max-height:420px;border:1px solid #e5e7eb;border-radius:12px}
+    .notice{background:#fff7ed;border-color:#fdba74}
+    @media(max-width:760px){.grid,.grid3{grid-template-columns:1fr} main{padding:10px} input,select,button{font-size:15px}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>HRFCO 수위·방류 원자료 검증기</h1>
+  <p>대시보드 수위·방류 실패 원인을 확인하기 위한 별도 테스트 화면입니다. 숫자가 없으면 임의값으로 대체하지 않습니다.</p>
+</header>
+
+<main>
+  <section class="card notice">
+    <strong>사용 목적</strong>
+    <p>API 호출 성공 여부와 별개로, 실제 숫자 값이 내려오는 관측소 코드·조회시간 조합을 찾습니다.</p>
+    <p><a href="./index.html">← 대시보드로 돌아가기</a></p>
+  </section>
+
+  <section class="card">
+    <h2>① 인증키·조회시간</h2>
+    <div class="grid">
+      <div>
+        <label>HRFCO 인증키</label>
+        <input id="apiKey" type="password" placeholder="api.hrfco.go.kr 인증키" autocomplete="off">
+      </div>
+      <div>
+        <label>보기/가림</label>
+        <button class="secondary" onclick="toggleKey()">인증키 보기/가림</button>
+      </div>
+      <div>
+        <label>조회 시작</label>
+        <input id="startTime" type="datetime-local">
+      </div>
+      <div>
+        <label>조회 종료</label>
+        <input id="endTime" type="datetime-local">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button onclick="setRecent(3)">최근 3시간</button>
+      <button onclick="setRecent(12)">최근 12시간</button>
+      <button onclick="setRecent(24)">최근 24시간</button>
+      <button class="secondary" onclick="saveKey()">키 저장</button>
+      <button class="secondary" onclick="clearKey()">키 삭제</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>② 수위 테스트</h2>
+    <div class="grid3">
+      <div>
+        <label>수위 관측소 코드</label>
+        <input id="waterCode" value="1018662">
+      </div>
+      <div>
+        <label>빠른 선택</label>
+        <select id="waterPreset" onchange="applyWaterPreset()">
+          <option value="1018662">청담대교 1018662</option>
+          <option value="1018640">광진교 1018640</option>
+          <option value="1018680">잠수교 1018680</option>
+          <option value="1018683">한강대교 후보 1018683</option>
+          <option value="1018695">행주대교 후보 1018695</option>
+        </select>
+      </div>
+      <div>
+        <label>실행</label>
+        <button onclick="testWater()">수위 조회</button>
+      </div>
+    </div>
+    <div id="waterSummary" style="margin:12px 0"></div>
+    <div class="tablewrap"><table id="waterTable"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>③ 방류 테스트</h2>
+    <div class="grid3">
+      <div>
+        <label>댐 관측소 코드</label>
+        <input id="damCode" value="1017310">
+      </div>
+      <div>
+        <label>빠른 선택</label>
+        <select id="damPreset" onchange="applyDamPreset()">
+          <option value="1017310">팔당댐 후보 1017310</option>
+        </select>
+      </div>
+      <div>
+        <label>실행</label>
+        <button onclick="testDam()">방류 조회</button>
+      </div>
+    </div>
+    <div id="damSummary" style="margin:12px 0"></div>
+    <div class="tablewrap"><table id="damTable"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>④ 원자료 로그</h2>
+    <pre id="logBox">대기 중</pre>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const HRFCO = "https://api.hrfco.go.kr";
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function toYmdhm(d){
+  return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+pad(d.getHours())+pad(d.getMinutes());
+}
+function fromLocalInput(v){ return new Date(v); }
+function toLocalInput(d){
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function log(...args){
+  const s=args.map(a=> typeof a==="string" ? a : JSON.stringify(a,null,2)).join(" ");
+  $('logBox').textContent = (s + "\n" + $('logBox').textContent).slice(0,20000);
+}
+function toggleKey(){ $('apiKey').type = $('apiKey').type === 'password' ? 'text' : 'password'; }
+function saveKey(){ localStorage.setItem('hrfco_key',$('apiKey').value.trim()); log('인증키 저장'); }
+function clearKey(){ localStorage.removeItem('hrfco_key'); $('apiKey').value=''; log('인증키 삭제'); }
+function setRecent(hours){
+  const end = new Date(Date.now() - 20*60000);
+  const start = new Date(end.getTime() - hours*3600000);
+  $('startTime').value = toLocalInput(start);
+  $('endTime').value = toLocalInput(end);
+}
+function applyWaterPreset(){ $('waterCode').value = $('waterPreset').value; }
+function applyDamPreset(){ $('damCode').value = $('damPreset').value; }
+
+function getRows(json){
+  if(Array.isArray(json)) return json;
+  if(Array.isArray(json?.content)) return json.content;
+  if(Array.isArray(json?.data)) return json.data;
+  if(Array.isArray(json?.list)) return json.list;
+  if(Array.isArray(json?.response?.body?.items?.item)) return json.response.body.items.item;
+  return [];
+}
+function num(v){
+  if(v === null || v === undefined) return null;
+  const s=String(v).trim();
+  if(s==="") return null;
+  const n=Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+function summarize(rows, keys){
+  const total = rows.length;
+  const result = keys.map(k => {
+    const exists = rows.filter(r => Object.prototype.hasOwnProperty.call(r,k)).length;
+    const nonblank = rows.filter(r => String(r?.[k] ?? '').trim() !== '').length;
+    const numeric = rows.filter(r => num(r?.[k]) !== null).length;
+    return {key:k, exists, nonblank, numeric};
+  });
+  return {total, result};
+}
+function renderTable(tableId, rows, keys){
+  const table=$(tableId);
+  if(!rows.length){ table.innerHTML='<tr><td>행 없음</td></tr>'; return; }
+  const show = rows.slice(-80).reverse();
+  table.innerHTML = '<thead><tr>' + keys.map(k=>`<th>${k}</th>`).join('') + '</tr></thead><tbody>' +
+    show.map(r=>'<tr>'+keys.map(k=>`<td>${String(r?.[k] ?? '')}</td>`).join('')+'</tr>').join('') +
+    '</tbody>';
+}
+function statusHtml(summary){
+  const anyNumeric = summary.result.some(x=>x.numeric>0);
+  const anyNonBlank = summary.result.some(x=>x.nonblank>0);
+  const cls = anyNumeric ? 'ok' : anyNonBlank ? 'warn' : 'bad';
+  const label = anyNumeric ? '숫자값 있음' : anyNonBlank ? '문자값은 있으나 숫자값 없음' : '전부 공백';
+  return `<span class="${cls}">${label}</span> <span class="pill">총 ${summary.total}행</span> ` +
+    summary.result.map(x=>`<span class="pill">${x.key}: 존재 ${x.exists}, 비공백 ${x.nonblank}, 숫자 ${x.numeric}</span>`).join(' ');
+}
+async function fetchHrfco(path){
+  const key=$('apiKey').value.trim();
+  if(!key) throw new Error('HRFCO 인증키 없음');
+  const url = `${HRFCO}/${key}/${path}`;
+  log('[FETCH]', url.replace(key,'***'));
+  const res = await fetch(url);
+  const text = await res.text();
+  let json;
+  try{ json=JSON.parse(text); }catch(e){ throw new Error('JSON 파싱 실패: '+text.slice(0,200)); }
+  return {json, rows:getRows(json)};
+}
+function timeRange(){
+  const s = fromLocalInput($('startTime').value);
+  const e = fromLocalInput($('endTime').value);
+  return {start:toYmdhm(s), end:toYmdhm(e)};
+}
+async function testWater(){
+  try{
+    const {start,end}=timeRange();
+    const code=$('waterCode').value.trim();
+    const {json,rows}=await fetchHrfco(`waterlevel/list/10M/${code}/${start}/${end}.json`);
+    const keys=['ymdhm','wlobscd','wl','fw'];
+    const sum=summarize(rows, ['wl','fw']);
+    $('waterSummary').innerHTML=statusHtml(sum);
+    renderTable('waterTable', rows, keys);
+    log('[수위 요약]', sum);
+    log('[수위 첫 행]', rows[0] || {});
+    log('[수위 마지막 행]', rows[rows.length-1] || {});
+  }catch(e){
+    $('waterSummary').innerHTML=`<span class="bad">실패: ${e.message}</span>`;
+    log('[수위 실패]', e.message);
+  }
+}
+async function testDam(){
+  try{
+    const {start,end}=timeRange();
+    const code=$('damCode').value.trim();
+    const {json,rows}=await fetchHrfco(`dam/list/10M/${code}/${start}/${end}.json`);
+    const keys=['ymdhm','dmobscd','swl','inf','sfw','ecpc','tototf'];
+    const sum=summarize(rows, ['swl','inf','sfw','ecpc','tototf']);
+    $('damSummary').innerHTML=statusHtml(sum);
+    renderTable('damTable', rows, keys);
+    log('[방류 요약]', sum);
+    log('[방류 첫 행]', rows[0] || {});
+    log('[방류 마지막 행]', rows[rows.length-1] || {});
+  }catch(e){
+    $('damSummary').innerHTML=`<span class="bad">실패: ${e.message}</span>`;
+    log('[방류 실패]', e.message);
+  }
+}
+(function init(){
+  $('apiKey').value = localStorage.getItem('hrfco_key') || '';
+  setRecent(12);
+})();
+</script>
+</body>
+</html>

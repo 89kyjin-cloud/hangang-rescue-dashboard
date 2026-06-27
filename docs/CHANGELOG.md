@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v1.0 Phase 3.0 HRFCO StationScanner
+
+- `test_hrfco.html`에 관측소 자동 스캔 기능 추가
+- 수위 후보 관측소 여러 개를 순차 조회해 wl/fw 숫자값 존재 여부 표시
+- 방류 후보 관측소 여러 개를 순차 조회해 swl/inf/sfw/ecpc/tototf 숫자값 존재 여부 표시
+- 최근 72시간, 최근 7일 조회 버튼 추가
+- 숫자값이 발견된 코드와 전부 공백인 코드를 표로 구분
+- 본 대시보드 파일 구조 유지
+
 ## v1.0 Phase 2.9 HRFCO Tester
 
 - `test_hrfco.html` 추가

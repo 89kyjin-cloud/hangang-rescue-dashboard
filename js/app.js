@@ -1,7 +1,6 @@
-const WEATHER_ASSIST_VERSION='v1.0 Phase 2.4 WeatherAssist';
-/* HanRiver Environment Dashboard v1.0 Phase 2.4 WeatherAssist
- * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
- * 수정: 한강홍수통제소 수위·방류량 응답 필드 자동탐지 강화, 후보 필드 없을 때 원자료 샘플 표시.
+/* HanRiver Environment Dashboard v1.0 Phase 2.6 BlankDataGuard
+ * 원칙: 확인된 원자료/계산값/검증필요/확인실패를 구분한다.
+ * 수정: 수위·방류량 필드 존재/값 없음/유효값 발견을 분리하고, 기간 전체 빈값이면 확인 실패로 명확히 표시한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
  */
 const $ = (id) => document.getElementById(id);
@@ -36,8 +35,8 @@ const BRIDGES = [
   {bridge:'천호대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'광진교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'올림픽대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
-  {bridge:'잠실철교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'추가 교량. 청담대교 관측소 권역. 조석 영향은 현장 검증 필요'},
-  {bridge:'잠실대교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
+  {bridge:'잠실철교',zone:'수중보 상류',station:'서울시(청담대교)',code:'1018662',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
+  {bridge:'잠실대교',zone:'수중보 상류/경계',station:'서울시(청담대교)',code:'1018662',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 영향권: 조석/물때 직접 적용 제외'},
   {bridge:'청담대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
   {bridge:'영동대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값'},
   {bridge:'성수대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값'},
@@ -254,7 +253,7 @@ function autoMetricStats(rows,label){
   }
   const stats=[];
   for(const [k,vals] of Object.entries(bucket)){
-    if(vals.length < Math.max(2, Math.ceil(rows.length*0.25))) continue;
+    if(vals.length < 1) continue;
     const min=Math.min(...vals), max=Math.max(...vals);
     stats.push({key:k,count:vals.length,min,max,first:vals[0],last:vals[vals.length-1],allZero:vals.every(v=>Math.abs(v)<1e-9),auto:true,score:metricKeyScore(k,label,min,max,vals.length)});
   }
@@ -283,28 +282,79 @@ function metricKeyScore(k,label,min,max,count){
   }
   return score;
 }
+function fieldPresenceStats(rows, keys){
+  const out=[];
+  for(const k of keys){
+    let present=0, nonEmpty=0, numeric=0, lastRaw='', lastTime=null;
+    for(const row of rows){
+      const r=flatRow(row);
+      if(Object.prototype.hasOwnProperty.call(r,k)){
+        present++;
+        const raw=r[k];
+        if(raw!==undefined && raw!==null && String(raw).trim()!==''){
+          nonEmpty++; lastRaw=raw; lastTime=parseObsTime(row);
+          if(toNumber(raw)!==null) numeric++;
+        }
+      }
+    }
+    if(present) out.push({key:k,present,nonEmpty,numeric,lastRaw,lastTime});
+  }
+  return out;
+}
+function lastValidRow(rows, keys){
+  for(let i=rows.length-1;i>=0;i--){
+    const row=rows[i];
+    const r=flatRow(row);
+    for(const k of keys){
+      if(Object.prototype.hasOwnProperty.call(r,k) && toNumber(r[k])!==null){
+        return {row,key:k,value:toNumber(r[k]),time:parseObsTime(row),index:i};
+      }
+    }
+  }
+  return null;
+}
 function detectMetric(rows, keys, label){
+  if(!rows || !rows.length){
+    log(`[${label} 필드검증] 실패: API 행 없음`);
+    return {key:null,status:'실패',stats:[],reason:'API 행 없음'};
+  }
+  const presence=fieldPresenceStats(rows,keys);
   const stats=metricStats(rows,keys);
   let allStats=stats;
   if(!allStats.length){
     const auto=autoMetricStats(rows,label);
     allStats=auto;
-    log(`[${label} 필드검증] 1차 후보 없음 → 자동탐지 ${auto.length}개`);
+    log(`[${label} 필드검증] 1차 후보 유효값 없음 → 자동탐지 ${auto.length}개`);
   }
   if(!allStats.length){
+    if(presence.length){
+      const cnt=countNumericRows(rows,keys);
+      log(`[${label} 필드검증] 확인 실패: 후보 필드는 존재하지만 조회기간 전체에 유효 숫자값 없음`);
+      log(`[${label} 값 현황]`, `총 ${cnt.totalRows}행 · 후보필드 존재 ${cnt.present}건 · 빈값아님 ${cnt.nonEmpty}건 · 숫자 ${cnt.numeric}건`);
+      log(`[${label} 필드 존재현황]`, presence.map(p=>`${p.key}: 존재 ${p.present}행 / 빈값아님 ${p.nonEmpty}행 / 숫자 ${p.numeric}행`).join(' | '));
+      log(`[${label} 판정]`, 'API 호출은 성공했지만 해당 관측소/기간의 수치가 비어 있어 임의값으로 대체하지 않음');
+      log(`[${label} 원자료 앞/뒤 샘플]`, sampleRowsWindow(rows,keys,3));
+      return {key:null,status:'확인실패',stats:[],presence,reason:'조회기간 전체 유효 숫자값 없음'};
+    }
     log(`[${label} 필드검증] 실패: 후보 필드 없음`);
     if(rows[0]){
       const f=flatRow(rows[0]);
       log(`[${label} 원자료 첫 행 전체키]`, Object.keys(f).slice(0,80).join(', '));
       log(`[${label} 원자료 첫 행]`, f);
+      log(`[${label} 원자료 앞/뒤 샘플]`, sampleRowsWindow(rows,keys,3));
     }
-    return {key:null,status:'실패',stats:[]};
+    return {key:null,status:'확인실패',stats:[],reason:'후보 필드 없음'};
   }
   let chosen=allStats.find(s=>!s.allZero && Math.abs(s.max-s.min)>1e-9) || allStats.find(s=>!s.allZero) || allStats[0];
+  const latest=lastValidRow(rows,[chosen.key]);
   const suspicious = chosen.allZero || Math.abs(chosen.max-chosen.min)<1e-9 || chosen.auto;
-  log(`[${label} 필드검증] 선택=${chosen.key} count=${chosen.count} min=${chosen.min} max=${chosen.max} first=${chosen.first} last=${chosen.last}${chosen.auto?' 자동탐지':''}${suspicious?' 검증필요':''}`);
+  log(`[${label} 필드검증] 선택=${chosen.key} 유효값=${chosen.count}개 min=${chosen.min} max=${chosen.max} first=${chosen.first} last=${chosen.last}${chosen.auto?' 자동탐지':''}${suspicious?' 검증필요':''}`);
+  if(latest){
+    log(`[${label} 최근 유효값]`, `${latest.time?pretty(latest.time):'시간미상'} ${chosen.key}=${latest.value} · 원자료 index=${latest.index}/${rows.length-1}`);
+    if(latest.index < rows.length-1) log(`[${label} 최근 빈값 처리]`, `마지막 ${rows.length-1-latest.index}개 행은 값이 없거나 숫자가 아니어서 건너뜀`);
+  }
   if(rows[0]) log(`[${label} 원자료 예시]`, sampleRow(rows[0], [chosen.key,...keys]));
-  return {key:chosen.key,status:suspicious?'검증필요':'실측',stats:allStats,chosen};
+  return {key:chosen.key,status:suspicious?'검증필요':'실측',stats:allStats,chosen,latest};
 }
 function sampleRow(row, keys){
   const f=flatRow(row);
@@ -316,6 +366,29 @@ function sampleRow(row, keys){
   }
   return out;
 }
+
+function countNumericRows(rows, keys){
+  let present=0, numeric=0, nonEmpty=0;
+  for(const row of rows){
+    const r=flatRow(row);
+    for(const k of keys){
+      if(Object.prototype.hasOwnProperty.call(r,k)){
+        present++;
+        if(r[k]!==undefined && r[k]!==null && String(r[k]).trim()!=='') nonEmpty++;
+        if(toNumber(r[k])!==null) numeric++;
+      }
+    }
+  }
+  return {present,nonEmpty,numeric,totalRows:rows.length};
+}
+function sampleRowsWindow(rows, keys, n=3){
+  const pick=[];
+  for(let i=0;i<Math.min(n,rows.length);i++) pick.push({index:i, sample:sampleRow(rows[i],keys)});
+  const start=Math.max(n, rows.length-n);
+  for(let i=start;i<rows.length;i++) pick.push({index:i, sample:sampleRow(rows[i],keys)});
+  return pick;
+}
+
 function nearest(rows,target,valueKeys,maxMin=MAX_NEAREST_MIN){
   let best=null, bestDiff=Infinity;
   for(const row of rows){ const t=parseObsTime(row); const v=val(row,valueKeys); if(!t || v===null) continue; const diff=Math.abs(t-target); if(diff<bestDiff){ best={time:t,value:v,row,diffMin:Math.round(diff/60000)}; bestDiff=diff; } }
@@ -461,6 +534,12 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   return {label,time,water,wTrend,damImpact,damImpactTime,tide,direction,speed,notes};
 }
 function flowDecisionFromState(state){
+  const noWater = !state.water || state.water.stale;
+  const noDam = !state.damImpact || state.damImpact.stale;
+  if(noWater && noDam){
+    const base = state.tide ? '현재 판단은 조석 자료만 이용' : '수위·방류량 자료 없음';
+    return {direction:'참고판정 제한', parts:[base, ...state.notes], speed:'신뢰도 낮음'};
+  }
   return {direction:state.direction, parts:state.notes, speed:state.speed};
 }
 function fmtWaterPoint(p){ return p ? `${p.value.toFixed(2)}m · ${pretty(p.time)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
@@ -568,6 +647,8 @@ async function runQuery(){
   if(search<incident){ $('inputStatus').textContent='조회시각은 사고시각 이후여야 합니다.'; return; }
   if((search-incident)/3600000 > 168){ $('inputStatus').textContent='Phase 2.2는 7일 이내 구간 조회를 권장합니다.'; return; }
   $('inputStatus').textContent='조회 중...'; renderModelInfo(b);
+  log('[버전]', 'v1.0 Phase 2.6 BlankDataGuard');
+  log('[선택 교량]', b.bridge, b.tide ? '조석 적용' : '조석 제외', b.reason);
   const start=new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000);
   const end=new Date(search.getTime()+90*60000);
   const q={water:'대기',dam:'대기',tide:b.tide?'대기':'제외',weather:'미조회'}; renderQuality(q);
@@ -608,7 +689,7 @@ async function runQuery(){
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>조위 ${currentState.tide.best.value.toFixed(1)}cm · 인천 기준 ${b.offset}분 보정${currentState.tide.nextTurn?` · 다음 ${currentState.tide.nextTurn.type} ${hhmm(currentState.tide.nextTurn.time)}`:''}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}]);
-  $('inputStatus').textContent='조회 완료. 원자료 로그에서 수위/방류량 필드검증 결과를 확인하세요.';
+  $('inputStatus').textContent='조회 완료. 원자료 로그에서 수위/방류량 유효값 탐색 결과를 확인하세요.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -23,6 +23,7 @@
     .ok{color:#059669;font-weight:800}.bad{color:#dc2626;font-weight:800}.warn{color:#d97706;font-weight:800}
     pre{background:#0f172a;color:#e5e7eb;border-radius:12px;padding:12px;overflow:auto;max-height:420px;font-size:12px;line-height:1.45}
     table{width:100%;border-collapse:collapse;font-size:13px}
+    textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
     th,td{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left;white-space:nowrap}
     th{background:#f8fafc;position:sticky;top:0}
     .tablewrap{overflow:auto;max-height:420px;border:1px solid #e5e7eb;border-radius:12px}
@@ -120,8 +121,41 @@
     <div class="tablewrap"><table id="damTable"></table></div>
   </section>
 
+
   <section class="card">
-    <h2>④ 원자료 로그</h2>
+    <h2>⑤ 관측소 자동 스캔</h2>
+    <p>아래 후보 관측소들을 자동으로 조회해서 실제 숫자가 나오는 코드를 찾습니다.</p>
+    <div class="grid">
+      <div>
+        <label>수위 후보 코드 목록</label>
+        <textarea id="waterCandidates" style="width:100%;height:120px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;box-sizing:border-box">1018640 광진교
+1018662 청담대교
+1018680 잠수교
+1018683 한강대교후보
+1018695 행주대교후보
+1019630 한강대교후보2
+1019635 잠수교후보2
+1019650 행주대교후보2</textarea>
+      </div>
+      <div>
+        <label>댐/방류 후보 코드 목록</label>
+        <textarea id="damCandidates" style="width:100%;height:120px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;box-sizing:border-box">1017310 팔당댐후보
+1017315 팔당댐후보2
+1017320 팔당댐후보3</textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button onclick="scanWaterCandidates()">수위 후보 스캔</button>
+      <button onclick="scanDamCandidates()">방류 후보 스캔</button>
+      <button class="secondary" onclick="setRecent(72)">최근 72시간</button>
+      <button class="secondary" onclick="setRecent(168)">최근 7일</button>
+    </div>
+    <div id="scanSummary" style="margin:12px 0"></div>
+    <div class="tablewrap"><table id="scanTable"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>⑥ 원자료 로그</h2>
     <pre id="logBox">대기 중</pre>
   </section>
 </main>
@@ -245,6 +279,102 @@ async function testDam(){
     log('[방류 실패]', e.message);
   }
 }
+
+function parseCandidates(text){
+  return text.split(/\n+/).map(line => line.trim()).filter(Boolean).map(line => {
+    const parts = line.split(/\s+/);
+    return {code: parts[0], name: parts.slice(1).join(' ') || parts[0]};
+  }).filter(x => /^\d+/.test(x.code));
+}
+async function scanOneWater(candidate){
+  const {start,end}=timeRange();
+  const {rows}=await fetchHrfco(`waterlevel/list/10M/${candidate.code}/${start}/${end}.json`);
+  const sum=summarize(rows, ['wl','fw']);
+  return {
+    type:'수위',
+    code:candidate.code,
+    name:candidate.name,
+    total:sum.total,
+    wlNumeric:sum.result.find(x=>x.key==='wl')?.numeric || 0,
+    fwNumeric:sum.result.find(x=>x.key==='fw')?.numeric || 0,
+    wlNonblank:sum.result.find(x=>x.key==='wl')?.nonblank || 0,
+    fwNonblank:sum.result.find(x=>x.key==='fw')?.nonblank || 0,
+    first: rows[0]?.ymdhm || '',
+    last: rows[rows.length-1]?.ymdhm || '',
+    sample: JSON.stringify(rows.find(r=>num(r.wl)!==null || num(r.fw)!==null) || rows[0] || {})
+  };
+}
+async function scanOneDam(candidate){
+  const {start,end}=timeRange();
+  const {rows}=await fetchHrfco(`dam/list/10M/${candidate.code}/${start}/${end}.json`);
+  const sum=summarize(rows, ['swl','inf','sfw','ecpc','tototf']);
+  const get = k => sum.result.find(x=>x.key===k)?.numeric || 0;
+  const getN = k => sum.result.find(x=>x.key===k)?.nonblank || 0;
+  return {
+    type:'방류',
+    code:candidate.code,
+    name:candidate.name,
+    total:sum.total,
+    swlNumeric:get('swl'),
+    infNumeric:get('inf'),
+    sfwNumeric:get('sfw'),
+    ecpcNumeric:get('ecpc'),
+    tototfNumeric:get('tototf'),
+    swlNonblank:getN('swl'),
+    infNonblank:getN('inf'),
+    sfwNonblank:getN('sfw'),
+    ecpcNonblank:getN('ecpc'),
+    tototfNonblank:getN('tototf'),
+    first: rows[0]?.ymdhm || '',
+    last: rows[rows.length-1]?.ymdhm || '',
+    sample: JSON.stringify(rows.find(r=>num(r.swl)!==null || num(r.inf)!==null || num(r.sfw)!==null || num(r.ecpc)!==null || num(r.tototf)!==null) || rows[0] || {})
+  };
+}
+function renderScan(rows){
+  const table=$('scanTable');
+  if(!rows.length){ table.innerHTML='<tr><td>결과 없음</td></tr>'; return; }
+  const keys=Object.keys(rows[0]);
+  table.innerHTML='<thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+keys.map(k=>`<td>${String(r[k] ?? '')}</td>`).join('')+'</tr>').join('')+
+    '</tbody>';
+  const hit = rows.filter(r => Object.keys(r).some(k => k.endsWith('Numeric') && Number(r[k])>0));
+  $('scanSummary').innerHTML = hit.length
+    ? `<span class="ok">숫자값 발견 ${hit.length}개</span>`
+    : `<span class="bad">숫자값 발견 0개</span> <span class="pill">후보 ${rows.length}개 검사</span>`;
+}
+async function scanWaterCandidates(){
+  const list=parseCandidates($('waterCandidates').value);
+  const results=[];
+  $('scanSummary').innerHTML='<span class="warn">수위 후보 스캔 중...</span>';
+  for(const c of list){
+    try{
+      const r=await scanOneWater(c);
+      results.push(r);
+      renderScan(results);
+      log('[수위 후보 결과]', r);
+    }catch(e){
+      const r={type:'수위',code:c.code,name:c.name,error:e.message};
+      results.push(r); renderScan(results); log('[수위 후보 실패]', r);
+    }
+  }
+}
+async function scanDamCandidates(){
+  const list=parseCandidates($('damCandidates').value);
+  const results=[];
+  $('scanSummary').innerHTML='<span class="warn">방류 후보 스캔 중...</span>';
+  for(const c of list){
+    try{
+      const r=await scanOneDam(c);
+      results.push(r);
+      renderScan(results);
+      log('[방류 후보 결과]', r);
+    }catch(e){
+      const r={type:'방류',code:c.code,name:c.name,error:e.message};
+      results.push(r); renderScan(results); log('[방류 후보 실패]', r);
+    }
+  }
+}
+
 (function init(){
   $('apiKey').value = localStorage.getItem('hrfco_key') || '';
   setRecent(12);

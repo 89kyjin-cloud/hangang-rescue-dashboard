@@ -1,15 +1,17 @@
 # CHANGELOG
 
-## v1.0 Phase 2.2 FlowFix
+## v1.0 Phase 2.4 WeatherAssist
 
-- 수위/방류량 파싱 필드 자동검증 추가
-- 원자료 예시 로그 표시 추가
-- 투신시점·조회시점 환경 비교 섹션 추가
-- 교량 영향 방류량에 팔당 지연시간 보정 반영
-- 물 방향/물살 참고판정 로직 추가
-- `index.html`에서 `js/app.js?v=20260625-flowfix`로 캐시 우회
+- 버전명 갱신
+- 기상 API 연동 준비 구조 추가
+- 풍향/풍속 보조판정 정책 반영
+- 물 방향/물살 = 참고판정 문구 명시
+- 원자료 로그 확장 준비
+- 잠실수중보 상류 조석 제외 재검증 대상 표시
 
-## v1.0 Phase 2.1 TideFix
+## v1.0 Phase 2.3 FieldFix
 
-- 조석 API 상세기능명 `GetTideFcstTimeApiService` 반영
-- `numOfRows=300` 적용
+- 수위/방류량 필드 자동탐지 강화
+- 후보 필드 검증 실패 시 원자료 첫 행 전체 키와 샘플 표시
+- 수위/방류량 0 임의 표시 방지 유지
+- 조석 API GetTideFcstTimeApiService 유지

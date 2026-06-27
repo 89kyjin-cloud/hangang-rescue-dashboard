@@ -1,4 +1,4 @@
-/* HanRiver Environment Dashboard v1.0 Phase 2.9 HRFCO Tester
+/* HanRiver Environment Dashboard v1.0 Phase 3.0 HRFCO StationScanner
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 수위·방류 조회 종료시각이 현재보다 미래로 넘어가지 않도록 보정하고, HRFCO 지연 시간을 반영.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.

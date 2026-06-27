@@ -1,6 +1,6 @@
-/* HanRiver Environment Dashboard v1.0 Phase 2.3 FieldFix
+/* HanRiver Environment Dashboard v1.0 Phase 2.2 FlowFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
- * 수정: 한강홍수통제소 수위·방류량 응답 필드 자동탐지 강화, 후보 필드 없을 때 원자료 샘플 표시.
+ * 수정: 수위·방류량 필드 자동검증, 투신시점/조회시점 환경 비교, 교량 영향 방류량은 팔당 지연시간 보정.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
  */
 const $ = (id) => document.getElementById(id);
@@ -22,11 +22,9 @@ function maskSecrets(s){
 const DAM_CODE = '1017310';
 const TIDE_STATION = 'DT_0001';
 const MAX_NEAREST_MIN = 40;
-// 수위/방류량 필드는 한강홍수통제소 API 종류와 응답 버전에 따라 표기가 달라질 수 있다.
-// 1차 후보 + 2차 자동탐지로 처리하며, 실패 시 원자료 샘플과 키 목록을 로그에 남긴다.
-const WATER_KEYS = ['wl','WL','obswl','OBSWL','obsWl','obs_wl','wlevel','WLEVEL','waterLevel','WaterLevel','waterlevel','WATERLEVEL','swl','SWL','wlobs','WLOBS','wlv','WLV','rfwl','RFWL','fw','FW'];
-const DAM_KEYS = ['tototf','TOTOTF','totOutflow','totalOutflow','tot_outflow','otf','OTF','edq','EDQ','outflow','OUTFLOW','discharge','DISCHARGE','fw','FW','tdsrf','TDSRF','flow','FLOW','q','Q'];
-const TIDE_KEYS = ['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level','wl','value','fcstValue'];
+const WATER_KEYS = ['wl','WL','waterLevel','water_level','obsWl','obs_wl','wlevel','level','wlv','rfwl','fw'];
+const DAM_KEYS = ['tototf','TOTOTF','totOutflow','totalOutflow','tot_outflow','tdsrf','outflow','discharge','otf','fw','放流量'];
+const TIDE_KEYS = ['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level'];
 
 // 대표 관측소 기준은 Phase 1 모델 + 추가 교량 확장안입니다. 좌표 기반 최종 검증 전까지는 "운영 매핑안"으로 표시합니다.
 const BRIDGES = [
@@ -112,93 +110,23 @@ async function fetchJson(url){
 }
 function normalizeRows(data){
   if(!data) return [];
-  const cands = [
-    data?.content,
-    data?.list,
-    data?.body?.items?.item,
-    data?.response?.body?.items?.item,
-    data?.items?.item,
-    data?.data,
-    data?.result?.data,
-    data?.response?.body?.item
-  ];
-  for(const c of cands){
-    if(Array.isArray(c)) return c;
-    if(c && typeof c==='object') {
-      // content가 {list:[...]}처럼 한 단계 더 감싸진 경우까지 확인
-      const nested = [c.content,c.list,c.data,c.items?.item,c.result?.data,c.body?.items?.item];
-      for(const n of nested){ if(Array.isArray(n)) return n; }
-      return [c];
-    }
-  }
+  const cands = [data?.content, data?.list, data?.body?.items?.item, data?.response?.body?.items?.item, data?.items?.item, data?.data, data?.result?.data, data?.response?.body?.item];
+  for(const c of cands){ if(Array.isArray(c)) return c; if(c && typeof c==='object') return [c]; }
   if(Array.isArray(data)) return data;
-  const deep = findBestArray(data);
-  if(deep.length) return deep;
   return [];
 }
-function findBestArray(obj){
-  let best=[]; let bestScore=-1; const seen=new Set();
-  function walk(x,depth=0){
-    if(!x || depth>5) return;
-    if(Array.isArray(x)){
-      const score = scoreArray(x);
-      if(score>bestScore){ best=x; bestScore=score; }
-      for(const it of x.slice(0,3)) walk(it,depth+1);
-      return;
-    }
-    if(typeof x==='object'){
-      if(seen.has(x)) return; seen.add(x);
-      for(const v of Object.values(x)) walk(v,depth+1);
-    }
-  }
-  walk(obj,0);
-  return bestScore>0 ? best : [];
-}
-function scoreArray(arr){
-  if(!arr || !arr.length) return 0;
-  let score=Math.min(arr.length,50);
-  for(const r of arr.slice(0,5)){
-    const f=flatRow(r);
-    const keys=Object.keys(f).join('|').toLowerCase();
-    if(/ymdhm|obsymdhm|obstm|obs_time|date|time|tm|predcdt|tdlvdt/.test(keys)) score+=30;
-    if(/(^|[.|_])(wl|obswl|waterlevel|wlevel|swl|fw|tototf|otf|outflow|discharge|tdlvhgt)([.|_]|$)/.test(keys)) score+=50;
-  }
-  return score;
-}
-function flatRow(row,prefix='',out={}){
-  if(row === undefined || row === null) return out;
-  if(Array.isArray(row)){
-    row.forEach((v,i)=>{ out[`${prefix}col${i}`]=v; });
-    // 배열 응답일 경우 첫 12자리 시간값과 첫 숫자값을 보조 필드로 만든다.
-    for(const v of row){ const nums=String(v??'').replace(/\D/g,''); if(nums.length>=12 && !out.ymdhm){ out.ymdhm=nums.slice(0,12); break; } }
-    for(const v of row){ const n=toNumber(v); const nums=String(v??'').replace(/\D/g,''); if(n!==null && nums.length<10){ out.value=n; break; } }
-    return out;
-  }
-  if(typeof row!=='object'){ out[prefix||'value']=row; return out; }
-  for(const [k,v] of Object.entries(row)){
-    const path = prefix ? `${prefix}.${k}` : k;
-    if(v && typeof v==='object' && !Array.isArray(v)){
-      flatRow(v,path,out);
-    }else{
-      out[path]=v;
-      if(!(k in out)) out[k]=v;
-    }
-  }
-  return out;
-}
 function parseObsTime(row){
-  const r=flatRow(row);
-  const raw = r.obstm || r.obsTime || r.obs_time || r.ymdhm || r.obsymdhm || r.ymdh || r.tm || r.datetime || r.dateTime || r.fcstDateTime || r.predcDt || r.obsvDt || r.tideTime || r.tide_time || r.tphTime || r.tph_time || r.tdlvTime || r.tdlv_time || r.time || r.date;
+  const raw = row.obstm || row.obsTime || row.obs_time || row.ymdhm || row.tm || row.datetime || row.dateTime || row.fcstDateTime || row.predcDt || row.obsvDt || row.tideTime || row.tide_time || row.tphTime || row.tph_time || row.tdlvTime || row.tdlv_time || row.time;
   let nums = raw ? String(raw).replace(/\D/g,'') : '';
   if(nums.length>=12){ const y=+nums.slice(0,4), mo=+nums.slice(4,6), d=+nums.slice(6,8), h=+nums.slice(8,10), m=+nums.slice(10,12); return new Date(y,mo-1,d,h,m); }
-  const dateRaw = r.reqDate || r.fcstDate || r.date || r.tideDate || r.tide_date || r.ymd;
-  const timeRaw = r.hm || r.hhmm || r.tideTime || r.tide_time || r.tphTime || r.tph_time || r.time || r.tm;
+  const dateRaw = row.reqDate || row.fcstDate || row.date || row.tideDate || row.tide_date || row.ymd;
+  const timeRaw = row.hm || row.hhmm || row.tideTime || row.tide_time || row.tphTime || row.tph_time || row.time;
   const dnums = dateRaw ? String(dateRaw).replace(/\D/g,'') : '';
   const tnums = timeRaw ? String(timeRaw).replace(/\D/g,'') : '';
   if(dnums.length>=8 && tnums.length>=3){
     const y=+dnums.slice(0,4), mo=+dnums.slice(4,6), d=+dnums.slice(6,8);
-    const hm = tnums.padStart(4,'0');
-    return new Date(y,mo-1,d,+hm.slice(0,2),+hm.slice(2,4));
+    const hhmm = tnums.padStart(4,'0');
+    return new Date(y,mo-1,d,+hhmm.slice(0,2),+hhmm.slice(2,4));
   }
   return null;
 }
@@ -207,16 +135,14 @@ function toNumber(v){
   if(typeof v === 'number') return Number.isFinite(v) ? v : null;
   const s = String(v).trim();
   if(!s || s === '-' || s.toLowerCase() === 'null') return null;
-  const cleaned = s.replace(/,/g,'').replace(/[^0-9.+\-]/g,'').trim();
-  if(!cleaned || cleaned==='-' || cleaned==='+' || cleaned==='.' || cleaned==='-.') return null;
+  const cleaned = s.replace(/,/g,'').replace(/㎥\/s|m³\/s|cms|cm|m/g,'').trim();
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
 }
 function val(row, keys){
-  const r=flatRow(row);
   for(const k of keys){
-    if(Object.prototype.hasOwnProperty.call(r,k)){
-      const n = toNumber(r[k]);
+    if(row && Object.prototype.hasOwnProperty.call(row,k)){
+      const n = toNumber(row[k]);
       if(n !== null) return n;
     }
   }
@@ -226,9 +152,8 @@ function metricStats(rows, keys){
   const stats=[];
   for(const k of keys){
     const vals=[];
-    for(const row of rows){
-      const r=flatRow(row);
-      if(Object.prototype.hasOwnProperty.call(r,k)){
+    for(const r of rows){
+      if(r && Object.prototype.hasOwnProperty.call(r,k)){
         const n=toNumber(r[k]);
         if(n!==null) vals.push(n);
       }
@@ -240,79 +165,19 @@ function metricStats(rows, keys){
   }
   return stats;
 }
-function autoMetricStats(rows,label){
-  const bucket={};
-  for(const row of rows){
-    const r=flatRow(row);
-    for(const [k,v] of Object.entries(r)){
-      const n=toNumber(v);
-      if(n===null) continue;
-      if(isMetricExcluded(k,label,n)) continue;
-      (bucket[k] ||= []).push(n);
-    }
-  }
-  const stats=[];
-  for(const [k,vals] of Object.entries(bucket)){
-    if(vals.length < Math.max(2, Math.ceil(rows.length*0.25))) continue;
-    const min=Math.min(...vals), max=Math.max(...vals);
-    stats.push({key:k,count:vals.length,min,max,first:vals[0],last:vals[vals.length-1],allZero:vals.every(v=>Math.abs(v)<1e-9),auto:true,score:metricKeyScore(k,label,min,max,vals.length)});
-  }
-  stats.sort((a,b)=>b.score-a.score);
-  return stats;
-}
-function isMetricExcluded(k,label,n){
-  const s=String(k).toLowerCase();
-  if(/code|cd|id|name|nm|ymdh|ymd|date|time|dt|tm|lat|lon|page|row|count|num|no|seq|min|hour|addr/.test(s)) return true;
-  if(Math.abs(n)>1000000) return true;
-  if(label==='수위' && /attwl|wrnwl|almwl|srswl|wlobscd|obscd|fw|flow|out|discharge|tototf|otf/.test(s)) return true;
-  if(label==='방류량' && /wl|water|level|tdlv|tide|lat|lon/.test(s) && !/fw|flow|out|discharge|tototf|otf/.test(s)) return true;
-  return false;
-}
-function metricKeyScore(k,label,min,max,count){
-  const s=String(k).toLowerCase();
-  let score=count;
-  if(label==='수위'){
-    if(/(^|[._])(wl|obswl|waterlevel|wlevel|swl|wlv|rfwl)([._]|$)/.test(s) || /water.*level/.test(s)) score+=200;
-    if(max>=-5 && max<=50) score+=30;
-    if(max-min>0) score+=20;
-  }else if(label==='방류량'){
-    if(/tototf|otf|outflow|out_flow|discharge|edq|tdsrf|(^|[._])fw([._]|$)|flow/.test(s)) score+=200;
-    if(max>=0 && max<=100000) score+=20;
-    if(max-min>0) score+=20;
-  }
-  return score;
-}
 function detectMetric(rows, keys, label){
   const stats=metricStats(rows,keys);
-  let allStats=stats;
-  if(!allStats.length){
-    const auto=autoMetricStats(rows,label);
-    allStats=auto;
-    log(`[${label} 필드검증] 1차 후보 없음 → 자동탐지 ${auto.length}개`);
-  }
-  if(!allStats.length){
-    log(`[${label} 필드검증] 실패: 후보 필드 없음`);
-    if(rows[0]){
-      const f=flatRow(rows[0]);
-      log(`[${label} 원자료 첫 행 전체키]`, Object.keys(f).slice(0,80).join(', '));
-      log(`[${label} 원자료 첫 행]`, f);
-    }
-    return {key:null,status:'실패',stats:[]};
-  }
-  let chosen=allStats.find(s=>!s.allZero && Math.abs(s.max-s.min)>1e-9) || allStats.find(s=>!s.allZero) || allStats[0];
-  const suspicious = chosen.allZero || Math.abs(chosen.max-chosen.min)<1e-9 || chosen.auto;
-  log(`[${label} 필드검증] 선택=${chosen.key} count=${chosen.count} min=${chosen.min} max=${chosen.max} first=${chosen.first} last=${chosen.last}${chosen.auto?' 자동탐지':''}${suspicious?' 검증필요':''}`);
-  if(rows[0]) log(`[${label} 원자료 예시]`, sampleRow(rows[0], [chosen.key,...keys]));
-  return {key:chosen.key,status:suspicious?'검증필요':'실측',stats:allStats,chosen};
+  if(!stats.length){ log(`[${label} 필드검증] 실패: 후보 필드 없음`); return {key:null,status:'실패',stats:[]}; }
+  let chosen=stats.find(s=>!s.allZero && Math.abs(s.max-s.min)>1e-9) || stats.find(s=>!s.allZero) || stats[0];
+  const suspicious = chosen.allZero || Math.abs(chosen.max-chosen.min)<1e-9;
+  log(`[${label} 필드검증] 선택=${chosen.key} count=${chosen.count} min=${chosen.min} max=${chosen.max} first=${chosen.first} last=${chosen.last}${suspicious?' 검증필요':''}`);
+  if(rows[0]) log(`[${label} 원자료 예시]`, sampleRow(rows[0], keys));
+  return {key:chosen.key,status:suspicious?'검증필요':'실측',stats,chosen};
 }
 function sampleRow(row, keys){
-  const f=flatRow(row);
   const out={};
-  const baseKeys=['ymdhm','obsymdhm','ymdh','obstm','obsTime','tm','date','time',...keys];
-  for(const k of baseKeys){ if(Object.prototype.hasOwnProperty.call(f,k)) out[k]=f[k]; }
-  if(Object.keys(out).length===0){
-    for(const k of Object.keys(f).slice(0,20)) out[k]=f[k];
-  }
+  const baseKeys=['ymdhm','obstm','obsTime','tm','date','time',...keys];
+  for(const k of baseKeys){ if(row && Object.prototype.hasOwnProperty.call(row,k)) out[k]=row[k]; }
   return out;
 }
 function nearest(rows,target,valueKeys,maxMin=MAX_NEAREST_MIN){

@@ -1,4 +1,5 @@
-/* HanRiver Environment Dashboard v1.0 Phase 2.3 FieldFix
+const WEATHER_ASSIST_VERSION='v1.0 Phase 2.4 WeatherAssist';
+/* HanRiver Environment Dashboard v1.0 Phase 2.4 WeatherAssist
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 한강홍수통제소 수위·방류량 응답 필드 자동탐지 강화, 후보 필드 없을 때 원자료 샘플 표시.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.

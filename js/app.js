@@ -1,6 +1,6 @@
-/* HanRiver Environment Dashboard v1.0 Phase 2.7 RestoreBaseWeather
+/* HanRiver Environment Dashboard v1.0 Phase 2.3 FieldFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
- * 수정: 정상 작동하던 Phase 2.3 수위·방류 로직을 보존하고, 잠실수중보 예외와 기상 보조판정을 추가.
+ * 수정: 한강홍수통제소 수위·방류량 응답 필드 자동탐지 강화, 후보 필드 없을 때 원자료 샘플 표시.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
  */
 const $ = (id) => document.getElementById(id);
@@ -27,7 +27,6 @@ const MAX_NEAREST_MIN = 40;
 const WATER_KEYS = ['wl','WL','obswl','OBSWL','obsWl','obs_wl','wlevel','WLEVEL','waterLevel','WaterLevel','waterlevel','WATERLEVEL','swl','SWL','wlobs','WLOBS','wlv','WLV','rfwl','RFWL','fw','FW'];
 const DAM_KEYS = ['tototf','TOTOTF','totOutflow','totalOutflow','tot_outflow','otf','OTF','edq','EDQ','outflow','OUTFLOW','discharge','DISCHARGE','fw','FW','tdsrf','TDSRF','flow','FLOW','q','Q'];
 const TIDE_KEYS = ['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level','wl','value','fcstValue'];
-const KMA_ULTRA_NCST_URL = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst';
 
 // 대표 관측소 기준은 Phase 1 모델 + 추가 교량 확장안입니다. 좌표 기반 최종 검증 전까지는 "운영 매핑안"으로 표시합니다.
 const BRIDGES = [
@@ -36,8 +35,8 @@ const BRIDGES = [
   {bridge:'천호대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'광진교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'올림픽대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
-  {bridge:'잠실철교',zone:'수중보 상류',station:'서울시(청담대교)',code:'1018662',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류 교량으로 조석/물때 적용 제외'},
-  {bridge:'잠실대교',zone:'잠실수중보 경계',station:'서울시(청담대교)',code:'1018662',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 영향권으로 조석/물때 직접 적용 제외'},
+  {bridge:'잠실철교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'추가 교량. 청담대교 관측소 권역. 조석 영향은 현장 검증 필요'},
+  {bridge:'잠실대교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
   {bridge:'청담대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
   {bridge:'영동대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값'},
   {bridge:'성수대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값'},
@@ -103,52 +102,6 @@ function setNow(){ const now=new Date(); $('searchDate').value=formatDateInput(y
 function saveKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>localStorage.setItem(id,$(id).value.trim())); $('keyStatus').textContent='저장 완료 · 화면 기본값은 계속 숨김입니다.'; }
 function clearKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{localStorage.removeItem(id);$(id).value='';}); $('keyStatus').textContent='삭제 완료'; }
 function loadKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{ $(id).value=localStorage.getItem(id)||''; $(id).type='password'; }); }
-
-
-function kmaGridForBridge(b){
-  // 임시 대표격자: 교량별 정확 격자좌표 검증 전까지 구간별 서울권 대표격자를 사용한다.
-  // 기상값은 유속 실측이 아니라 보조 참고값으로만 표시한다.
-  if(['강동대교','구리암사대교','천호대교','광진교','올림픽대교','잠실철교','잠실대교','청담대교','영동대교','성수대교'].includes(b.bridge)) return {nx:62, ny:126, label:'서울 동부 대표격자(임시)'};
-  if(['성산대교','월드컵대교','가양대교','마곡대교','방화대교','행주대교'].includes(b.bridge)) return {nx:58, ny:126, label:'서울 서부/하류 대표격자(임시)'};
-  return {nx:60, ny:127, label:'서울 중부 대표격자(임시)'};
-}
-function getKmaBaseTime(date=new Date()){
-  const d = new Date(date.getTime());
-  if(d.getMinutes() < 40) d.setHours(d.getHours()-1);
-  return {base_date:ymd(d), base_time:String(d.getHours()).padStart(2,'0')+'00'};
-}
-async function getWeatherNcst(key,b,when=new Date()){
-  if(!key) throw new Error('기상 API 인증키 미입력');
-  const grid=kmaGridForBridge(b);
-  const base=getKmaBaseTime(when);
-  const p=new URLSearchParams({serviceKey:key,pageNo:'1',numOfRows:'100',dataType:'JSON',base_date:base.base_date,base_time:base.base_time,nx:String(grid.nx),ny:String(grid.ny)});
-  const data=await fetchJson(`${KMA_ULTRA_NCST_URL}?${p.toString()}`);
-  const header=data?.response?.header;
-  if(header && header.resultCode && header.resultCode !== '00') throw new Error(`기상청 응답 실패: ${header.resultMsg||header.resultCode}`);
-  const rows=normalizeRows(data);
-  const parsed={};
-  rows.forEach(r=>{ const c=r.category || r.Category; if(c) parsed[c]=toNumber(r.obsrValue ?? r.obsr_value ?? r.value); });
-  log('[기상 후보]', `${base.base_date} ${base.base_time} rows=${rows.length} grid=${grid.nx},${grid.ny} ${grid.label}`);
-  return {grid,base,rows,temperature:parsed.T1H??null,rainfall:parsed.RN1??null,humidity:parsed.REH??null,windSpeed:parsed.WSD??null,windDirection:parsed.VEC??null};
-}
-function windAssist(weather){
-  if(!weather) return {label:'기상 미조회', detail:'풍향·풍속 자료 없음', level:'확인 실패'};
-  const wsd=weather.windSpeed, vec=weather.windDirection;
-  if(wsd===null || vec===null) return {label:'기상 일부 누락', detail:'풍속 또는 풍향 값 없음', level:'확인 실패'};
-  let strength='약함';
-  if(wsd>=8) strength='강함'; else if(wsd>=4) strength='보통';
-  return {label:`바람 ${strength}`, detail:`풍속 ${wsd}m/s · 풍향 ${vec}° · ${weather.grid?.label||''}`, level:'참고판정'};
-}
-function reliabilityLabel(q,b){
-  let score=0;
-  if(q.water==='실측' || q.water==='정상') score++;
-  if(q.dam==='실측' || q.dam==='정상') score++;
-  if(!b.tide || q.tide==='정상' || q.tide==='제외') score++;
-  if(q.weather==='정상') score++;
-  if(score>=4) return '높음';
-  if(score>=2) return '보통';
-  return '낮음';
-}
 
 async function fetchJson(url){
   log('[FETCH]', url);
@@ -472,13 +425,12 @@ function tideNumber(date){
   const label = (n===8?'조금권 참고':(n>=14||n<=2?'사리권 참고':(n>=3&&n<=7?'중간물 참고':'보통 참고')));
   return {n,label};
 }
-function speedLabel(wTrend, damImpact, tide, weather){
+function speedLabel(wTrend, damImpact, tide){
   const wd = wTrend?.delta ?? null;
   const dam = damImpact?.value ?? null;
   const tr = Math.abs(tide?.rateCmHr ?? 0);
-  const ws = weather?.windSpeed ?? null;
   if((wd!==null && Math.abs(wd)>=0.10) || (dam!==null && dam>=1000) || tr>=25) return '빠름 가능';
-  if((wd!==null && Math.abs(wd)>=0.04) || (dam!==null && dam>=500) || tr>=10 || (ws!==null && ws>=8)) return '보통 가능';
+  if((wd!==null && Math.abs(wd)>=0.04) || (dam!==null && dam>=500) || tr>=10) return '보통 가능';
   return '완만 가능';
 }
 function directionLabel(b, wTrend, damImpact, tide){
@@ -491,7 +443,7 @@ function directionLabel(b, wTrend, damImpact, tide){
   if(tide.phase.includes('썰물')) return '물이 나가는 영향 가능';
   return damHigh ? '정체권 + 방류 하류방향 가능' : '정체·혼합 가능';
 }
-function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric,weather){
+function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric){
   const waterKeys = waterMetric?.key ? [waterMetric.key] : WATER_KEYS;
   const damKeys = damMetric?.key ? [damMetric.key] : DAM_KEYS;
   const water = nearest(waterRows,time,waterKeys);
@@ -500,13 +452,12 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const damImpact = nearest(damRows,damImpactTime,damKeys,90);
   const tide = b.tide && tideRows.length ? tideAt(tideRows,time,b.offset||0) : null;
   const direction = directionLabel(b,wTrend,damImpact,tide);
-  const speed = speedLabel(wTrend,damImpact,tide,weather);
+  const speed = speedLabel(wTrend,damImpact,tide);
   const notes=[];
   if(wTrend) notes.push(`수위 1시간 ${wTrend.delta>0?'+':''}${wTrend.delta}m`); else notes.push('수위 변화 계산불가');
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push('방류량 보정값 없음');
   if(b.tide) notes.push(tide?`조석 ${tide.phase} ${tide.rateCmHr!==null?`(${tide.rateCmHr>0?'+':''}${tide.rateCmHr}cm/h)`:''}`:'조석 없음'); else notes.push('조석 제외');
-  const wa=windAssist(weather); notes.push(`기상 ${wa.detail}`);
-  return {label,time,water,wTrend,damImpact,damImpactTime,tide,direction,speed,weather,windAssist:wa,notes};
+  return {label,time,water,wTrend,damImpact,damImpactTime,tide,direction,speed,notes};
 }
 function flowDecisionFromState(state){
   return {direction:state.direction, parts:state.notes, speed:state.speed};
@@ -540,19 +491,18 @@ function renderQuality(q={}){
     return `<div class="q"><strong>${name}</strong><span class="${cls}">${state||'대기'}</span></div>`;
   }).join('');
 }
-function renderSummary(b, incidentState, currentState, decision, q){
+function renderSummary(b, incidentState, currentState, decision){
   const searchDt=parseLocal($('searchDate').value,$('searchTime').value);
   const tn=searchDt?tideNumber(searchDt):null;
   $('summary').innerHTML = `
     <div class="summary-big">${decision?.direction || '조회 전'} · ${decision?.speed || ''}</div>
-    <span class="pill">대표 관측소: ${b.station}</span><span class="pill">${b.tide?'조석 적용':'조석 제외'}</span><span class="pill">신뢰도 ${q?reliabilityLabel(q,b):'판정전'}</span><span class="pill">교량 ${BRIDGES.length}개 등록</span>
+    <span class="pill">대표 관측소: ${b.station}</span><span class="pill">${b.tide?'조석 적용':'조석 제외'}</span><span class="pill">교량 ${BRIDGES.length}개 등록</span>
     <div class="kv"><b>현재 수위</b><span>${fmtWaterPoint(currentState.water)} <small class="muted">수심 아님</small></span></div>
     <div class="kv"><b>투신 수위</b><span>${fmtWaterPoint(incidentState.water)}</span></div>
     <div class="kv"><b>현재 방류 영향</b><span>${fmtDamPoint(currentState.damImpact,currentState.damImpactTime)}</span></div>
     <div class="kv"><b>투신 방류 영향</b><span>${fmtDamPoint(incidentState.damImpact,incidentState.damImpactTime)}</span></div>
     <div class="kv"><b>인천 물때</b><span>${tn?`${tn.n}물 · ${tn.label}`:'미조회'} <small class="muted">공식 물때 검증 전 참고값</small></span></div>
     <div class="kv"><b>현재 조석</b><span>${fmtTidePoint(b,currentState.tide)}</span></div>
-    <div class="kv"><b>기상 보조</b><span>${currentState.windAssist?.detail || '기상 미조회'} <small class="muted">실측 유속 아님</small></span></div>
     <div class="kv"><b>근거</b><span>${decision?.parts?.join(' / ') || '-'}</span></div>`;
 }
 function renderModelInfo(b){
@@ -562,7 +512,6 @@ function renderModelInfo(b){
     <div class="kv"><b>수위관측소</b><span>${b.station} (${b.code})</span></div>
     <div class="kv"><b>조석 보정</b><span>${b.tide ? `인천 ${TIDE_STATION} 기준 +${b.offset}분` : '적용 제외'}</span></div>
     <div class="kv"><b>팔당 영향 지연</b><span>${b.releaseLag}분</span></div>
-    <div class="kv"><b>기상 격자</b><span>${kmaGridForBridge(b).label} · nx=${kmaGridForBridge(b).nx}, ny=${kmaGridForBridge(b).ny}</span></div>
     <div class="kv"><b>매핑 근거</b><span>${b.reason}</span></div>`;
 }
 function rowsToPoints(rows, keys){ return rows.map(r=>({time:parseObsTime(r), value:val(r,keys)})).filter(p=>p.time&&p.value!=null); }
@@ -610,7 +559,7 @@ function renderBoard(results){
 }
 async function runQuery(){
   clearLog();
-  const key=$('hrfcoKey').value.trim(), tideKey=$('tideKey').value.trim(), weatherKey=$('weatherKey').value.trim();
+  const key=$('hrfcoKey').value.trim(), tideKey=$('tideKey').value.trim();
   const b=BRIDGES[Number($('bridgeSelect').value)];
   const incident=parseLocal($('incidentDate').value,$('incidentTime').value), search=parseLocal($('searchDate').value,$('searchTime').value);
   if(!key){ $('inputStatus').textContent='한강홍수통제소 키를 입력하세요.'; return; }
@@ -621,11 +570,10 @@ async function runQuery(){
   const start=new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000);
   const end=new Date(search.getTime()+90*60000);
   const q={water:'대기',dam:'대기',tide:b.tide?'대기':'제외',weather:'미조회'}; renderQuality(q);
-  let waterRows=[], damRows=[], tideRows=[], weather=null;
+  let waterRows=[], damRows=[], tideRows=[];
   try{ waterRows=await getWaterSeries(key,b.code,start,end); }catch(e){ q.water='실패'; log('[수위 최종 실패]',e.message); }
   try{ damRows=await getDamSeries(key,start,end); }catch(e){ q.dam='실패'; log('[댐 최종 실패]',e.message); }
   if(b.tide){ try{ tideRows=await getTideRowsRange(tideKey||'', start, end); q.tide='정상'; }catch(e){ q.tide='실패'; log('[조석 최종 실패]',e.message); } }
-  try{ weather=await getWeatherNcst(weatherKey,b,search); q.weather='정상'; }catch(e){ q.weather=weatherKey?'실패':'미조회'; log('[기상 최종]', e.message); }
 
   const waterMetric=detectMetric(waterRows,WATER_KEYS,'수위');
   const damMetric=detectMetric(damRows,DAM_KEYS,'방류량');
@@ -633,10 +581,10 @@ async function runQuery(){
   if(damRows.length) q.dam=damMetric.status; else q.dam='실패';
   renderQuality(q);
 
-  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,weather);
-  const currentState=makePointState('조회시점',b,search,waterRows,damRows,tideRows,waterMetric,damMetric,weather);
+  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric);
+  const currentState=makePointState('조회시점',b,search,waterRows,damRows,tideRows,waterMetric,damMetric);
   const decision=flowDecisionFromState(currentState);
-  renderSummary(b,incidentState,currentState,decision,q);
+  renderSummary(b,incidentState,currentState,decision);
   renderPointCompare(b,incidentState,currentState);
   renderModelInfo(b);
 
@@ -659,7 +607,7 @@ async function runQuery(){
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>조위 ${currentState.tide.best.value.toFixed(1)}cm · 인천 기준 ${b.offset}분 보정${currentState.tide.nextTurn?` · 다음 ${currentState.tide.nextTurn.type} ${hhmm(currentState.tide.nextTurn.time)}`:''}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}]);
-  $('inputStatus').textContent='조회 완료. 수위/방류 기존 로직은 보존했고, 기상은 보조 참고값으로만 반영됩니다.';
+  $('inputStatus').textContent='조회 완료. 원자료 로그에서 수위/방류량 필드검증 결과를 확인하세요.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

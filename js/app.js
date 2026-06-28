@@ -1,4 +1,4 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.4.2 DataFirstTimeout
+/* HanRiver Environment Dashboard v1.0 Phase 3.4.3 HRFCOTimeGridFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 수위/방류 숫자값 우선, 공백·타임아웃 분리, 핵심 데이터 판정판을 추가한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
@@ -25,6 +25,7 @@ const MAX_NEAREST_MIN = 40;
 // 수위/방류량 필드는 한강홍수통제소 API 종류와 응답 버전에 따라 표기가 달라질 수 있다.
 // 1차 후보 + 2차 자동탐지로 처리하며, 실패 시 원자료 샘플과 키 목록을 로그에 남긴다.
 const WATER_FIXED_KEY = 'wl';
+const WATER_FLOW_FIXED_KEY = 'fw';
 const DAM_FIXED_KEY = 'tototf';
 const WATER_KEYS = ['wl','WL','obswl','OBSWL','obsWl','obs_wl','wlevel','WLEVEL','waterLevel','WaterLevel','waterlevel','WATERLEVEL','swl','SWL','wlobs','WLOBS','wlv','WLV','rfwl','RFWL','fw','FW'];
 const DAM_KEYS = ['tototf','TOTOTF','totOutflow','totalOutflow','tot_outflow','otf','OTF','edq','EDQ','outflow','OUTFLOW','discharge','DISCHARGE','fw','FW','tdsrf','TDSRF','flow','FLOW','q','Q'];
@@ -71,7 +72,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.2 DataFirstTimeout'); renderDataFirstPanel();
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.3 HRFCOTimeGridFix'); renderDataFirstPanel();
 }
 
 function bindInputs(){
@@ -97,6 +98,26 @@ function validTime(s){ if(!/^\d{2}:\d{2}$/.test(s))return false; const [h,m]=s.s
 function parseLocal(date,time){ if(!validDate(date)||!validTime(time)) return null; const [y,mo,d]=date.split('-').map(Number); const [h,mi]=time.split(':').map(Number); return new Date(y,mo-1,d,h,mi,0); }
 function ymd(d){ return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`; }
 function ymdhm(d){ return ymd(d)+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0'); }
+function floorTo10Min(d){
+  const x=new Date(d);
+  x.setSeconds(0,0);
+  x.setMinutes(Math.floor(x.getMinutes()/10)*10);
+  return x;
+}
+function ceilTo10Min(d){
+  const x=new Date(d);
+  x.setSeconds(0,0);
+  const m=x.getMinutes();
+  if(m%10!==0) x.setMinutes(Math.ceil(m/10)*10);
+  return x;
+}
+function ymdhm10(d){ return ymdhm(floorTo10Min(d)); }
+function hrfcoWindow(start,end){
+  let s=floorTo10Min(start);
+  let e=floorTo10Min(end);
+  if(e<=s) e=new Date(s.getTime()+10*60000);
+  return {start:s,end:e,startCode:ymdhm(s),endCode:ymdhm(e)};
+}
 function hhmm(d){ return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
 function pretty(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${hhmm(d)}`; }
 function setDefaultTimes(){ const now=new Date(); const incident=new Date(now.getTime()-6*3600e3); $('incidentDate').value=formatDateInput(ymd(incident)); $('incidentTime').value=hhmm(incident); $('searchDate').value=formatDateInput(ymd(now)); $('searchTime').value=hhmm(now); }
@@ -299,8 +320,8 @@ function isMetricExcluded(k,label,n){
   const s=String(k).toLowerCase();
   if(/code|cd|id|name|nm|ymdh|ymd|date|time|dt|tm|lat|lon|page|row|count|num|no|seq|min|hour|addr/.test(s)) return true;
   if(Math.abs(n)>1000000) return true;
-  if(label==='수위' && /attwl|wrnwl|almwl|srswl|wlobscd|obscd|fw|flow|out|discharge|tototf|otf/.test(s)) return true;
-  if(label==='방류량' && /wl|water|level|tdlv|tide|lat|lon/.test(s) && !/fw|flow|out|discharge|tototf|otf/.test(s)) return true;
+  if(label==='수위' && /attwl|wrnwl|almwl|srswl|wlobscd|obscd|flow|out|discharge|tototf|otf/.test(s)) return true;
+  if(label==='방류량' && /tdlv|tide|lat|lon/.test(s) && !/fw|flow|out|discharge|tototf|otf|swl|inf|sfw|ecpc/.test(s)) return true;
   return false;
 }
 function metricKeyScore(k,label,min,max,count){
@@ -384,8 +405,10 @@ function dataQualityForPoint(p){ if(!p) return '자료 없음'; return p.stale ?
 
 async function getWaterSeries(key, code, start, end){
   let lastErr='';
+  const w=hrfcoWindow(start,end);
+  log('[HRFCO 10분격자]', `수위 ${code}`, `${pretty(w.start)}~${pretty(w.end)}`, `${w.startCode}/${w.endCode}`);
   for(const k of hrfcoKeyVariants(key)){
-    const url = `https://api.hrfco.go.kr/${k}/waterlevel/list/10M/${code}/${ymdhm(start)}/${ymdhm(end)}.json`;
+    const url = `https://api.hrfco.go.kr/${k}/waterlevel/list/10M/${code}/${w.startCode}/${w.endCode}.json`;
     try{
       const j=await fetchJson(url); const rows=normalizeRows(j); log('[수위 기간 행 수]', rows.length); if(rows.length) return rows;
       lastErr='기간조회 결과 없음';
@@ -395,8 +418,10 @@ async function getWaterSeries(key, code, start, end){
 }
 async function getDamSeries(key, start, end){
   let lastErr='';
+  const w=hrfcoWindow(start,end);
+  log('[HRFCO 10분격자]', `방류 ${DAM_CODE}`, `${pretty(w.start)}~${pretty(w.end)}`, `${w.startCode}/${w.endCode}`);
   for(const k of hrfcoKeyVariants(key)){
-    const url = `https://api.hrfco.go.kr/${k}/dam/list/10M/${DAM_CODE}/${ymdhm(start)}/${ymdhm(end)}.json`;
+    const url = `https://api.hrfco.go.kr/${k}/dam/list/10M/${DAM_CODE}/${w.startCode}/${w.endCode}.json`;
     try{
       const j=await fetchJson(url); const rows=normalizeRows(j); log('[댐 기간 행 수]', rows.length); if(rows.length) return rows;
       lastErr='기간조회 결과 없음';
@@ -567,12 +592,13 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   if(wTrend) notes.push(`수위 1시간 ${wTrend.delta>0?'+':''}${wTrend.delta}m`); else notes.push(waterMetric?.blank?'통제소 수위 응답 공백':'수위 변화 계산불가');
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push(damMetric?.blank?'통제소 방류 응답 공백':'방류량 보정값 없음');
   if(b.tide) notes.push(tide?`조석 ${tide.phase} ${tide.rateCmHr!==null?`(${tide.rateCmHr>0?'+':''}${tide.rateCmHr}cm/h)`:''}`:'조석 없음'); else notes.push('조석 제외');
-  return {label,time,water,wTrend,damImpact,damImpactTime,tide,direction,speed,notes};
+  return {label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,direction,speed,notes};
 }
 function flowDecisionFromState(state){
   return {direction:state.direction, parts:state.notes, speed:state.speed};
 }
 function fmtWaterPoint(p){ return p ? `${p.value.toFixed(2)}m · ${pretty(p.time)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
+function fmtWaterFlowPoint(p){ return p ? `${p.value.toFixed(1)} · ${pretty(p.time)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
 function fmtTrend(t){ return t ? `${t.delta>0?'+':''}${t.delta}m / ${t.minutes}분` : '계산불가'; }
 function fmtDamPoint(p, impactTime){ return p ? `${p.value.toFixed(1)}㎥/s · 팔당 ${pretty(p.time)} · 교량영향 기준 ${pretty(impactTime)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
 function fmtTidePoint(b,t){
@@ -603,7 +629,7 @@ function renderDataFirstPanel(b=null, incidentState=null, currentState=null, q={
   }
   el.innerHTML = `
     <div class="data-card primary"><b>판정</b><strong>${currentState.direction}</strong><span>${currentState.speed}</span></div>
-    <div class="data-card"><b>수위</b>${dataBadge(q.water)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.water,'m')}</span><span>조회</span><span>${fmtCorePoint(currentState.water,'m')}</span></div></div>
+    <div class="data-card"><b>수위</b>${dataBadge(q.water)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.water,'m')}</span><span>조회</span><span>${fmtCorePoint(currentState.water,'m')}</span><span>관측소 fw</span><span>${fmtWaterFlowPoint(currentState.waterFlow)}</span></div></div>
     <div class="data-card"><b>방류</b>${dataBadge(q.dam)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.damImpact,'cms')}</span><span>조회</span><span>${fmtCorePoint(currentState.damImpact,'cms')}</span></div></div>
     <div class="data-card"><b>조석</b>${dataBadge(q.tide)}<div class="data-grid-mini"><span>투신</span><span>${incidentState.tide?fmtTidePoint(b,incidentState.tide):'자료 없음/제외'}</span><span>조회</span><span>${currentState.tide?fmtTidePoint(b,currentState.tide):'자료 없음/제외'}</span></div></div>
   `;
@@ -614,6 +640,7 @@ function renderPointCompare(b, incidentState, currentState){
   const html = `
     ${row('수위',fmtWaterPoint(incidentState.water),fmtWaterPoint(currentState.water))}
     ${row('수위 변화',fmtTrend(incidentState.wTrend),fmtTrend(currentState.wTrend))}
+    ${row('수위관측소 fw',fmtWaterFlowPoint(incidentState.waterFlow),fmtWaterFlowPoint(currentState.waterFlow))}
     ${row('교량 영향 방류량',fmtDamPoint(incidentState.damImpact,incidentState.damImpactTime),fmtDamPoint(currentState.damImpact,currentState.damImpactTime))}
     ${row('조석 영향',fmtTidePoint(b,incidentState.tide),fmtTidePoint(b,currentState.tide))}
     ${row('물 방향',incidentState.direction,currentState.direction)}
@@ -704,11 +731,12 @@ async function runQuery(){
   if(search<incident){ $('inputStatus').textContent='조회시각은 사고시각 이후여야 합니다.'; return; }
   if((search-incident)/3600000 > 168){ $('inputStatus').textContent='Phase 2.2는 7일 이내 구간 조회를 권장합니다.'; return; }
   $('inputStatus').textContent='조회 중...'; renderModelInfo(b);
-  const start=new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000);
-  const nowLimit=new Date(Date.now()-20*60000);
-  const rawEnd=new Date(search.getTime()+90*60000);
+  const start=floorTo10Min(new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000));
+  // HRFCO 10M API는 임의 분(:13 등) 또는 너무 최근 시각에서 공백 행을 반환하는 경우가 있어 10분 격자와 충분한 지연을 강제한다.
+  const nowLimit=floorTo10Min(new Date(Date.now()-90*60000));
+  const rawEnd=floorTo10Min(new Date(search.getTime()+90*60000));
   const end=rawEnd>nowLimit ? nowLimit : rawEnd;
-  log('[조회시각 보정]', `입력 조회시각=${pretty(search)}`, `수위/방류 종료=${pretty(end)}`);
+  log('[조회시각 보정]', `입력 조회시각=${pretty(search)}`, `HRFCO 종료=${pretty(end)}`, '10분 단위·현재-90분 제한');
   const q={water:'대기',dam:'대기',tide:b.tide?'대기':'제외',weather:'미조회'}; renderQuality(q);
   let waterRows=[], damRows=[], tideRows=[];
   try{ waterRows=await getWaterSeries(key,b.code,start,end); }catch(e){ q.water='실패'; log('[수위 최종 실패]',e.message); }
@@ -745,7 +773,7 @@ async function runQuery(){
     {name:'방류',points:normalizePoints(damPts)},
     {name:'조석',points:normalizePoints(tidePts)}
   ], `${b.bridge} · ${pretty(incident)} ~ ${pretty(search)}`);
-  $('combinedChartNote').textContent = `단위가 다른 수위(m), 방류량(㎥/s), 조위(cm)를 0~100으로 정규화해 변화 방향만 비교합니다. 수위필드=${waterMetric.key||'없음'}, 방류필드=${damMetric.key||'없음'}`;
+  $('combinedChartNote').textContent = `단위가 다른 수위(m), 방류량(㎥/s), 조위(cm)를 0~100으로 정규화해 변화 방향만 비교합니다. 수위필드=${waterMetric.key||'없음'}, 수위관측소 fw=참고흐름, 방류필드=${damMetric.key||'없음'}`;
   drawLine($('waterChart'), waterPts, 'value', `${b.station} 수위(m) · ${pretty(incident)} ~ ${pretty(search)}`);
   $('waterChartNote').textContent = currentState.wTrend ? `조회시점 최근 1시간 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m` : '최근 1시간 변화 계산에 필요한 시계열이 부족합니다.';
   drawLine($('damChart'), damPts, 'value', `팔당댐 방류량(㎥/s)`);
@@ -754,7 +782,7 @@ async function runQuery(){
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>조위 ${currentState.tide.best.value.toFixed(1)}cm · 인천 기준 ${b.offset}분 보정${currentState.tide.nextTurn?` · 다음 ${currentState.tide.nextTurn.type} ${hhmm(currentState.tide.nextTurn.time)}`:''}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}]);
-  $('inputStatus').textContent='조회 완료. 수위·방류량 숫자값을 우선 적용하고 공백값은 분리 표시했습니다.';
+  $('inputStatus').textContent='조회 완료. HRFCO 10분격자 기준으로 수위·방류량 숫자값을 우선 적용했습니다.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

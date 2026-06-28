@@ -1,4 +1,4 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.4.1 DataFirstFix
+/* HanRiver Environment Dashboard v1.0 Phase 3.4.2 DataFirstTimeout
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 수위/방류 숫자값 우선, 공백·타임아웃 분리, 핵심 데이터 판정판을 추가한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
@@ -71,7 +71,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.1 DataFirstFix'); renderDataFirstPanel();
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.2 DataFirstTimeout'); renderDataFirstPanel();
 }
 
 function bindInputs(){
@@ -120,12 +120,21 @@ function hrfcoKeyVariants(key){
 async function fetchJson(url, timeoutMs=10000){
   log('[FETCH]', url);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try{
-    const r = await fetch(url, {signal: controller.signal});
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try { controller.abort(); } catch(e) {}
+      reject(new Error(`요청 타임아웃 ${Math.round(timeoutMs/1000)}초`));
+    }, timeoutMs);
+  });
+  const fetchPromise = (async () => {
+    const r = await fetch(url, {signal: controller.signal, cache:'no-store'});
     const text = await r.text();
     if(!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0,160)}`);
     try{return JSON.parse(text);}catch(e){ throw new Error('JSON 파싱 실패: '+text.slice(0,160)); }
+  })();
+  try{
+    return await Promise.race([fetchPromise, timeoutPromise]);
   }catch(e){
     if(e.name === 'AbortError') throw new Error(`요청 타임아웃 ${Math.round(timeoutMs/1000)}초`);
     throw e;

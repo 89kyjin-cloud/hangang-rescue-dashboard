@@ -1,6 +1,6 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.1 BlankGuard
+/* HanRiver Environment Dashboard v1.0 Phase 3.3 HRFCO FallbackFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
- * 수정: 한강홍수통제소 wl/tototf 고정 필드 우선, 공백 응답과 파싱 실패를 분리 표시.
+ * 수정: 기간조회 wl/tototf 공백 시 최신값 endpoint를 자동 재조회하고, 요청별 timeout을 내장한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
  */
 const $ = (id) => document.getElementById(id);
@@ -71,7 +71,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.1 BlankGuard');
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.3 FallbackFix');
 }
 
 function bindInputs(){
@@ -105,12 +105,21 @@ function saveKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>localStorag
 function clearKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{localStorage.removeItem(id);$(id).value='';}); $('keyStatus').textContent='삭제 완료'; }
 function loadKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{ $(id).value=localStorage.getItem(id)||''; $(id).type='password'; }); }
 
-async function fetchJson(url){
+async function fetchJson(url, timeoutMs=10000){
   log('[FETCH]', url);
-  const r = await fetch(url);
-  const text = await r.text();
-  if(!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0,160)}`);
-  try{return JSON.parse(text);}catch(e){ throw new Error('JSON 파싱 실패: '+text.slice(0,160)); }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    const r = await fetch(url, {signal: controller.signal});
+    const text = await r.text();
+    if(!r.ok) throw new Error(`HTTP ${r.status}: ${text.slice(0,160)}`);
+    try{return JSON.parse(text);}catch(e){ throw new Error('JSON 파싱 실패: '+text.slice(0,160)); }
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error(`요청 타임아웃 ${Math.round(timeoutMs/1000)}초`);
+    throw e;
+  }finally{
+    clearTimeout(timer);
+  }
 }
 function normalizeRows(data){
   if(!data) return [];
@@ -353,14 +362,72 @@ function trend(rows,target,valueKeys,minutes=60){
 function dataQualityForPoint(p){ if(!p) return '자료 없음'; return p.stale ? `검증필요: ${p.diffMin}분 차이` : `정상: ${p.diffMin}분 차이`; }
 
 async function getWaterSeries(key, code, start, end){
-  const url = `https://api.hrfco.go.kr/${encodeURIComponent(key)}/waterlevel/list/10M/${code}/${ymdhm(start)}/${ymdhm(end)}.json`;
-  const j=await fetchJson(url); const rows=normalizeRows(j); log('[수위 행 수]', rows.length); if(rows.length) return rows;
-  throw new Error('수위 기간조회 결과 없음');
+  let lastErr='';
+  for(const k of hrfcoKeyVariants(key)){
+    const url = `https://api.hrfco.go.kr/${k}/waterlevel/list/10M/${code}/${ymdhm(start)}/${ymdhm(end)}.json`;
+    try{
+      const j=await fetchJson(url); const rows=normalizeRows(j); log('[수위 기간 행 수]', rows.length); if(rows.length) return rows;
+      lastErr='기간조회 결과 없음';
+    }catch(e){ lastErr=e.message; log('[수위 기간조회 실패]', e.message); }
+  }
+  throw new Error(lastErr || '수위 기간조회 결과 없음');
 }
 async function getDamSeries(key, start, end){
-  const url = `https://api.hrfco.go.kr/${encodeURIComponent(key)}/dam/list/10M/${DAM_CODE}/${ymdhm(start)}/${ymdhm(end)}.json`;
-  const j=await fetchJson(url); const rows=normalizeRows(j); log('[댐 행 수]', rows.length); if(rows.length) return rows;
-  throw new Error('댐 기간조회 결과 없음');
+  let lastErr='';
+  for(const k of hrfcoKeyVariants(key)){
+    const url = `https://api.hrfco.go.kr/${k}/dam/list/10M/${DAM_CODE}/${ymdhm(start)}/${ymdhm(end)}.json`;
+    try{
+      const j=await fetchJson(url); const rows=normalizeRows(j); log('[댐 기간 행 수]', rows.length); if(rows.length) return rows;
+      lastErr='기간조회 결과 없음';
+    }catch(e){ lastErr=e.message; log('[댐 기간조회 실패]', e.message); }
+  }
+  throw new Error(lastErr || '댐 기간조회 결과 없음');
+}
+async function getLatestWaterRows(key, code){
+  let lastErr='';
+  for(const k of hrfcoKeyVariants(key)){
+    const url = `https://api.hrfco.go.kr/${k}/waterlevel/list/10M/${code}.json`;
+    try{
+      const j=await fetchJson(url); const rows=normalizeRows(j); log('[수위 최신 행 수]', rows.length); if(rows.length) return rows;
+      lastErr='최신조회 결과 없음';
+    }catch(e){ lastErr=e.message; log('[수위 최신조회 실패]', e.message); }
+  }
+  throw new Error(lastErr || '수위 최신조회 결과 없음');
+}
+async function getLatestDamRows(key){
+  let lastErr='';
+  for(const k of hrfcoKeyVariants(key)){
+    const url = `https://api.hrfco.go.kr/${k}/dam/list/10M/${DAM_CODE}.json`;
+    try{
+      const j=await fetchJson(url); const rows=normalizeRows(j); log('[댐 최신 행 수]', rows.length); if(rows.length) return rows;
+      lastErr='최신조회 결과 없음';
+    }catch(e){ lastErr=e.message; log('[댐 최신조회 실패]', e.message); }
+  }
+  throw new Error(lastErr || '댐 최신조회 결과 없음');
+}
+async function applyHrfcoFallbacks(key, b, waterRows, damRows){
+  let waterFallback=false, damFallback=false;
+  if(waterRows.length && !hasNumericValue(waterRows, [WATER_FIXED_KEY, ...WATER_KEYS])){
+    log('[수위 기간조회 공백]', '기간조회 wl/fw가 전부 공백 → 최신값 endpoint 재조회');
+    try{
+      const latest=await getLatestWaterRows(key,b.code);
+      if(hasNumericValue(latest, [WATER_FIXED_KEY, ...WATER_KEYS])){
+        waterRows=mergeRowsByTime(waterRows, latest); waterFallback=true;
+        log('[수위 최신값 보강]', `추가행=${latest.length}`, '현재시점 참고값으로만 사용');
+      }else{ log('[수위 최신값도 공백]', '통제소 최신 endpoint도 숫자값 없음'); }
+    }catch(e){ log('[수위 최신값 보강 실패]', e.message); }
+  }
+  if(damRows.length && !hasNumericValue(damRows, [DAM_FIXED_KEY, ...DAM_KEYS])){
+    log('[방류 기간조회 공백]', '기간조회 tototf가 전부 공백 → 최신값 endpoint 재조회');
+    try{
+      const latest=await getLatestDamRows(key);
+      if(hasNumericValue(latest, [DAM_FIXED_KEY, ...DAM_KEYS])){
+        damRows=mergeRowsByTime(damRows, latest); damFallback=true;
+        log('[방류 최신값 보강]', `추가행=${latest.length}`, '현재시점 참고값으로만 사용');
+      }else{ log('[방류 최신값도 공백]', '통제소 최신 endpoint도 숫자값 없음'); }
+    }catch(e){ log('[방류 최신값 보강 실패]', e.message); }
+  }
+  return {waterRows, damRows, waterFallback, damFallback};
 }
 async function getTideRowsForDate(key, date){
   if(!key) throw new Error('조석 키 없음');
@@ -590,11 +657,20 @@ async function runQuery(){
   if((search-incident)/3600000 > 168){ $('inputStatus').textContent='Phase 2.2는 7일 이내 구간 조회를 권장합니다.'; return; }
   $('inputStatus').textContent='조회 중...'; renderModelInfo(b);
   const start=new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000);
-  const end=new Date(search.getTime()+90*60000);
+  const nowLimit=new Date(Date.now()-20*60000);
+  const rawEnd=new Date(search.getTime()+90*60000);
+  const end=rawEnd>nowLimit ? nowLimit : rawEnd;
+  log('[조회시각 보정]', `입력 조회시각=${pretty(search)}`, `수위/방류 종료=${pretty(end)}`);
   const q={water:'대기',dam:'대기',tide:b.tide?'대기':'제외',weather:'미조회'}; renderQuality(q);
   let waterRows=[], damRows=[], tideRows=[];
   try{ waterRows=await getWaterSeries(key,b.code,start,end); }catch(e){ q.water='실패'; log('[수위 최종 실패]',e.message); }
   try{ damRows=await getDamSeries(key,start,end); }catch(e){ q.dam='실패'; log('[댐 최종 실패]',e.message); }
+  try{
+    const patched=await applyHrfcoFallbacks(key,b,waterRows,damRows);
+    waterRows=patched.waterRows; damRows=patched.damRows;
+    if(patched.waterFallback) log('[수위 보강 적용]', '기간그래프는 공백일 수 있고, 현재값은 최신 endpoint 기준입니다.');
+    if(patched.damFallback) log('[방류 보강 적용]', '기간그래프는 공백일 수 있고, 현재값은 최신 endpoint 기준입니다.');
+  }catch(e){ log('[HRFCO 보강 처리 오류]', e.message); }
   if(b.tide){ try{ tideRows=await getTideRowsRange(tideKey||'', start, end); q.tide='정상'; }catch(e){ q.tide='실패'; log('[조석 최종 실패]',e.message); } }
 
   const waterMetric=detectMetric(waterRows,WATER_KEYS,'수위');
@@ -629,7 +705,7 @@ async function runQuery(){
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>조위 ${currentState.tide.best.value.toFixed(1)}cm · 인천 기준 ${b.offset}분 보정${currentState.tide.nextTurn?` · 다음 ${currentState.tide.nextTurn.type} ${hhmm(currentState.tide.nextTurn.time)}`:''}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}]);
-  $('inputStatus').textContent='조회 완료. wl/tototf가 공백이면 통제소 응답 공백으로 표시합니다.';
+  $('inputStatus').textContent='조회 완료. 기간조회 공백 시 최신값 endpoint를 자동 확인했습니다.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -1,6 +1,6 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.3 HRFCO FallbackFix
+/* HanRiver Environment Dashboard v1.0 Phase 3.4 DataFirst
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
- * 수정: 기간조회 wl/tototf 공백 시 최신값 endpoint를 자동 재조회하고, 요청별 timeout을 내장한다.
+ * 수정: 수위/방류 숫자값 우선, 공백·타임아웃 분리, 핵심 데이터 판정판을 추가한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
  */
 const $ = (id) => document.getElementById(id);
@@ -37,7 +37,7 @@ const BRIDGES = [
   {bridge:'천호대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'광진교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
   {bridge:'올림픽대교',zone:'수중보 상류',station:'서울시(광진교)',code:'1018640',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석 적용 제외'},
-  {bridge:'잠실철교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'추가 교량. 청담대교 관측소 권역. 조석 영향은 현장 검증 필요'},
+  {bridge:'잠실철교',zone:'잠실수중보 상류',station:'서울시(청담대교)',code:'1018662',tide:false,offset:null,releaseLag:330,reason:'잠실수중보 상류: 조석/물때 적용 제외'},
   {bridge:'잠실대교',zone:'수중보 하류 경계',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
   {bridge:'청담대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값. 모델: 행주→청담 +70분'},
   {bridge:'영동대교',zone:'중상류 혼합',station:'서울시(청담대교)',code:'1018662',tide:true,offset:70,releaseLag:330,reason:'청담대교 대표값'},
@@ -71,7 +71,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.3 FallbackFix');
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4 DataFirst'); renderDataFirstPanel();
 }
 
 function bindInputs(){
@@ -561,6 +561,33 @@ function fmtTidePoint(b,t){
   const rate = t.rateCmHr!==null ? ` · 변화율 ${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h` : '';
   return `${t.phase} · 조위 ${t.best.value.toFixed(1)}cm · 인천 기준 ${t.shifted ? pretty(t.shifted) : ''} 관측 보정${rate}${turn}`;
 }
+
+function dataBadge(state){
+  if(state==='실측'||state==='정상') return '<span class="data-badge good">실측</span>';
+  if(state==='검증필요') return '<span class="data-badge warn">검증필요</span>';
+  if(state==='공백') return '<span class="data-badge bad">통제소 공백</span>';
+  if(state==='제외') return '<span class="data-badge hold">제외</span>';
+  return `<span class="data-badge hold">${state||'대기'}</span>`;
+}
+function fmtCorePoint(p, unit){
+  if(!p) return '자료 없음';
+  const value = unit==='m' ? p.value.toFixed(2)+'m' : unit==='cms' ? p.value.toFixed(1)+'㎥/s' : p.value.toFixed(1);
+  return `${value}<br><small>${pretty(p.time)} · ${dataQualityForPoint(p)}</small>`;
+}
+function renderDataFirstPanel(b=null, incidentState=null, currentState=null, q={}){
+  const el=$('dataFirstPanel'); if(!el) return;
+  if(!b || !incidentState || !currentState){
+    el.innerHTML='<div class="empty-panel">환경조회 후 수위·방류량·조석 핵심값을 먼저 표시합니다.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="data-card primary"><b>판정</b><strong>${currentState.direction}</strong><span>${currentState.speed}</span></div>
+    <div class="data-card"><b>수위</b>${dataBadge(q.water)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.water,'m')}</span><span>조회</span><span>${fmtCorePoint(currentState.water,'m')}</span></div></div>
+    <div class="data-card"><b>방류</b>${dataBadge(q.dam)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.damImpact,'cms')}</span><span>조회</span><span>${fmtCorePoint(currentState.damImpact,'cms')}</span></div></div>
+    <div class="data-card"><b>조석</b>${dataBadge(q.tide)}<div class="data-grid-mini"><span>투신</span><span>${incidentState.tide?fmtTidePoint(b,incidentState.tide):'자료 없음/제외'}</span><span>조회</span><span>${currentState.tide?fmtTidePoint(b,currentState.tide):'자료 없음/제외'}</span></div></div>
+  `;
+}
+
 function renderPointCompare(b, incidentState, currentState){
   const row=(name,a,c)=>`<div class="kv"><b>${name}</b><span><strong>투신</strong> ${a}<br><strong>조회</strong> ${c}</span></div>`;
   const html = `
@@ -576,7 +603,7 @@ function renderPointCompare(b, incidentState, currentState){
 function renderQuality(q={}){
   const labels=[['수위',q.water],['방류',q.dam],['조석',q.tide],['기상',q.weather]];
   $('qualityGrid').innerHTML = labels.map(([name,state])=>{
-    const cls = state==='실측' || state==='정상' ? 'ok' : state==='미조회'||state==='제외'||!state ? 'hold' : 'fail';
+    const cls = state==='실측' || state==='정상' ? 'ok' : (state==='검증필요' || state==='미조회'||state==='제외'||!state ? 'hold' : 'fail');
     return `<div class="q"><strong>${name}</strong><span class="${cls}">${state||'대기'}</span></div>`;
   }).join('');
 }
@@ -684,6 +711,7 @@ async function runQuery(){
   const decision=flowDecisionFromState(currentState);
   renderSummary(b,incidentState,currentState,decision);
   renderPointCompare(b,incidentState,currentState);
+  renderDataFirstPanel(b, incidentState, currentState, q);
   renderModelInfo(b);
 
   const waterKeys=waterMetric.key?[waterMetric.key]:WATER_KEYS;
@@ -705,7 +733,7 @@ async function runQuery(){
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>조위 ${currentState.tide.best.value.toFixed(1)}cm · 인천 기준 ${b.offset}분 보정${currentState.tide.nextTurn?` · 다음 ${currentState.tide.nextTurn.type} ${hhmm(currentState.tide.nextTurn.time)}`:''}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}]);
-  $('inputStatus').textContent='조회 완료. 기간조회 공백 시 최신값 endpoint를 자동 확인했습니다.';
+  $('inputStatus').textContent='조회 완료. 수위·방류량 숫자값을 우선 적용하고 공백값은 분리 표시했습니다.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

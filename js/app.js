@@ -1,4 +1,4 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.4 DataFirst
+/* HanRiver Environment Dashboard v1.0 Phase 3.4.1 DataFirstFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 수위/방류 숫자값 우선, 공백·타임아웃 분리, 핵심 데이터 판정판을 추가한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
@@ -71,7 +71,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4 DataFirst'); renderDataFirstPanel();
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.1 DataFirstFix'); renderDataFirstPanel();
 }
 
 function bindInputs(){
@@ -104,6 +104,18 @@ function setNow(){ const now=new Date(); $('searchDate').value=formatDateInput(y
 function saveKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>localStorage.setItem(id,$(id).value.trim())); $('keyStatus').textContent='저장 완료 · 화면 기본값은 계속 숨김입니다.'; }
 function clearKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{localStorage.removeItem(id);$(id).value='';}); $('keyStatus').textContent='삭제 완료'; }
 function loadKeys(){ ['hrfcoKey','tideKey','weatherKey'].forEach(id=>{ $(id).value=localStorage.getItem(id)||''; $(id).type='password'; }); }
+
+function hrfcoKeyVariants(key){
+  const raw = String(key || '').trim();
+  if(!raw) throw new Error('한강홍수통제소 인증키 없음');
+  const variants = [];
+  const add = (v) => { if(v && !variants.includes(v)) variants.push(v); };
+  add(raw);
+  try { add(encodeURIComponent(raw)); } catch(e) {}
+  try { add(decodeURIComponent(raw)); } catch(e) {}
+  return variants;
+}
+
 
 async function fetchJson(url, timeoutMs=10000){
   log('[FETCH]', url);

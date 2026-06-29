@@ -1,4 +1,4 @@
-/* HanRiver Environment Dashboard v1.0 Phase 3.4.3 HRFCOTimeGridFix
+/* HanRiver Environment Dashboard v1.0 Phase 3.4.4 RenderFix
  * 원칙: 확인된 원자료/계산값/검증필요를 구분한다.
  * 수정: 수위/방류 숫자값 우선, 공백·타임아웃 분리, 핵심 데이터 판정판을 추가한다.
  * 주의: 물 방향/물살은 유속 실측값이 아니라 수위변화·방류량·조석보정 기반 참고판정이다.
@@ -72,7 +72,7 @@ function init(){
   renderQuality();
   renderModelInfo(BRIDGES[0]);
   renderBoard([]);
-  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.3 HRFCOTimeGridFix'); renderDataFirstPanel();
+  log('[초기화]', `교량 ${BRIDGES.length}개`, 'Phase 3.4.4 RenderFix'); renderDataFirstPanel();
 }
 
 function bindInputs(){
@@ -274,6 +274,17 @@ function val(row, keys){
     }
   }
   return null;
+}
+
+function hasNumericValue(rows, keys){
+  return Array.isArray(rows) && rows.some(row => {
+    const r = flatRow(row);
+    return keys.some(k => {
+      if(!Object.prototype.hasOwnProperty.call(r, k)) return false;
+      const v = r[k];
+      return v !== null && v !== undefined && String(v).trim() !== '' && !isNaN(Number(String(v).replace(/,/g,'')));
+    });
+  });
 }
 function metricStats(rows, keys){
   const stats=[];
@@ -582,6 +593,7 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const waterKeys = waterMetric?.key ? [waterMetric.key] : WATER_KEYS;
   const damKeys = damMetric?.key ? [damMetric.key] : DAM_KEYS;
   const water = nearest(waterRows,time,waterKeys);
+  const waterFlow = nearest(waterRows,time,[WATER_FLOW_FIXED_KEY,'FW','flow','FLOW'],MAX_NEAREST_MIN);
   const wTrend = trend(waterRows,time,waterKeys,60);
   const damImpactTime = new Date(time.getTime() - (b.releaseLag||0)*60000);
   const damImpact = nearest(damRows,damImpactTime,damKeys,90);

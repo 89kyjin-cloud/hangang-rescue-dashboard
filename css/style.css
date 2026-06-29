@@ -28,3 +28,13 @@ canvas{min-height:280px}.bridge-item.selected{border-color:#0f62fe;background:#e
 .card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:360px}
 #combinedChartNote,#waterChartNote,#damChartNote,#tideChartNote{font-size:13px;line-height:1.5;margin-top:8px}
 @media(max-width:760px){.card canvas#combinedChart{min-height:430px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px}}
+
+
+/* Phase 3.4.8 evidence-first UX */
+.data-panel{grid-template-columns:1.05fr repeat(3,1fr)}
+.change-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:2px}
+.change-card{border:1px solid #d9e2f3;border-radius:14px;background:#fbfdff;padding:12px;min-height:92px}
+.change-card b{display:block;color:#475467;font-size:13px;margin-bottom:8px}.change-card strong{display:block;font-size:22px;line-height:1.2}.change-card span{display:block;color:#667085;font-size:12px;margin-top:5px}.change-card .up,.up{color:#c53030}.change-card .down,.down{color:#0f62fe}.neutral{color:#475467}
+.evidence-card{grid-column:1/-1;border:1px solid #d0d5dd;border-radius:16px;background:#fff;padding:14px;margin-top:2px}.evidence-card h3{margin:0 0 10px;font-size:16px}.evidence-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.evidence-list div{border:1px dashed #d8dde8;border-radius:12px;padding:10px;background:#fafbff}.evidence-list b{display:block;color:#344054}.evidence-list span{display:block;font-weight:800;margin:3px 0}.evidence-list em{font-style:normal;color:#667085;font-size:12px}.evidence-total{display:grid;grid-template-columns:80px 1fr;gap:8px;margin-top:10px;padding:10px;border-radius:12px;background:#eef4ff}.evidence-total b{color:#344054}.evidence-total span{font-weight:800;color:#0f62fe}
+.advanced-graph summary,.raw-log-card summary{cursor:pointer;font-weight:800;color:#172033;padding:8px 0}.advanced-graph details[open] summary,.raw-log-card details[open] summary{margin-bottom:8px}.raw-log-card pre{margin-top:8px}.bridge-item.inflow .bridge-status{color:#2563eb}.bridge-item.outflow .bridge-status{color:#f97316}.bridge-item.unknown .bridge-status{color:#6b7280}.bridge-item.same-station{border-style:dashed}.card canvas#combinedChart{min-height:420px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:380px}
+@media(max-width:760px){.change-grid{grid-template-columns:1fr 1fr}.evidence-list{grid-template-columns:1fr}.card canvas#combinedChart{min-height:360px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:340px}}

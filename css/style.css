@@ -13,3 +13,7 @@
 .data-grid-mini{display:grid;grid-template-columns:44px 1fr;gap:6px 8px;font-size:13px}.data-grid-mini>span:nth-child(odd){font-weight:800;color:#475467}.data-grid-mini small{color:#667085}.empty-panel{padding:14px;border:1px dashed #c7d7fe;border-radius:12px;color:#667085;background:#fff}
 .result-card .summary-big{font-size:24px;line-height:1.25;color:#101828}
 @media(max-width:760px){.data-panel{grid-template-columns:1fr}.topbar{padding:14px 12px}.topbar h1{font-size:18px}.topbar p{font-size:12px}.badge{font-size:11px;padding:5px 8px}.data-card strong{font-size:20px}.result-card .summary-big{font-size:21px}}
+
+
+/* Phase 3.4.5 readability fixes */
+canvas{min-height:280px}.bridge-item.selected{border-color:#0f62fe;background:#eef4ff;box-shadow:0 0 0 2px rgba(15,98,254,.08)}.bridge-status{font-weight:800;margin-top:8px;color:#172033}.bridge-status.strong{font-size:15px;color:#0f62fe}.small-note{font-size:12px;margin-top:5px}.card canvas#combinedChart{min-height:360px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:280px}@media(max-width:760px){canvas{min-height:240px}.card canvas#combinedChart{min-height:320px}}

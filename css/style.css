@@ -17,3 +17,14 @@
 
 /* Phase 3.4.5 readability fixes */
 canvas{min-height:280px}.bridge-item.selected{border-color:#0f62fe;background:#eef4ff;box-shadow:0 0 0 2px rgba(15,98,254,.08)}.bridge-status{font-weight:800;margin-top:8px;color:#172033}.bridge-status.strong{font-size:15px;color:#0f62fe}.small-note{font-size:12px;margin-top:5px}.card canvas#combinedChart{min-height:360px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:280px}@media(max-width:760px){canvas{min-height:240px}.card canvas#combinedChart{min-height:320px}}
+
+
+/* Phase 3.4.6 graph and board readability */
+.card canvas#combinedChart{min-height:430px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:330px}.bridge-board{grid-template-columns:repeat(2,minmax(0,1fr));}.bridge-item{padding:12px}.bridge-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.bridge-top h3{margin:0;font-size:15px}.bridge-top span{font-size:11px;background:#eef4ff;color:#0f62fe;border-radius:999px;padding:3px 7px;white-space:nowrap}.data-grid-mini small{line-height:1.35}.kv span{line-height:1.55}@media(max-width:760px){.bridge-board{grid-template-columns:1fr}.card canvas#combinedChart{min-height:380px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:280px}}
+
+
+/* Phase 3.4.7 graph size and time reference lines */
+.card canvas#combinedChart{min-height:500px}
+.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:360px}
+#combinedChartNote,#waterChartNote,#damChartNote,#tideChartNote{font-size:13px;line-height:1.5;margin-top:8px}
+@media(max-width:760px){.card canvas#combinedChart{min-height:430px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px}}

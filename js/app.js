@@ -533,6 +533,15 @@ async function getTideRowsRange(key,start,end){
   throw new Error('조석 기간조회 전체 실패: '+errors.slice(0,3).join(' / '));
 }
 function decodeURIComponentSafe(s){ try{return decodeURIComponent(s);}catch{return s;} }
+function hasNumericValue(rows, keys){
+  return Array.isArray(rows) && rows.some(row => {
+    const r = flatRow(row);
+    return keys.some(k => {
+      const v = r[k];
+      return v !== null && v !== undefined && String(v).trim() !== '' && !isNaN(Number(v));
+    });
+  });
+}
 function tideAt(rows,target,offsetMin=0){
   const shifted = new Date(target.getTime()-offsetMin*60000);
   const items=[];

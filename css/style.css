@@ -1,43 +1,166 @@
-:root{--bg:#f6f7fb;--card:#fff;--ink:#172033;--muted:#667085;--line:#e6e8ef;--primary:#0f62fe;--good:#078a4f;--warn:#b7791f;--bad:#c53030;--soft:#eef4ff;--dark:#101828}*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);line-height:1.45}.topbar{padding:18px 16px;background:var(--dark);color:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;z-index:5}.topbar h1{font-size:20px;margin:0}.topbar p{margin:4px 0 0;color:#d0d5dd;font-size:13px}.badge{background:#1d9a6c;padding:6px 10px;border-radius:999px;font-size:12px;white-space:nowrap}main{max-width:1100px;margin:0 auto;padding:14px}.grid{display:grid;gap:12px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.compact{gap:8px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}.card h2{font-size:17px;margin:0 0 12px}.warning{background:#fff8eb;border-color:#ffd59a}label{display:block;margin:10px 0 5px;color:#344054;font-weight:650;font-size:13px}input,select{width:100%;font-size:16px;padding:11px 12px;border:1px solid #cfd5e1;border-radius:12px;background:#fff;color:var(--ink)}select{min-height:44px}button{border:0;border-radius:12px;padding:11px 14px;background:var(--primary);color:#fff;font-weight:700;font-size:15px;cursor:pointer}button.secondary{background:#e9eef8;color:#243044}button.small{padding:9px 11px;min-width:54px}.key-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.muted{color:var(--muted);font-size:13px}.quality-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.q{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fafbff}.q strong{display:block}.ok{color:var(--good);font-weight:800}.hold{color:var(--warn);font-weight:800}.fail{color:var(--bad);font-weight:800}.summary-big{font-size:26px;font-weight:800;margin:4px 0}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--soft);font-size:12px;margin:3px 4px 3px 0}.kv{display:grid;grid-template-columns:120px 1fr;gap:8px;padding:7px 0;border-bottom:1px dashed #e5e7eb}.kv:last-child{border-bottom:0}.bridge-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.bridge-item{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.bridge-item h3{font-size:14px;margin:0 0 6px}canvas{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;display:block}pre{white-space:pre-wrap;word-break:break-all;background:#0b1020;color:#d8e1ff;border-radius:12px;padding:12px;max-height:360px;overflow:auto;font-size:12px}@media(max-width:760px){.topbar{align-items:flex-start}.topbar h1{font-size:18px}.grid.two{grid-template-columns:1fr}.quality-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.bridge-board{grid-template-columns:1fr}.kv{grid-template-columns:96px 1fr}.summary-big{font-size:22px}.card{padding:12px}main{padding:10px}.key-row{grid-template-columns:1fr auto}}
+/* ============================================================
+   HanRiver Environment Dashboard — CSS Phase 3.4.7
+   기존 스타일 100% 유지 + 신규 컴포넌트 추가
+   ============================================================ */
 
+:root{--bg:#f6f7fb;--card:#fff;--ink:#172033;--muted:#667085;--line:#e6e8ef;--primary:#0f62fe;--good:#078a4f;--warn:#b7791f;--bad:#c53030;--soft:#eef4ff;--dark:#101828;
+  --flow-in:#2563eb;--flow-out:#f97316;--flow-na:#6b7280;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;color:var(--ink);line-height:1.45}
 
-/* Phase 3.4 DataFirst UI */
-.topbar{box-shadow:0 2px 10px rgba(16,24,40,.18)}
+/* ── 상단바 ── */
+.topbar{padding:18px 16px;background:var(--dark);color:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;z-index:5;box-shadow:0 2px 10px rgba(16,24,40,.18)}
+.topbar h1{font-size:20px;margin:0}.topbar p{margin:4px 0 0;color:#d0d5dd;font-size:13px}
+.badge{background:#1d9a6c;padding:6px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
+
+/* ── 레이아웃 ── */
+main{max-width:1100px;margin:0 auto;padding:14px}
+.grid{display:grid;gap:12px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.compact{gap:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card h2{font-size:17px;margin:0 0 12px}
+.warning{background:#fff8eb;border-color:#ffd59a}
+
+/* ── 폼 ── */
+label{display:block;margin:10px 0 5px;color:#344054;font-weight:650;font-size:13px}
+input,select{width:100%;font-size:16px;padding:11px 12px;border:1px solid #cfd5e1;border-radius:12px;background:#fff;color:var(--ink)}
+select{min-height:44px}
+button{border:0;border-radius:12px;padding:11px 14px;background:var(--primary);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+button.secondary{background:#e9eef8;color:#243044}
+button.small{padding:9px 11px;min-width:54px}
+.key-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.muted{color:var(--muted);font-size:13px}
+
+/* ── 신뢰도 ── */
+.quality-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.q{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fafbff}
+.q strong{display:block}
+.ok{color:var(--good);font-weight:800}.hold{color:var(--warn);font-weight:800}.fail{color:var(--bad);font-weight:800}
+
+/* ── 공통 ── */
+.summary-big{font-size:26px;font-weight:800;margin:4px 0}
+.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--soft);font-size:12px;margin:3px 4px 3px 0}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:8px;padding:7px 0;border-bottom:1px dashed #e5e7eb}
+.kv:last-child{border-bottom:0}
+.kv span{line-height:1.55}
+
+/* ── 교량 현황판 ── */
+.bridge-board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.bridge-item{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}
+.bridge-item h3{font-size:14px;margin:0 0 6px}
+.bridge-item.selected{border-color:var(--primary);background:#eef4ff;box-shadow:0 0 0 2px rgba(15,98,254,.08)}
+.bridge-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.bridge-top h3{margin:0;font-size:15px}
+.bridge-top span{font-size:11px;background:#eef4ff;color:var(--primary);border-radius:999px;padding:3px 7px;white-space:nowrap}
+.bridge-status{font-weight:800;margin-top:8px;color:var(--ink)}
+.bridge-status.flow-in{color:var(--flow-in)}
+.bridge-status.flow-out{color:var(--flow-out)}
+.bridge-status.flow-na{color:var(--flow-na)}
+.bridge-status.strong{font-size:15px;color:var(--primary)}
+.small-note{font-size:12px;margin-top:5px}
+
+/* ── 핵심 데이터 판정 패널 ── */
 .card.data-first{border-color:#c7d7fe;background:linear-gradient(180deg,#ffffff,#f8fbff)}
 .data-panel{display:grid;grid-template-columns:1.05fr repeat(3,1fr);gap:10px}
 .data-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:12px;min-height:110px}
 .data-card.primary{background:#101828;color:#fff;border-color:#101828}
-.data-card b{display:block;color:#667085;font-size:13px;margin-bottom:6px}.data-card.primary b{color:#cbd5e1}
-.data-card strong{display:block;font-size:22px;line-height:1.25;margin:6px 0}.data-card.primary span{display:inline-block;margin-top:4px;color:#e5e7eb}
-.data-badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:800;margin-bottom:8px}.data-badge.good{background:#e7f8ef;color:#078a4f}.data-badge.warn{background:#fff4db;color:#b7791f}.data-badge.bad{background:#ffe8e8;color:#c53030}.data-badge.hold{background:#eef2f7;color:#475467}
-.data-grid-mini{display:grid;grid-template-columns:44px 1fr;gap:6px 8px;font-size:13px}.data-grid-mini>span:nth-child(odd){font-weight:800;color:#475467}.data-grid-mini small{color:#667085}.empty-panel{padding:14px;border:1px dashed #c7d7fe;border-radius:12px;color:#667085;background:#fff}
+.data-card b{display:block;color:#667085;font-size:13px;margin-bottom:6px}
+.data-card.primary b{color:#cbd5e1}
+.data-card strong{display:block;font-size:22px;line-height:1.25;margin:6px 0}
+.data-card.primary span{display:inline-block;margin-top:4px;color:#e5e7eb}
+.data-badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:800;margin-bottom:8px}
+.data-badge.good{background:#e7f8ef;color:#078a4f}
+.data-badge.warn{background:#fff4db;color:#b7791f}
+.data-badge.bad{background:#ffe8e8;color:#c53030}
+.data-badge.hold{background:#eef2f7;color:#475467}
+.data-grid-mini{display:grid;grid-template-columns:44px 1fr;gap:6px 8px;font-size:13px}
+.data-grid-mini>span:nth-child(odd){font-weight:800;color:#475467}
+.data-grid-mini small{color:#667085;line-height:1.35}
+.empty-panel{padding:14px;border:1px dashed #c7d7fe;border-radius:12px;color:#667085;background:#fff}
 .result-card .summary-big{font-size:24px;line-height:1.25;color:#101828}
-@media(max-width:760px){.data-panel{grid-template-columns:1fr}.topbar{padding:14px 12px}.topbar h1{font-size:18px}.topbar p{font-size:12px}.badge{font-size:11px;padding:5px 8px}.data-card strong{font-size:20px}.result-card .summary-big{font-size:21px}}
 
+/* ── ★ 변화량 카드 ── */
+.delta-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.delta-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:#fff;text-align:center}
+.delta-label{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.delta-value{font-size:30px;font-weight:800;line-height:1;letter-spacing:-1px}
+.delta-value.up{color:#c53030}
+.delta-value.down{color:#0f62fe}
+.delta-value.neutral{color:var(--muted)}
+.delta-value.tide-in{color:var(--flow-in)}
+.delta-value.tide-out{color:var(--flow-out)}
+.delta-unit{font-size:12px;color:var(--muted);margin-top:6px}
 
-/* Phase 3.4.5 readability fixes */
-canvas{min-height:280px}.bridge-item.selected{border-color:#0f62fe;background:#eef4ff;box-shadow:0 0 0 2px rgba(15,98,254,.08)}.bridge-status{font-weight:800;margin-top:8px;color:#172033}.bridge-status.strong{font-size:15px;color:#0f62fe}.small-note{font-size:12px;margin-top:5px}.card canvas#combinedChart{min-height:360px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:280px}@media(max-width:760px){canvas{min-height:240px}.card canvas#combinedChart{min-height:320px}}
+/* ── ★ 판정 근거 카드 ── */
+.reason-grid{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:center}
+.reason-item{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fafbff}
+.reason-item-label{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.reason-item-value{font-size:15px;font-weight:800;color:var(--ink)}
+.reason-item-score{font-size:13px;color:var(--muted);margin-top:4px}
+.reason-final{border:2px solid var(--primary);border-radius:12px;padding:14px;background:#eef4ff;text-align:center}
+.reason-final-label{font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px}
+.reason-final-value{font-size:18px;font-weight:800;color:#101828}
+.reliability-bar{height:6px;border-radius:999px;background:#e5e7eb;margin-top:8px;overflow:hidden}
+.reliability-fill{height:100%;border-radius:999px;background:var(--primary);transition:width .4s}
 
+/* ── ★ 신뢰도 표시 ── */
+.reliability-badge{display:inline-block;font-size:13px;font-weight:800;color:var(--primary);background:var(--soft);border-radius:999px;padding:3px 10px;margin-top:6px}
 
-/* Phase 3.4.6 graph and board readability */
-.card canvas#combinedChart{min-height:430px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:330px}.bridge-board{grid-template-columns:repeat(2,minmax(0,1fr));}.bridge-item{padding:12px}.bridge-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}.bridge-top h3{margin:0;font-size:15px}.bridge-top span{font-size:11px;background:#eef4ff;color:#0f62fe;border-radius:999px;padding:3px 7px;white-space:nowrap}.data-grid-mini small{line-height:1.35}.kv span{line-height:1.55}@media(max-width:760px){.bridge-board{grid-template-columns:1fr}.card canvas#combinedChart{min-height:380px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:280px}}
+/* ── ★ 방류량 통계 바 ── */
+.dam-stat-bar{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.dam-stat-item{border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:#fff;font-size:13px}
+.dam-stat-item b{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:2px}
+.dam-stat-item span{font-size:18px;font-weight:800;color:var(--ink)}
+.dam-stat-item.current span{color:var(--primary)}
+.dam-stat-item.high span{color:var(--bad)}
+.dam-stat-item.low span{color:var(--good)}
 
+/* ── ★ 조석 다음 전환 표시 ── */
+.tide-next-turn{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.tide-turn-item{border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:#fff;font-size:13px}
+.tide-turn-item b{display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:2px}
+.tide-turn-item span{font-size:16px;font-weight:800;color:var(--ink)}
+.tide-ref-note{font-size:11px;color:var(--muted);margin-top:4px}
 
-/* Phase 3.4.7 graph size and time reference lines */
+/* ── ★ 토글 버튼 ── */
+.toggle-btn{width:100%;text-align:left;background:none;color:var(--ink);font-size:15px;font-weight:700;padding:4px 0;border:0;border-radius:0;cursor:pointer;display:flex;align-items:center;gap:8px}
+.toggle-btn:hover{color:var(--primary)}
+.toggle-btn[aria-expanded="true"]{color:var(--primary)}
+.collapsible-section{margin-top:10px}
+
+/* ── 범례 도트 ── */
+.legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:3px}
+
+/* ── 캔버스 ── */
+canvas{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;display:block}
 .card canvas#combinedChart{min-height:500px}
 .card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:360px}
 #combinedChartNote,#waterChartNote,#damChartNote,#tideChartNote{font-size:13px;line-height:1.5;margin-top:8px}
-@media(max-width:760px){.card canvas#combinedChart{min-height:430px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px}}
 
+/* ── 원자료 로그 ── */
+pre{white-space:pre-wrap;word-break:break-all;background:#0b1020;color:#d8e1ff;border-radius:12px;padding:12px;max-height:360px;overflow:auto;font-size:12px}
 
-/* Phase 3.4.8 evidence-first UX */
-.data-panel{grid-template-columns:1.05fr repeat(3,1fr)}
-.change-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:2px}
-.change-card{border:1px solid #d9e2f3;border-radius:14px;background:#fbfdff;padding:12px;min-height:92px}
-.change-card b{display:block;color:#475467;font-size:13px;margin-bottom:8px}.change-card strong{display:block;font-size:22px;line-height:1.2}.change-card span{display:block;color:#667085;font-size:12px;margin-top:5px}.change-card .up,.up{color:#c53030}.change-card .down,.down{color:#0f62fe}.neutral{color:#475467}
-.evidence-card{grid-column:1/-1;border:1px solid #d0d5dd;border-radius:16px;background:#fff;padding:14px;margin-top:2px}.evidence-card h3{margin:0 0 10px;font-size:16px}.evidence-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.evidence-list div{border:1px dashed #d8dde8;border-radius:12px;padding:10px;background:#fafbff}.evidence-list b{display:block;color:#344054}.evidence-list span{display:block;font-weight:800;margin:3px 0}.evidence-list em{font-style:normal;color:#667085;font-size:12px}.evidence-total{display:grid;grid-template-columns:80px 1fr;gap:8px;margin-top:10px;padding:10px;border-radius:12px;background:#eef4ff}.evidence-total b{color:#344054}.evidence-total span{font-weight:800;color:#0f62fe}
-.advanced-graph summary,.raw-log-card summary{cursor:pointer;font-weight:800;color:#172033;padding:8px 0}.advanced-graph details[open] summary,.raw-log-card details[open] summary{margin-bottom:8px}.raw-log-card pre{margin-top:8px}.bridge-item.inflow .bridge-status{color:#2563eb}.bridge-item.outflow .bridge-status{color:#f97316}.bridge-item.unknown .bridge-status{color:#6b7280}.bridge-item.same-station{border-style:dashed}.card canvas#combinedChart{min-height:420px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:380px}
-@media(max-width:760px){.change-grid{grid-template-columns:1fr 1fr}.evidence-list{grid-template-columns:1fr}.card canvas#combinedChart{min-height:360px}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:340px}}
-
-/* Phase 3.4.9 interactive chart + water insight */
-.chart-tooltip{margin:8px 0 2px;padding:10px 12px;border:1px solid #d9e2f3;border-radius:12px;background:#f8fbff;color:#344054;font-size:13px;line-height:1.45}.chart-tooltip strong{color:#172033}.chart-tooltip b{color:#0f62fe}.water-insight{grid-column:1/-1;border:1px solid #c7d7fe;border-radius:16px;background:#f8fbff;padding:14px;display:grid;gap:5px}.water-insight b{font-size:14px;color:#344054}.water-insight strong{font-size:20px;color:#101828}.water-insight span{font-size:14px;color:#344054}.water-insight em{font-style:normal;color:#667085;font-size:12px;line-height:1.45}.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{cursor:crosshair}.card canvas#combinedChart{cursor:default}@media(max-width:760px){.water-insight strong{font-size:18px}.chart-tooltip{font-size:12px}}
+/* ── 반응형 ── */
+@media(max-width:760px){
+  .topbar{align-items:flex-start;padding:14px 12px}
+  .topbar h1{font-size:18px}
+  .topbar p{font-size:12px}
+  .badge{font-size:11px;padding:5px 8px}
+  .grid.two{grid-template-columns:1fr}
+  .quality-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bridge-board{grid-template-columns:1fr}
+  .kv{grid-template-columns:96px 1fr}
+  .summary-big{font-size:22px}
+  .data-card strong{font-size:20px}
+  .result-card .summary-big{font-size:21px}
+  .card{padding:12px}
+  main{padding:10px}
+  .key-row{grid-template-columns:1fr auto}
+  .data-panel{grid-template-columns:1fr}
+  .delta-grid{grid-template-columns:1fr}
+  .reason-grid{grid-template-columns:1fr}
+  canvas{min-height:240px}
+  .card canvas#combinedChart{min-height:430px}
+  .card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px}
+  .delta-value{font-size:24px}
+}

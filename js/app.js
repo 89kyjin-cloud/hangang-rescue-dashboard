@@ -410,7 +410,11 @@ function trend(rows,target,valueKeys,minutes=60){
   if(!now || !past || now.stale || past.stale) return null;
   return {now,past,delta:Number((now.value-past.value).toFixed(2)), minutes};
 }
-function dataQualityForPoint(p){ if(!p) return '자료 없음'; return p.stale ? `검증필요: ${p.diffMin}분 차이` : `정상: ${p.diffMin}분 차이`; }
+function dataQualityForPoint(p){ if(!p) return '자료 없음'; return p.stale ? `검증필요: 입력시각과 관측시각 ${p.diffMin}분 차이` : `정상: 입력시각과 관측시각 ${p.diffMin}분 차이`; }
+function observationGapShort(p){
+  if(!p) return '자료 없음';
+  return `${pretty(p.time)} · 입력시각과 관측값 ${p.diffMin}분 차이${p.stale?' · 검증필요':''}`;
+}
 
 async function getWaterSeries(key, code, start, end){
   let lastErr='';
@@ -607,10 +611,10 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
 function flowDecisionFromState(state){
   return {direction:state.direction, parts:state.notes, speed:state.speed};
 }
-function fmtWaterPoint(p){ return p ? `${p.value.toFixed(2)}m · ${pretty(p.time)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
-function fmtWaterFlowPoint(p){ return p ? `${p.value.toFixed(1)} · ${pretty(p.time)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
+function fmtWaterPoint(p){ return p ? `${p.value.toFixed(2)}m · ${observationGapShort(p)}` : '자료 없음'; }
+function fmtWaterFlowPoint(p){ return p ? `${p.value.toFixed(1)} · ${observationGapShort(p)}` : '자료 없음'; }
 function fmtTrend(t){ return t ? `${t.delta>0?'+':''}${t.delta}m / ${t.minutes}분` : '계산불가'; }
-function fmtDamPoint(p, impactTime){ return p ? `${p.value.toFixed(1)}㎥/s · 팔당 ${pretty(p.time)} · 교량영향 기준 ${pretty(impactTime)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
+function fmtDamPoint(p, impactTime){ return p ? `${p.value.toFixed(1)}㎥/s · 팔당 관측 ${pretty(p.time)} · 교량영향 기준 ${pretty(impactTime)} · ${dataQualityForPoint(p)}` : '자료 없음'; }
 function fmtTidePoint(b,t){
   if(!b.tide) return '잠실수중보 상류: 조석 적용 제외';
   if(!t) return '조석 자료 없음';
@@ -619,11 +623,11 @@ function fmtTidePoint(b,t){
   let turn = '';
   if(t.nextTurn){
     const bridgeTurn = new Date(t.nextTurn.time.getTime() + offset*60000);
-    turn = ` · 다음 ${t.nextTurn.type} 인천 ${hhmm(t.nextTurn.time)} / 교량보정 ${hhmm(bridgeTurn)} ${t.nextTurn.value.toFixed(1)}cm`;
+    turn = ` · 다음 전환: 인천 기준 ${hhmm(t.nextTurn.time)} / 교량 보정 ${hhmm(bridgeTurn)} · 조위 ${t.nextTurn.value.toFixed(1)}cm`;
   }
   const rate = t.rateCmHr!==null ? ` · 변화율 ${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h` : '';
-  const baseTxt = bridgeBestTime ? `인천 ${pretty(t.best.time)} 관측값을 ${offset}분 보정 → 교량기준 ${pretty(bridgeBestTime)}` : `인천 기준 ${t.shifted ? pretty(t.shifted) : ''}`;
-  return `${t.phase} · 조위 ${t.best.value.toFixed(1)}cm · ${baseTxt}${rate}${turn}`;
+  const baseTxt = bridgeBestTime ? `인천 관측 ${pretty(t.best.time)} + ${offset}분 보정 = 교량 기준 ${pretty(bridgeBestTime)}` : `인천 기준 ${t.shifted ? pretty(t.shifted) : ''}`;
+  return `${t.phase} · 인천 조위 ${t.best.value.toFixed(1)}cm · ${baseTxt}${rate}${turn}`;
 }
 
 function dataBadge(state){
@@ -636,7 +640,7 @@ function dataBadge(state){
 function fmtCorePoint(p, unit){
   if(!p) return '자료 없음';
   const value = unit==='m' ? p.value.toFixed(2)+'m' : unit==='cms' ? p.value.toFixed(1)+'㎥/s' : p.value.toFixed(1);
-  return `${value}<br><small>${pretty(p.time)} · ${dataQualityForPoint(p)}</small>`;
+  return `${value}<br><small>${observationGapShort(p)}</small>`;
 }
 function renderDataFirstPanel(b=null, incidentState=null, currentState=null, q={}){
   const el=$('dataFirstPanel'); if(!el) return;
@@ -718,38 +722,54 @@ function drawMultiLine(canvas, series, label=''){
   const ctx=canvas.getContext('2d'); const ratio=window.devicePixelRatio||1; canvas.width=canvas.clientWidth*ratio; canvas.height=canvas.clientHeight*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
   const cw=canvas.clientWidth, ch=canvas.clientHeight; ctx.clearRect(0,0,cw,ch);
   const all=series.flatMap(s=>s.points).filter(p=>p.time&&p.value!=null);
-  ctx.font='14px system-ui'; ctx.fillStyle='#172033'; ctx.fillText(label,14,22);
-  if(all.length<2){ ctx.fillStyle='#667085'; ctx.fillText('통합 그래프 데이터 부족',14,56); return; }
-  const xs=all.map(p=>p.time.getTime()), minX=Math.min(...xs), maxX=Math.max(...xs), padL=48, padR=28, padT=72, padB=34;
+  ctx.font='15px system-ui'; ctx.fillStyle='#172033'; ctx.fillText(label,16,24);
+  if(all.length<2){ ctx.fillStyle='#667085'; ctx.fillText('통합 그래프 데이터 부족',16,60); return; }
+  const xs=all.map(p=>p.time.getTime()), minX=Math.min(...xs), maxX=Math.max(...xs);
+  const padL=58, padR=36, padT=92, padB=42;
   const sx=x=>padL+(x-minX)/(maxX-minX||1)*(cw-padL-padR); const sy=y=>ch-padB-(y/100)*(ch-padT-padB);
   const colors=['#0f62fe','#b7791f','#078a4f'];
-  const legend=['파란선: 수위(m) 정규화','갈색선: 방류량(㎥/s) 정규화','초록선: 조석(cm) 정규화'];
-  legend.forEach((txt,i)=>{const x=14+i*210; ctx.fillStyle=colors[i]; ctx.fillRect(x,38,18,5); ctx.fillStyle='#344054'; ctx.font='13px system-ui'; ctx.fillText(txt,x+26,44);});
+  const legends=[
+    {label:'수위(m)', desc:'파란선', color:colors[0]},
+    {label:'방류량(㎥/s)', desc:'갈색선', color:colors[1]},
+    {label:'조석(cm)', desc:'초록선', color:colors[2]}
+  ];
+  legends.forEach((l,i)=>{const x=18+i*230; ctx.fillStyle=l.color; ctx.fillRect(x,44,32,7); ctx.fillStyle='#172033'; ctx.font='14px system-ui'; ctx.fillText(`${l.desc} = ${l.label}`,x+42,51);});
+  ctx.fillStyle='#667085'; ctx.font='12px system-ui'; ctx.fillText('※ 서로 단위가 달라 실제값이 아니라 0~100 정규화로 변화 방향만 비교합니다.',18,76);
   ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1;
-  for(let i=0;i<5;i++){const y=padT+i*(ch-padT-padB)/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(cw-padR,y);ctx.stroke(); ctx.fillStyle='#8a95a8'; ctx.font='12px system-ui'; ctx.fillText(String(100-i*25),10,y+4);}
+  for(let i=0;i<5;i++){const y=padT+i*(ch-padT-padB)/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(cw-padR,y);ctx.stroke(); ctx.fillStyle='#8a95a8'; ctx.font='12px system-ui'; ctx.fillText(String(100-i*25),18,y+4);}
   series.forEach((s,si)=>{
     const pts=s.points.filter(p=>p.time&&p.value!=null).sort((a,b)=>a.time-b.time);
     if(pts.length<2) return;
-    ctx.strokeStyle=colors[si%colors.length]; ctx.lineWidth=3; ctx.beginPath();
+    ctx.strokeStyle=colors[si%colors.length]; ctx.lineWidth=4; ctx.beginPath();
     pts.forEach((p,i)=>{const x=sx(p.time.getTime()), y=sy(p.value); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke();
-    const last=pts[pts.length-1]; ctx.fillStyle=colors[si%colors.length]; ctx.beginPath(); ctx.arc(sx(last.time.getTime()),sy(last.value),4,0,Math.PI*2); ctx.fill();
+    const last=pts[pts.length-1]; ctx.fillStyle=colors[si%colors.length]; ctx.beginPath(); ctx.arc(sx(last.time.getTime()),sy(last.value),6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=colors[si%colors.length]; ctx.font='13px system-ui'; ctx.fillText(s.name, Math.min(cw-80, sx(last.time.getTime())+8), Math.max(padT+12, Math.min(ch-padB-6, sy(last.value))));
   });
-  ctx.fillStyle='#667085'; ctx.font='13px system-ui'; const first=new Date(minX), last=new Date(maxX); ctx.fillText(hhmm(first),padL,ch-10); ctx.fillText(hhmm(last),cw-70,ch-10); ctx.fillText('정규화 0~100: 단위가 다른 값의 변화 방향 비교용',cw-330,22);
+  ctx.fillStyle='#667085'; ctx.font='13px system-ui'; const first=new Date(minX), last=new Date(maxX); ctx.fillText(hhmm(first),padL,ch-12); ctx.fillText(hhmm(last),cw-78,ch-12);
+}
+function stationGroupLabel(b){
+  if(!b.tide) return '조석 제외';
+  if(b.zone.includes('상류')) return '상류권';
+  if(b.zone.includes('중상류')) return '중상류';
+  if(b.zone.includes('중류')) return '중류';
+  if(b.zone.includes('하류')) return '하류';
+  return b.zone || '기타';
 }
 function renderBoard(results=[], selectedBridge=null, currentState=null){
   const selectedName = selectedBridge?.bridge || results[0]?.bridge;
   $('bridgeBoard').innerHTML = BRIDGES.map(b=>{
     const isSelected = b.bridge===selectedName;
     const sameStation = selectedBridge && b.code===selectedBridge.code;
+    const stationInfo = `${b.station.replace('서울시(','').replace(')','')} · ${b.code}`;
     let status = '';
     if(isSelected && currentState){
       status = `<div class="bridge-status strong">${currentState.direction}</div><div class="muted">${currentState.speed}</div><div class="muted">수위 ${currentState.water?currentState.water.value.toFixed(2)+'m':'자료 없음'} · 방류 ${currentState.damImpact?currentState.damImpact.value.toFixed(1)+'㎥/s':'자료 없음'}</div>`;
     }else if(sameStation && currentState){
       status = `<div class="bridge-status">동일 관측소 참고</div><div class="muted">${currentState.direction}</div>`;
     }else{
-      status = `<div class="bridge-status muted">선택 시 해당 관측소 기준 재계산</div>`;
+      status = `<div class="bridge-status muted">선택 시 재계산</div>`;
     }
-    return `<div class="bridge-item ${isSelected?'selected':''}"><h3>${b.bridge}</h3><div>${b.station}</div><div>${b.tide?'조석 적용':'조석 제외'}</div>${status}<div class="muted small-note">${b.zone}</div></div>`;
+    return `<div class="bridge-item ${isSelected?'selected':''}"><div class="bridge-top"><h3>${b.bridge}</h3><span>${stationGroupLabel(b)}</span></div><div>${stationInfo}</div><div>${b.tide?'조석 적용':'조석 제외'}</div>${status}<div class="muted small-note">${b.zone}</div></div>`;
   }).join('');
 }
 async function runQuery(){
@@ -804,16 +824,16 @@ async function runQuery(){
     {name:'방류',points:normalizePoints(damPts)},
     {name:'조석',points:normalizePoints(tidePts)}
   ], `${b.bridge} · ${pretty(incident)} ~ ${pretty(search)}`);
-  $('combinedChartNote').textContent = `파란선=수위, 갈색선=방류량, 초록선=조석입니다. 모두 0~100으로 정규화한 비교 그래프라 실제 단위값은 아래 개별 그래프와 핵심 데이터 판정판을 보세요. 수위필드=${waterMetric.key||'없음'}, 수위관측소 fw=참고흐름, 방류필드=${damMetric.key||'없음'}`;
+  $('combinedChartNote').textContent = `파란선=수위(m), 갈색선=방류량(㎥/s), 초록선=조석(cm). 통합 그래프는 단위가 다른 값을 0~100으로 바꾼 비교용입니다. 실제 수치 판단은 위 핵심 데이터와 아래 개별 그래프를 기준으로 보세요. 수위필드=${waterMetric.key||'없음'}, 수위관측소 fw=참고흐름, 방류필드=${damMetric.key||'없음'}`;
   drawLine($('waterChart'), waterPts, 'value', `${b.station} 수위(m) · ${pretty(incident)} ~ ${pretty(search)}`);
-  $('waterChartNote').textContent = currentState.wTrend ? `조회시점 최근 1시간 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m` : '최근 1시간 변화 계산에 필요한 시계열이 부족합니다.';
+  $('waterChartNote').textContent = currentState.wTrend ? `조회시점 기준 최근 1시간 수위 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m · 관측값 시간차는 입력시각과 가장 가까운 HRFCO 관측시각의 차이입니다.` : '최근 1시간 변화 계산에 필요한 시계열이 부족합니다.';
   drawLine($('damChart'), damPts, 'value', `팔당댐 방류량(㎥/s)`);
   $('damChartNote').textContent = currentState.damImpact ? `조회시점 교량 영향 방류량: ${currentState.damImpact.value.toFixed(1)}㎥/s · 팔당 ${b.releaseLag}분 지연 보정 · ${dataQualityForPoint(currentState.damImpact)}` : '방류량 미조회';
-  if(tideRows.length){ drawLine($('tideChart'), tidePts, 'value', `인천 조위(cm) · ${TIDE_STATION}`); $('tideChartNote').textContent = currentState.tide ? `교량 보정 후 ${currentState.tide.phase}, 기준값과 ${currentState.tide.diffMin}분 차이` : '조석 매칭 실패'; }
+  if(tideRows.length){ drawLine($('tideChart'), tidePts, 'value', `인천 조위(cm) · ${TIDE_STATION}`); $('tideChartNote').textContent = currentState.tide ? `인천 조석값에 교량별 지연시간(${b.offset||0}분)을 더해 교량 기준으로 보정했습니다. 입력시각과 조석 기준값 차이 ${currentState.tide.diffMin}분.` : '조석 매칭 실패'; }
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>${fmtTidePoint(b,currentState.tide)}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}], b, currentState);
-  $('inputStatus').textContent='조회 완료. HRFCO 10분격자 기준으로 수위·방류량 숫자값을 우선 적용했습니다.';
+  $('inputStatus').textContent='조회 완료. 시간차 표기는 입력시각과 가장 가까운 관측자료 시각의 차이입니다.';
 }
 
 document.addEventListener('DOMContentLoaded', init);

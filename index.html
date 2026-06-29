@@ -3,1133 +3,154 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>한강 환경 대시보드</title>
-  <style>
-    /* ── 기본 리셋 & 변수 ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0d1117;
-      --surface: #161b22;
-      --surface2: #1c2333;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --blue: #388bfd;
-      --blue-dim: #1f3a5a;
-      --green: #3fb950;
-      --green-dim: #1a3a22;
-      --red: #f85149;
-      --red-dim: #3d1a1a;
-      --yellow: #d29922;
-      --yellow-dim: #3a2f0a;
-      --tide: #a371f7;
-      --tide-dim: #2d1f5e;
-      --r: 12px;
-      --r-sm: 8px;
-    }
-
-    html { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
-    body { min-height: 100vh; padding-bottom: env(safe-area-inset-bottom, 20px); }
-
-    /* ── 상단바 ── */
-    .topbar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 16px 12px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-    .topbar h1 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-    .topbar .sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
-    .badge-warning { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-
-    /* ── 레이아웃 ── */
-    main { max-width: 900px; margin: 0 auto; padding: 14px 12px; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
-    .card-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-    /* ── 카드 헤더 주의 배너 ── */
-    .notice-banner { background: var(--yellow-dim); border: 1px solid var(--yellow); border-radius: var(--r-sm); padding: 10px 14px; font-size: 13px; color: #f0c060; margin-bottom: 12px; line-height: 1.5; }
-    .notice-banner strong { display: block; margin-bottom: 4px; }
-
-    /* ── 폼 요소 ── */
-    label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 5px; }
-    input, select {
-      width: 100%; font-size: 16px; background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--r-sm); padding: 10px 12px; color: var(--text);
-      -webkit-appearance: none; appearance: none;
-    }
-    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b949e' d='M1.41 0L6 4.58 10.59 0 12 1.41 6 7.41 0 1.41z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
-    input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: 0; border-color: transparent; }
-    .key-row { display: flex; gap: 6px; }
-    .key-row input { flex: 1; }
-
-    /* ── 버튼 ── */
-    button {
-      font-size: 15px; font-weight: 700; border: none; border-radius: var(--r-sm);
-      padding: 11px 18px; cursor: pointer; transition: opacity .15s; line-height: 1; white-space: nowrap;
-    }
-    button:active { opacity: .75; }
-    .btn-primary { background: var(--blue); color: #fff; }
-    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
-    .btn-sm { font-size: 13px; padding: 7px 12px; }
-    .btn-full { width: 100%; }
-
-    /* ── 상태 배지 ── */
-    .badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
-    .badge-ok { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
-    .badge-fail { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
-    .badge-warn { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
-    .badge-info { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
-    .badge-tide { background: var(--tide-dim); color: var(--tide); border: 1px solid var(--tide); }
-    .badge-muted { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-
-    /* ── 데이터 종류 구분 레이블 ── */
-    .dtype { font-size: 10px; font-weight: 800; border-radius: 3px; padding: 1px 5px; letter-spacing: 0.3px; }
-    .dtype-live { background: #0d3321; color: #3fb950; }
-    .dtype-past { background: #0d2340; color: #58a6ff; }
-    .dtype-calc { background: #2d2200; color: #e3b341; }
-    .dtype-est  { background: #3d1a1a; color: #f85149; }
-    .dtype-fail { background: #3d1a1a; color: #f85149; border: 1px solid #f85149; }
-
-    /* ── 핵심 수치 표시 카드 ── */
-    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .metric-card {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm);
-      padding: 12px; text-align: center;
-    }
-    .metric-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
-    .metric-val { font-size: 28px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
-    .metric-unit { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .metric-time { font-size: 10px; color: var(--muted); margin-top: 6px; }
-    .val-ok { color: var(--green); }
-    .val-warn { color: var(--yellow); }
-    .val-danger { color: var(--red); }
-    .val-na { color: var(--muted); font-size: 20px; }
-    .val-fail { color: var(--red); font-size: 16px; font-weight: 700; }
-
-    /* ── 방향 표시기 ── */
-    .flow-indicator {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm);
-      padding: 14px 16px; display: flex; align-items: center; gap: 12px;
-    }
-    .flow-arrow { font-size: 32px; flex-shrink: 0; }
-    .flow-label { font-size: 14px; font-weight: 700; }
-    .flow-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-    /* ── 교량 현황판 ── */
-    .bridge-board { display: flex; flex-direction: column; gap: 6px; }
-    .bridge-row {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm);
-      padding: 10px 14px; display: flex; align-items: center; gap: 10px;
-      cursor: pointer; transition: border-color .15s;
-    }
-    .bridge-row:hover { border-color: var(--blue); }
-    .bridge-row.active { border-color: var(--blue); background: var(--blue-dim); }
-    .bridge-name { font-size: 14px; font-weight: 700; flex: 1; }
-    .bridge-meta { font-size: 11px; color: var(--muted); }
-    .bridge-badges { display: flex; gap: 4px; flex-wrap: wrap; }
-
-    /* ── 비교 테이블 ── */
-    .compare-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .compare-table th { background: var(--surface2); color: var(--muted); font-size: 11px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-    .compare-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    .compare-table tr:last-child td { border-bottom: none; }
-    .compare-table .col-label { font-weight: 600; color: var(--muted); font-size: 12px; }
-    .compare-table .col-incident { color: var(--text); }
-    .compare-table .col-current { color: var(--blue); font-weight: 700; }
-
-    /* ── 섹션 분리선 ── */
-    .section-sep { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
-
-    /* ── 원자료 로그 ── */
-    pre#rawLog {
-      background: #0d1117; color: #8b949e; border: 1px solid var(--border); border-radius: var(--r-sm);
-      padding: 12px; font-size: 11px; line-height: 1.5; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-all;
-    }
-
-    /* ── 질 지표 그리드 ── */
-    .quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .quality-item { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px; }
-    .quality-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
-    .quality-status { font-size: 13px; font-weight: 700; }
-
-    /* ── 모바일 반응형 ── */
-    @media (max-width: 600px) {
-      .grid2, .grid3 { grid-template-columns: 1fr; }
-      .metric-grid { grid-template-columns: 1fr 1fr; }
-      .quality-grid { grid-template-columns: 1fr 1fr; }
-      .metric-val { font-size: 24px; }
-      main { padding: 10px 8px; }
-      .topbar { padding: 12px 12px 10px; }
-      .topbar h1 { font-size: 15px; }
-    }
-    @media (max-width: 380px) {
-      .metric-grid { grid-template-columns: 1fr; }
-    }
-
-    /* ── 로딩 스피너 ── */
-    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── 구간 안내 ── */
-    .zone-info { font-size: 12px; color: var(--muted); padding: 8px 0; }
-    .zone-badge { display: inline-block; background: var(--tide-dim); color: var(--tide); border: 1px solid var(--tide); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
-    .zone-badge-no { display: inline-block; background: var(--surface2); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 700; }
-
-    /* ── 숨김 ── */
-    .hidden { display: none !important; }
-  </style>
+  <title>HanRiver Environment Dashboard v1.0 Phase 3.4.3.3.2.1</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
 <header class="topbar">
   <div>
-    <h1>한강 환경 대시보드</h1>
-    <div class="sub">수위·방류량·조석 분리 표시 · 조회 실패 시 추정값 대체 없음</div>
+    <h1>HanRiver Environment Dashboard</h1>
+    <p>v1.0 Phase 3.4.3.2.1 · DataFirstFix · 수위/방류 실측 우선 · 내장 타임아웃</p>
   </div>
-  <span class="badge-warning">검증 우선</span>
+  <span class="badge">검증 우선</span>
 </header>
 
 <main>
+  <section class="card warning">
+    <strong>사용 원칙</strong>
+    <p>이 화면은 수위·방류량·조석·기상 데이터를 검증하기 위한 분석 보조 도구입니다. 실제 수색 지시나 작전 범위 결정은 현장 지휘·공식 절차를 따르세요.</p>
+  </section>
 
-  <!-- 사용 원칙 배너 -->
-  <div class="notice-banner">
-    <strong>⚠ 사용 원칙</strong>
-    이 화면은 수위·방류량·조석·기상 데이터를 검증하기 위한 분석 보조 도구입니다.
-    실제 수색 지시나 작전 범위 결정은 현장 지휘·공식 절차를 따르세요.
-    API 조회 실패 시 추정값으로 자동 대체하지 않습니다.
-  </div>
+  <section class="grid two">
+    <div class="card">
+      <h2>① API 키</h2>
+      <p class="muted">기본값은 숨김입니다. 필요할 때만 보기 버튼을 누르세요. 원자료 로그에는 키가 자동 마스킹됩니다.</p>
 
-  <!-- ① API 키 -->
-  <div class="card">
-    <div class="card-title">① API 키</div>
-    <div class="grid2">
-      <div>
-        <label>한강홍수통제소 (수위·방류)</label>
-        <div class="key-row">
-          <input id="hrfcoKey" type="password" placeholder="api.hrfco.go.kr 인증키" autocomplete="off" spellcheck="false" />
-          <button type="button" class="btn-secondary btn-sm" data-toggle="hrfcoKey">보기</button>
-        </div>
+      <label>한강홍수통제소 인증키</label>
+      <div class="key-row">
+        <input id="hrfcoKey" type="password" placeholder="HRFCO API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="hrfcoKey">보기</button>
       </div>
-      <div>
-        <label>조석 API (KHOA / data.go.kr)</label>
-        <div class="key-row">
-          <input id="tideKey" type="password" placeholder="조석 API 인증키" autocomplete="off" spellcheck="false" />
-          <button type="button" class="btn-secondary btn-sm" data-toggle="tideKey">보기</button>
-        </div>
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button type="button" id="saveKeys" class="btn-primary btn-sm">키 저장</button>
-      <button type="button" id="clearKeys" class="btn-danger btn-sm">키 삭제</button>
-      <span id="keyStatus" style="font-size:12px;color:var(--muted)"></span>
-    </div>
-  </div>
 
-  <!-- ② 조회 조건 -->
-  <div class="card">
-    <div class="card-title">② 조회 조건</div>
-    <div style="margin-bottom:12px">
-      <label>교량 선택</label>
+      <label>조석 API 인증키</label>
+      <div class="key-row">
+        <input id="tideKey" type="password" placeholder="KHOA/Data.go.kr Tide API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="tideKey">보기</button>
+      </div>
+
+      <label>기상청 인증키</label>
+      <div class="key-row">
+        <input id="weatherKey" type="password" placeholder="KMA API Key" autocomplete="off" spellcheck="false" />
+        <button type="button" class="secondary small" data-toggle-key="weatherKey">보기</button>
+      </div>
+
+      <div class="row">
+        <button id="saveKeys">키 저장</button>
+        <button id="clearKeys" class="secondary">키 삭제</button>
+      </div>
+      <p id="keyStatus" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>② 조회 조건</h2>
+      <label>교량</label>
       <select id="bridgeSelect"></select>
-      <div id="bridgeZoneInfo" class="zone-info"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div>
-        <label>사고 날짜</label>
-        <input id="incidentDate" type="date" style="width:100%;font-size:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);-webkit-appearance:none;appearance:none;box-sizing:border-box" />
-      </div>
-      <div>
-        <label>사고 시간</label>
-        <input id="incidentTime" type="time" style="width:100%;font-size:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);-webkit-appearance:none;appearance:none;box-sizing:border-box" />
-      </div>
-      <div>
-        <label>조회 날짜</label>
-        <input id="searchDate" type="date" style="width:100%;font-size:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);-webkit-appearance:none;appearance:none;box-sizing:border-box" />
-      </div>
-      <div>
-        <label>조회 시간</label>
-        <input id="searchTime" type="time" style="width:100%;font-size:16px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);-webkit-appearance:none;appearance:none;box-sizing:border-box" />
-      </div>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button type="button" id="setNow" class="btn-secondary btn-sm">현재시각 입력</button>
-      <button type="button" id="runQuery" class="btn-primary">환경 조회</button>
-      <button type="button" id="refreshBtn" class="btn-secondary btn-sm">새로고침</button>
-    </div>
-    <div id="inputStatus" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
-  </div>
-
-  <!-- ③ 데이터 신뢰도 -->
-  <div class="card">
-    <div class="card-title">③ 데이터 신뢰도</div>
-    <div class="quality-grid" id="qualityGrid">
-      <div class="quality-item">
-        <div class="quality-name">수위 API</div>
-        <div class="quality-status" id="q-water"><span class="badge badge-muted">대기</span></div>
-      </div>
-      <div class="quality-item">
-        <div class="quality-name">방류량 API</div>
-        <div class="quality-status" id="q-dam"><span class="badge badge-muted">대기</span></div>
-      </div>
-      <div class="quality-item">
-        <div class="quality-name">조석 API</div>
-        <div class="quality-status" id="q-tide"><span class="badge badge-muted">대기</span></div>
-      </div>
-    </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)">
-      <span class="dtype dtype-live">실시간</span> 현재값 &nbsp;
-      <span class="dtype dtype-past">과거값</span> API 과거 조회 &nbsp;
-      <span class="dtype dtype-calc">계산값</span> 수치 계산 &nbsp;
-      <span class="dtype dtype-est">추정</span> 근사값 &nbsp;
-      <span class="dtype dtype-fail">조회 실패</span> 미대체
-    </div>
-  </div>
-
-  <!-- ④ 핵심 수치 (3개 영역 분리) -->
-  <div class="card">
-    <div class="card-title">④ 수위 <span class="dtype dtype-live" id="wl-dtype" style="display:none">실시간</span></div>
-    <div class="metric-grid" id="waterMetrics">
-      <div class="metric-card">
-        <div class="metric-label">현재 수위</div>
-        <div class="metric-val val-na" id="wl-val">—</div>
-        <div class="metric-unit">m (관측소 기준)</div>
-        <div class="metric-time" id="wl-time"></div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">사고 시점 수위</div>
-        <div class="metric-val val-na" id="wl-inc-val">—</div>
-        <div class="metric-unit">m</div>
-        <div class="metric-time" id="wl-inc-time"></div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">수위 변화</div>
-        <div class="metric-val val-na" id="wl-diff-val">—</div>
-        <div class="metric-unit">m (조회-사고)</div>
-        <div class="metric-time" id="wl-obs-id"></div>
-      </div>
-    </div>
-    <div id="wl-fail-msg" class="hidden" style="margin-top:10px;padding:10px 14px;background:var(--red-dim);border:1px solid var(--red);border-radius:var(--r-sm);font-size:13px;color:var(--red)"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">④ 팔당댐 방류량 <span class="dtype dtype-live" id="dam-dtype" style="display:none">실시간</span></div>
-    <div class="metric-grid" id="damMetrics">
-      <div class="metric-card">
-        <div class="metric-label">현재 방류량</div>
-        <div class="metric-val val-na" id="dam-val">—</div>
-        <div class="metric-unit">㎥/s</div>
-        <div class="metric-time" id="dam-time"></div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">사고 시점 방류량</div>
-        <div class="metric-val val-na" id="dam-inc-val">—</div>
-        <div class="metric-unit">㎥/s</div>
-        <div class="metric-time" id="dam-inc-time"></div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-label">저수위 (ell)</div>
-        <div class="metric-val val-na" id="dam-swl-val">—</div>
-        <div class="metric-unit">EL.m</div>
-        <div class="metric-time" id="dam-swl-time"></div>
-      </div>
-    </div>
-    <div id="dam-fail-msg" class="hidden" style="margin-top:10px;padding:10px 14px;background:var(--red-dim);border:1px solid var(--red);border-radius:var(--r-sm);font-size:13px;color:var(--red)"></div>
-  </div>
-
-  <div class="card" id="tideCard">
-    <div class="card-title">④ 조석 영향 <span id="tide-zone-label"></span></div>
-    <div id="tide-zone-notice" class="hidden" style="padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);font-size:14px;color:var(--muted);text-align:center">
-      ⛔ 이 교량 구간은 잠실수중보 상류 또는 조석 영향 제외 구간입니다.<br>
-      조석 데이터를 표시하지 않습니다.
-    </div>
-    <div id="tide-content">
-      <div class="metric-grid">
-        <div class="metric-card">
-          <div class="metric-label">현재 조석</div>
-          <div class="metric-val val-na" id="tide-val">—</div>
-          <div class="metric-unit">cm</div>
-          <div class="metric-time" id="tide-time"></div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">사고 시점 조석</div>
-          <div class="metric-val val-na" id="tide-inc-val">—</div>
-          <div class="metric-unit">cm</div>
-          <div class="metric-time" id="tide-inc-time"></div>
-        </div>
-        <div class="metric-card">
-          <div class="metric-label">조석 방향</div>
-          <div class="metric-val val-na" id="tide-dir-val">—</div>
-          <div class="metric-unit">밀물/썰물</div>
-          <div class="metric-time" id="tide-dir-time"></div>
-        </div>
-      </div>
-      <div id="tide-fail-msg" class="hidden" style="margin-top:10px;padding:10px 14px;background:var(--red-dim);border:1px solid var(--red);border-radius:var(--r-sm);font-size:13px;color:var(--red)"></div>
-    </div>
-  </div>
-
-  <!-- ⑤ 흐름 방향 판정 -->
-  <div class="card">
-    <div class="card-title">⑤ 흐름 방향 참고 판정</div>
-    <div class="notice-banner" style="margin-bottom:12px;font-size:12px">
-      ⚠ 아래 판정은 수위·방류량·조석 API값이 모두 정상일 때만 유효합니다.
-      API 조회 실패 시 "판정 불가"로 표시합니다. 실제 수색 판단은 현장 확인 우선입니다.
-    </div>
-    <div id="flowPanel">
-      <div class="flow-indicator">
-        <div class="flow-arrow" id="flow-arrow">—</div>
+      <p id="bridgeCount" class="muted"></p>
+      <div class="grid two compact">
         <div>
-          <div class="flow-label" id="flow-label">조회 전</div>
-          <div class="flow-sub" id="flow-sub">환경 조회 버튼을 눌러 데이터를 불러오세요</div>
+          <label>사고 날짜</label>
+          <input id="incidentDate" inputmode="numeric" placeholder="20260621" />
+        </div>
+        <div>
+          <label>사고 시간</label>
+          <input id="incidentTime" inputmode="numeric" placeholder="1300" />
         </div>
       </div>
+      <div class="grid two compact">
+        <div>
+          <label>조회 날짜</label>
+          <input id="searchDate" inputmode="numeric" placeholder="20260622" />
+        </div>
+        <div>
+          <label>조회 시간</label>
+          <input id="searchTime" inputmode="numeric" placeholder="1100" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="setNow" class="secondary">현재시각 입력</button>
+        <button id="runQuery">환경조회</button>
+      </div>
+      <p id="inputStatus" class="muted"></p>
     </div>
-  </div>
+  </section>
 
-  <!-- ⑥ 투신시점 vs 조회시점 비교 -->
-  <div class="card">
-    <div class="card-title">⑥ 사고시점 → 조회시점 비교</div>
-    <div style="overflow:auto">
-      <table class="compare-table" id="compareTable">
-        <thead>
-          <tr>
-            <th class="col-label">항목</th>
-            <th>사고 시점</th>
-            <th class="col-current">조회 시점</th>
-            <th>변화</th>
-          </tr>
-        </thead>
-        <tbody id="compareBody">
-          <tr><td colspan="4" style="color:var(--muted);font-size:13px;padding:16px">조회 전 상태입니다. 환경 조회를 실행하세요.</td></tr>
-        </tbody>
-      </table>
+  <section class="card">
+    <h2>③ 데이터 신뢰도</h2>
+    <div id="qualityGrid" class="quality-grid"></div>
+  </section>
+
+  <section class="card data-first">
+    <h2>④ 핵심 데이터 판정</h2>
+    <p class="muted">수위·방류량·조석을 먼저 확정하고, 그래프와 수색 참고판정은 이 값 기준으로 표시합니다.</p>
+    <div id="dataFirstPanel" class="data-panel"></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card result-card">
+      <h2>선택 교량 환경</h2>
+      <div id="summary"></div>
     </div>
-  </div>
+    <div class="card result-card">
+      <h2>대표 관측소·모델 근거</h2>
+      <div id="modelInfo"></div>
+    </div>
+  </section>
 
-  <!-- ⑦ 한강 전체 교량 현황 -->
-  <div class="card">
-    <div class="card-title">⑦ 한강 전체 교량 목록</div>
-    <div class="bridge-board" id="bridgeBoard"></div>
-  </div>
 
-  <!-- ⑧ 원자료 로그 -->
-  <div class="card">
-    <div class="card-title">⑧ 원자료 로그 <button type="button" class="btn-secondary btn-sm" id="clearLog" style="margin-left:auto">로그 지우기</button></div>
-    <pre id="rawLog">대기 중 — 환경 조회를 실행하면 API 원자료가 여기에 표시됩니다.</pre>
-  </div>
+  <section class="card">
+    <h2>투신시점 · 조회시점 환경 비교</h2>
+    <p class="muted">투신시점과 현재/조회시점의 수위, 교량 영향 방류량, 조석 영향, 물 방향, 물살 참고판정을 나란히 비교합니다.</p>
+    <div id="pointCompare"></div>
+  </section>
 
+  <section class="card">
+    <h2>통합 변화 그래프</h2>
+    <p class="muted">투신시점부터 조회시점까지의 흐름을 한 화면에 비교합니다. 각 지표는 서로 단위가 달라 0~100 정규화값으로 표시합니다.</p>
+    <canvas id="combinedChart" height="260"></canvas>
+    <div id="combinedChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>투신시점 → 조회시점 수위 변화</h2>
+    <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.</p>
+    <canvas id="waterChart" height="220"></canvas>
+    <div id="waterChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>방류량 변화</h2>
+    <canvas id="damChart" height="220"></canvas>
+    <div id="damChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>조석 검증</h2>
+    <div id="tideSummary"></div>
+    <canvas id="tideChart" height="220"></canvas>
+    <div id="tideChartNote" class="muted"></div>
+  </section>
+
+  <section class="card">
+    <h2>한강 전체 교량 현황판</h2>
+    <div id="bridgeBoard" class="bridge-board"></div>
+  </section>
+
+  <section class="card">
+    <h2>원자료 로그</h2>
+    <pre id="rawLog"></pre>
+  </section>
 </main>
 
-<script>
-/* =========================================================
-   한강 환경 대시보드 — 메인 스크립트
-   원칙:
-   - 조회 실패 데이터는 절대 추정값으로 대체하지 않는다.
-   - 실시간/과거/계산/추정 값 유형을 항상 표시한다.
-   - 잠실수중보 상류 구간: 조석 영향 없음.
-   - 잠실철교: 조석 영향 없음.
-   - 잠실대교 상류: 조석 영향 없음.
-   - 신곡수중보: 고정 구조물 — 개폐 여부 계산 로직 없음.
-   ========================================================= */
-
-// ── 상수 ──────────────────────────────────────────────────
-const HRFCO_BASE = "https://api.hrfco.go.kr";
-const TIDE_BASE  = "https://www.khoa.go.kr/api/oceangrid/tidalLevel/search.do";
-
-// 교량 정의
-// tideable: 조석 영향 구간 여부
-// wlCode: 수위관측소 코드 (비어있으면 "조회 실패"로 표시)
-// wlName: 관측소명
-// zone: "upstream" | "downstream" | "boundary"
-const BRIDGES = [
-  // ─── 잠실수중보 상류 (조석 영향 없음) ───
-  { name: "팔당대교",      zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "팔당대교 (팔당역)", zone: "upstream", tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "구리암사대교",  zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "광진교",        zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "천호대교",      zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "올림픽대교",    zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교" },
-  { name: "잠실철교",      zone: "upstream",   tideable: false, wlCode: "1018640", wlName: "광진교", note:"잠실수중보 상류 분류" },
-  { name: "잠실대교 (상류)", zone: "upstream", tideable: false, wlCode: "1018640", wlName: "광진교", note:"잠실수중보 상류 분류" },
-  // ─── 잠실수중보 하류 (조석 영향 가능) ───
-  { name: "청담대교",      zone: "downstream", tideable: true,  wlCode: "1018662", wlName: "청담대교" },
-  { name: "영동대교",      zone: "downstream", tideable: true,  wlCode: "1018662", wlName: "청담대교" },
-  { name: "성수대교",      zone: "downstream", tideable: true,  wlCode: "1018662", wlName: "청담대교" },
-  { name: "동호대교",      zone: "downstream", tideable: true,  wlCode: "1018662", wlName: "청담대교" },
-  { name: "한남대교",      zone: "downstream", tideable: true,  wlCode: "1018662", wlName: "청담대교" },
-  { name: "반포대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "잠수교",        zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "원효대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "마포대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "서강대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "한강대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "한강철교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "노량대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  { name: "동작대교",      zone: "downstream", tideable: true,  wlCode: "1018680", wlName: "잠수교" },
-  // ─── 신곡수중보 인근 및 하류 (조석 영향 큼) ───
-  { name: "가양대교",      zone: "downstream", tideable: true,  wlCode: "",        wlName: "행주" },
-  { name: "방화대교",      zone: "downstream", tideable: true,  wlCode: "",        wlName: "행주" },
-  { name: "행주대교",      zone: "downstream", tideable: true,  wlCode: "",        wlName: "행주", note:"신곡수중보 하류, 조석 영향 큼" },
-  { name: "일산대교",      zone: "downstream", tideable: true,  wlCode: "",        wlName: "행주", note:"신곡수중보 하류, 조석 영향 큼" },
-];
-
-// 팔당댐 방류 관측소 코드
-const DAM_CODE = "1017310";
-
-// ── 상태 변수 ────────────────────────────────────────────
-let state = {
-  wlData:    null, // { incident: {val, time}, search: {val, time}, status: 'ok'|'fail', error: '' }
-  damData:   null,
-  tideData:  null,
-  selectedBridge: 0,
-};
-
-// ── 유틸 ─────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-function pad(n) { return String(n).padStart(2, '0'); }
-function toYmdhm(d) {
-  return d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes());
-}
-function parseYmdhm(s) {
-  if (!s || s.length < 8) return null;
-  const y = +s.slice(0,4), mo = +s.slice(4,6)-1, d = +s.slice(6,8);
-  const h = s.length >= 10 ? +s.slice(8,10) : 0;
-  const mi = s.length >= 12 ? +s.slice(10,12) : 0;
-  return new Date(y, mo, d, h, mi);
-}
-function fmtDatetime(s) {
-  if (!s) return '';
-  const d = parseYmdhm(s);
-  if (!d) return s;
-  return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-function num(v) {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-function maskKey(url, key) {
-  if (!key) return url;
-  return url.replace(key, '***');
-}
-
-// ── 로그 ─────────────────────────────────────────────────
-function log(...args) {
-  const ts = new Date().toLocaleTimeString('ko-KR');
-  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ');
-  const box = $('rawLog');
-  box.textContent = `[${ts}] ${msg}\n` + box.textContent.slice(0, 30000);
-}
-
-// ── API 응답 행 추출 ──────────────────────────────────────
-function getRows(json) {
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json?.content)) return json.content;
-  if (Array.isArray(json?.data)) return json.data;
-  if (Array.isArray(json?.list)) return json.list;
-  if (Array.isArray(json?.response?.body?.items?.item)) return json.response.body.items.item;
-  return [];
-}
-
-// ── HRFCO API 호출 ────────────────────────────────────────
-async function fetchHrfco(path) {
-  const key = $('hrfcoKey').value.trim();
-  if (!key) throw new Error('한강홍수통제소 인증키가 입력되지 않았습니다');
-  const url = `${HRFCO_BASE}/${key}/${path}`;
-  log('[HRFCO 요청]', maskKey(url, key));
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 15000);
-  let res;
-  try {
-    res = await fetch(url, { signal: ctrl.signal });
-  } finally {
-    clearTimeout(tid);
-  }
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-  const text = await res.text();
-  let json;
-  try { json = JSON.parse(text); } catch(e) { throw new Error('JSON 파싱 실패: ' + text.slice(0, 200)); }
-  const rows = getRows(json);
-  log('[HRFCO 응답]', `${rows.length}행`, rows.slice(-1)[0] || {});
-  return { json, rows };
-}
-
-// ── 수위 API ─────────────────────────────────────────────
-async function fetchWaterLevel(wlCode, startYmdhm, endYmdhm) {
-  if (!wlCode) throw new Error('이 교량의 수위관측소 코드가 등록되지 않았습니다. 수위 조회 불가.');
-  const { rows } = await fetchHrfco(`waterlevel/list/10M/${wlCode}/${startYmdhm}/${endYmdhm}.json`);
-  return rows;
-}
-
-// ── 팔당댐 방류량 API ────────────────────────────────────
-async function fetchDamRelease(startYmdhm, endYmdhm) {
-  const { rows } = await fetchHrfco(`dam/list/10M/${DAM_CODE}/${startYmdhm}/${endYmdhm}.json`);
-  return rows;
-}
-
-// ── 조석 API ─────────────────────────────────────────────
-// KHOA 실측 조위 API (tideObsRecordData) — CORS 허용 엔드포인트
-// 인천 관측소 DT_0010 기준 (신곡수중보 하류 구간 적용)
-async function fetchTide(dateStr) {
-  // dateStr: "YYYYMMDD"
-  const key = $('tideKey').value.trim();
-  if (!key) throw new Error('조석 API 키 미입력');
-
-  const obsCode = 'DT_0010';
-  const url = `https://www.khoa.go.kr/api/oceangrid/tideObsRecordData/search.do?ServiceKey=${encodeURIComponent(key)}&ObsCode=${obsCode}&Date=${dateStr}&ResultType=json`;
-  log('[조석 요청]', maskKey(url, key));
-
-  const ctrl = new AbortController();
-  const tid = setTimeout(() => ctrl.abort(), 15000);
-  let res;
-  try {
-    res = await fetch(url, { signal: ctrl.signal });
-  } finally {
-    clearTimeout(tid);
-  }
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  let json;
-  try { json = JSON.parse(text); } catch(e) { throw new Error('JSON 파싱 실패: ' + text.slice(0, 200)); }
-
-  // KHOA 실측 응답: { result: { meta, data: [{record_time, tide_level}, ...] } }
-  const data = (json && json.result && Array.isArray(json.result.data))
-    ? json.result.data
-    : (Array.isArray(json && json.result) ? json.result : (Array.isArray(json && json.data) ? json.data : []));
-
-  if (!data.length) throw new Error('조석 데이터 없음 — 관측소 코드·날짜·API키 확인 필요');
-  log('[조석 응답]', data.length + '행', data[0]);
-
-  // 통일 형태로 변환
-  return data.map(function(r) {
-    return {
-      tph_time:  r.record_time || r.tph_time || r.obs_time || '',
-      tph_level: r.tide_level  || r.tph_level || r.wl || null,
-      hl_code:   r.hl_code || '',
-    };
-  });
-}
-
-// ── 날짜 파싱 ────────────────────────────────────────────
-function parseInputDT(dateStr, timeStr) {
-  const d = String(dateStr || '').replace(/\D/g, '');
-  const t = String(timeStr || '').replace(/\D/g, '').padEnd(4,'0');
-  if (d.length < 8) return null;
-  return parseYmdhm(d + t.slice(0,4));
-}
-
-// ── 가장 가까운 행 찾기 ───────────────────────────────────
-function findClosestRow(rows, targetYmdhm, timeKey = 'ymdhm') {
-  if (!rows || !rows.length) return null;
-  const target = parseYmdhm(targetYmdhm);
-  if (!target) return null;
-  let best = null, bestDiff = Infinity;
-  for (const r of rows) {
-    const t = parseYmdhm(String(r[timeKey] || ''));
-    if (!t) continue;
-    const diff = Math.abs(t - target);
-    if (diff < bestDiff) { bestDiff = diff; best = r; }
-  }
-  return best;
-}
-
-// ── 신뢰도 배지 업데이트 ─────────────────────────────────
-function setQuality(id, status, text) {
-  const el = $(id);
-  const cls = { ok: 'badge-ok', fail: 'badge-fail', warn: 'badge-warn', wait: 'badge-muted' }[status] || 'badge-muted';
-  el.innerHTML = `<span class="badge ${cls}">${text}</span>`;
-}
-
-// ── 수치 표시 헬퍼 ───────────────────────────────────────
-function setMetricVal(id, val, cls = '') {
-  const el = $(id);
-  if (!el) return;
-  el.className = 'metric-val ' + (cls || '');
-  el.textContent = val;
-}
-
-// ── 교량 목록 초기화 ─────────────────────────────────────
-function initBridges() {
-  const sel = $('bridgeSelect');
-  BRIDGES.forEach((b, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    const tideTag = b.tideable ? '🌊' : '—';
-    opt.textContent = `${b.name} (${b.zone === 'upstream' ? '수중보 상류' : '하류'}) ${tideTag}`;
-    sel.appendChild(opt);
-  });
-  sel.addEventListener('change', () => {
-    state.selectedBridge = +sel.value;
-    updateBridgeInfo();
-    renderBridgeBoard();
-  });
-  updateBridgeInfo();
-  renderBridgeBoard();
-}
-
-function updateBridgeInfo() {
-  const b = BRIDGES[state.selectedBridge];
-  const zoneEl = $('bridgeZoneInfo');
-  if (!b) { zoneEl.textContent = ''; return; }
-  const tideLabel = b.tideable
-    ? `<span class="zone-badge">🌊 조석 영향 구간</span>`
-    : `<span class="zone-badge-no">⛔ 조석 영향 제외</span>`;
-  const noteHtml = b.note ? ` · ${b.note}` : '';
-  zoneEl.innerHTML = `${tideLabel} &nbsp;수위관측소: <strong>${b.wlName || '없음'}</strong>${b.wlCode ? ` (${b.wlCode})` : ' — 코드 미등록'}${noteHtml}`;
-
-  // 조석 섹션 표시/숨김
-  const tideContent = $('tide-content');
-  const tideNotice = $('tide-zone-notice');
-  const tideLbl = $('tide-zone-label');
-  if (b.tideable) {
-    tideContent.classList.remove('hidden');
-    tideNotice.classList.add('hidden');
-    tideLbl.innerHTML = '<span class="zone-badge">🌊 적용 구간</span>';
-  } else {
-    tideContent.classList.add('hidden');
-    tideNotice.classList.remove('hidden');
-    tideLbl.innerHTML = '<span class="zone-badge-no">⛔ 제외 구간</span>';
-  }
-}
-
-function renderBridgeBoard() {
-  const board = $('bridgeBoard');
-  board.innerHTML = '';
-  BRIDGES.forEach((b, i) => {
-    const row = document.createElement('div');
-    row.className = 'bridge-row' + (i === state.selectedBridge ? ' active' : '');
-    const tideHtml = b.tideable
-      ? `<span class="badge badge-tide" style="font-size:10px">조석↑</span>`
-      : `<span class="badge badge-muted" style="font-size:10px">조석제외</span>`;
-    const zoneHtml = b.zone === 'upstream'
-      ? `<span class="badge badge-info" style="font-size:10px">상류</span>`
-      : `<span class="badge badge-ok" style="font-size:10px">하류</span>`;
-    row.innerHTML = `
-      <span class="bridge-name">${b.name}</span>
-      <span class="bridge-badges">${zoneHtml}${tideHtml}</span>
-      <span class="bridge-meta">${b.wlName || '관측소 미등록'}</span>
-    `;
-    row.addEventListener('click', () => {
-      state.selectedBridge = i;
-      $('bridgeSelect').value = i;
-      updateBridgeInfo();
-      renderBridgeBoard();
-    });
-    board.appendChild(row);
-  });
-}
-
-// ── 비교 테이블 렌더 ─────────────────────────────────────
-function renderCompare(incDT, srchDT) {
-  const wl = state.wlData;
-  const dam = state.damData;
-  const tide = state.tideData;
-  const bridge = BRIDGES[state.selectedBridge];
-
-  function fmtRow(label, incVal, srchVal, unit, incDtype, srchDtype, diffVal) {
-    const ic = incVal !== null && incVal !== undefined ? incVal : '<span class="dtype dtype-fail">조회 실패</span>';
-    const sc = srchVal !== null && srchVal !== undefined ? srchVal : '<span class="dtype dtype-fail">조회 실패</span>';
-    const diff = diffVal !== undefined ? diffVal : (
-      (typeof incVal === 'number' && typeof srchVal === 'number')
-        ? `${(srchVal - incVal >= 0 ? '+' : '')}${(srchVal - incVal).toFixed(2)}${unit}`
-        : '<span class="dtype dtype-fail">계산 불가</span>'
-    );
-    const ic_d = incDtype ? `<span class="dtype ${incDtype}" style="margin-left:4px">${incDtype.includes('past')?'과거':incDtype.includes('live')?'실시간':incDtype.includes('fail')?'실패':'계산'}</span>` : '';
-    const sc_d = srchDtype ? `<span class="dtype ${srchDtype}" style="margin-left:4px">${srchDtype.includes('past')?'과거':srchDtype.includes('live')?'실시간':srchDtype.includes('fail')?'실패':'계산'}</span>` : '';
-    return `<tr>
-      <td class="col-label">${label}</td>
-      <td>${ic}${unit ? `<span style="font-size:11px;color:var(--muted)">${unit}</span>` : ''}${ic_d}</td>
-      <td class="col-current">${sc}${unit ? `<span style="font-size:11px;color:var(--muted)">${unit}</span>` : ''}${sc_d}</td>
-      <td>${diff}</td>
-    </tr>`;
-  }
-
-  let rows = '';
-
-  // 수위
-  const wlInc  = wl?.status === 'ok' ? wl.incident?.wl  : null;
-  const wlSrch = wl?.status === 'ok' ? wl.search?.wl    : null;
-  const wlIncDt = wl?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-  const wlSrchDt = wl?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-  rows += fmtRow('수위', typeof wlInc==='number'?wlInc.toFixed(2):null, typeof wlSrch==='number'?wlSrch.toFixed(2):null, 'm', wlIncDt, wlSrchDt);
-
-  // 방류량
-  const damInc  = dam?.status === 'ok' ? dam.incident?.tototf : null;
-  const damSrch = dam?.status === 'ok' ? dam.search?.tototf  : null;
-  const damIncDt = dam?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-  const damSrchDt = dam?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-  rows += fmtRow('팔당댐 방류량', typeof damInc==='number'?damInc.toFixed(0):null, typeof damSrch==='number'?damSrch.toFixed(0):null, '㎥/s', damIncDt, damSrchDt);
-
-  // 조석
-  if (bridge?.tideable) {
-    const tideInc  = tide?.status === 'ok' ? tide.incident?.level  : null;
-    const tideSrch = tide?.status === 'ok' ? tide.search?.level    : null;
-    const tideIncDt = tide?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-    const tideSrchDt = tide?.status === 'ok' ? 'dtype-past' : 'dtype-fail';
-    rows += fmtRow('조석 (인천기준)', typeof tideInc==='number'?tideInc:null, typeof tideSrch==='number'?tideSrch:null, 'cm', tideIncDt, tideSrchDt);
-  } else {
-    rows += `<tr><td class="col-label">조석</td><td colspan="3"><span class="zone-badge-no" style="font-size:11px">조석 제외 구간</span></td></tr>`;
-  }
-
-  // 조회 시간
-  rows += `<tr>
-    <td class="col-label">기준 시각</td>
-    <td style="font-size:12px">${fmtDatetime(incDT)}</td>
-    <td class="col-current" style="font-size:12px">${fmtDatetime(srchDT)}</td>
-    <td></td>
-  </tr>`;
-
-  $('compareBody').innerHTML = rows;
-}
-
-// ── 흐름 방향 판정 ────────────────────────────────────────
-function updateFlowPanel() {
-  const bridge = BRIDGES[state.selectedBridge];
-  const wl = state.wlData;
-  const dam = state.damData;
-  const tide = state.tideData;
-
-  const arrow = $('flow-arrow');
-  const label = $('flow-label');
-  const sub   = $('flow-sub');
-
-  // 수위 기본 판정
-  if (!wl || wl.status !== 'ok') {
-    arrow.textContent = '⚠';
-    label.textContent = '흐름 방향 판정 불가';
-    sub.textContent = '수위 API 조회 실패로 판정할 수 없습니다. API 키와 관측소 코드를 확인하세요.';
-    return;
-  }
-
-  const wlInc  = num(wl.incident?.wl);
-  const wlSrch = num(wl.search?.wl);
-  const damSrch = dam?.status === 'ok' ? num(dam.search?.tototf) : null;
-
-  let direction = '알 수 없음';
-  let dirArrow = '？';
-  let dirSub = '';
-
-  if (typeof wlInc === 'number' && typeof wlSrch === 'number') {
-    const diff = wlSrch - wlInc;
-    if (diff > 0.05) {
-      dirArrow = '⬆'; direction = '수위 상승 중'; dirSub = `사고 시점 대비 +${diff.toFixed(2)}m`;
-    } else if (diff < -0.05) {
-      dirArrow = '⬇'; direction = '수위 하강 중'; dirSub = `사고 시점 대비 ${diff.toFixed(2)}m`;
-    } else {
-      dirArrow = '⟵'; direction = '수위 안정적'; dirSub = `변화 ${diff.toFixed(2)}m (±0.05m 이내)`;
-    }
-  }
-
-  if (bridge?.tideable && tide?.status === 'ok') {
-    const tideDir = tide.search?.direction;
-    if (tideDir) dirSub += ` / 조석: ${tideDir}`;
-  }
-
-  if (damSrch !== null) {
-    dirSub += ` / 팔당방류 ${damSrch.toFixed(0)}㎥/s`;
-  }
-
-  arrow.textContent = dirArrow;
-  label.textContent = direction;
-  sub.textContent = dirSub || '추가 참고 데이터 없음';
-  sub.textContent += ' — 현장 확인 우선';
-}
-
-// ── 메인 조회 함수 ────────────────────────────────────────
-async function runQuery() {
-  // type="date" → "YYYY-MM-DD", type="time" → "HH:MM"
-  const incDateRaw  = $('incidentDate').value.trim();  // e.g. "2026-06-21"
-  const incTimeRaw  = $('incidentTime').value.trim();  // e.g. "13:00"
-  const srchDateRaw = $('searchDate').value.trim();
-  const srchTimeRaw = $('searchTime').value.trim();
-
-  if (!incDateRaw) {
-    $('inputStatus').textContent = '⚠ 사고 날짜를 선택해주세요.';
-    return;
-  }
-  if (!srchDateRaw) {
-    $('inputStatus').textContent = '⚠ 조회 날짜를 선택해주세요.';
-    return;
-  }
-
-  // YYYYMMDD 형식으로 변환
-  const incDate  = incDateRaw.replace(/-/g, '');
-  const srchDate = srchDateRaw.replace(/-/g, '');
-  const incTime  = incTimeRaw  ? incTimeRaw.replace(':', '')  : '0000';
-  const srchTime = srchTimeRaw ? srchTimeRaw.replace(':', '') : '0000';
-
-  if (incDate.length < 8 || srchDate.length < 8) {
-    $('inputStatus').textContent = '⚠ 날짜 형식 오류. 다시 선택해주세요.';
-    return;
-  }
-  $('inputStatus').textContent = '조회 중…';
-
-  const incYmdhm  = incDate + incTime.slice(0,4);
-  const srchYmdhm = srchDate + srchTime.slice(0,4);
-
-  // 범위: 사고 -10분 ~ 조회 +10분
-  const incDT  = parseYmdhm(incYmdhm);
-  const srchDT = parseYmdhm(srchYmdhm);
-  if (!incDT || !srchDT) { $('inputStatus').textContent = '⚠ 날짜/시간 파싱 실패'; return; }
-  if (srchDT < incDT) { $('inputStatus').textContent = '⚠ 조회 시점이 사고 시점보다 빠릅니다.'; return; }
-
-  const startDT = new Date(incDT.getTime() - 10*60000);
-  const endDT   = new Date(srchDT.getTime() + 10*60000);
-  const startY  = toYmdhm(startDT);
-  const endY    = toYmdhm(endDT);
-
-  const bridge = BRIDGES[state.selectedBridge];
-  log('━━━ 환경 조회 시작 ━━━');
-  log('사고:', incYmdhm, '조회:', srchYmdhm, '교량:', bridge.name);
-
-  setQuality('q-water', 'wait', '조회 중…');
-  setQuality('q-dam',   'wait', '조회 중…');
-  setQuality('q-tide',  'wait', bridge.tideable ? '조회 중…' : '제외 구간');
-
-  // ── 수위 조회 ──────────────────────────────────────────
-  try {
-    const rows = await fetchWaterLevel(bridge.wlCode, startY, endY);
-    const incRow  = findClosestRow(rows, incYmdhm,  'ymdhm');
-    const srchRow = findClosestRow(rows, srchYmdhm, 'ymdhm');
-    const incWl   = num(incRow?.wl);
-    const srchWl  = num(srchRow?.wl);
-
-    state.wlData = {
-      status: 'ok',
-      incident: { wl: incWl,  time: incRow?.ymdhm  },
-      search:   { wl: srchWl, time: srchRow?.ymdhm },
-      obsCode: bridge.wlCode, obsName: bridge.wlName,
-    };
-
-    setQuality('q-water', 'ok', `실측 ${rows.length}행`);
-    $('wl-dtype').style.display = '';
-
-    setMetricVal('wl-val', typeof srchWl==='number' ? srchWl.toFixed(2) : '조회 실패', typeof srchWl==='number' ? 'metric-val' : 'metric-val val-fail');
-    $('wl-time').textContent = srchRow?.ymdhm ? '기준: ' + fmtDatetime(srchRow.ymdhm) : '';
-
-    setMetricVal('wl-inc-val', typeof incWl==='number' ? incWl.toFixed(2) : '조회 실패', typeof incWl==='number' ? 'metric-val' : 'metric-val val-fail');
-    $('wl-inc-time').textContent = incRow?.ymdhm ? '기준: ' + fmtDatetime(incRow.ymdhm) : '';
-
-    if (typeof incWl==='number' && typeof srchWl==='number') {
-      const diff = srchWl - incWl;
-      setMetricVal('wl-diff-val', (diff>=0?'+':'')+diff.toFixed(2), diff>0.1?'metric-val val-warn':diff<-0.1?'metric-val val-ok':'metric-val');
-    } else {
-      setMetricVal('wl-diff-val', '계산 불가', 'metric-val val-na');
-    }
-    $('wl-obs-id').textContent = `관측소: ${bridge.wlName} (${bridge.wlCode})`;
-    $('wl-fail-msg').classList.add('hidden');
-
-  } catch(e) {
-    state.wlData = { status: 'fail', error: e.message };
-    setQuality('q-water', 'fail', '조회 실패');
-    $('wl-dtype').style.display = 'none';
-    setMetricVal('wl-val', '조회 실패', 'metric-val val-fail');
-    setMetricVal('wl-inc-val', '조회 실패', 'metric-val val-fail');
-    setMetricVal('wl-diff-val', '계산 불가', 'metric-val val-na');
-    const failEl = $('wl-fail-msg');
-    failEl.classList.remove('hidden');
-    failEl.textContent = `⚠ 수위 조회 실패: ${e.message}`;
-    log('[수위 실패]', e.message);
-  }
-
-  // ── 방류량 조회 ────────────────────────────────────────
-  try {
-    const rows = await fetchDamRelease(startY, endY);
-    const incRow  = findClosestRow(rows, incYmdhm,  'ymdhm');
-    const srchRow = findClosestRow(rows, srchYmdhm, 'ymdhm');
-    const incTf   = num(incRow?.tototf);
-    const srchTf  = num(srchRow?.tototf);
-    const srchSwl = num(srchRow?.swl);
-
-    state.damData = {
-      status: 'ok',
-      incident: { tototf: incTf,  swl: num(incRow?.swl),  time: incRow?.ymdhm  },
-      search:   { tototf: srchTf, swl: srchSwl,            time: srchRow?.ymdhm },
-    };
-
-    setQuality('q-dam', 'ok', `실측 ${rows.length}행`);
-    $('dam-dtype').style.display = '';
-
-    const damCls = typeof srchTf==='number' ? (srchTf>2000?'metric-val val-danger':srchTf>500?'metric-val val-warn':'metric-val val-ok') : 'metric-val val-fail';
-    setMetricVal('dam-val', typeof srchTf==='number' ? srchTf.toFixed(0) : '조회 실패', damCls);
-    $('dam-time').textContent = srchRow?.ymdhm ? '기준: ' + fmtDatetime(srchRow.ymdhm) : '';
-
-    setMetricVal('dam-inc-val', typeof incTf==='number' ? incTf.toFixed(0) : '조회 실패', typeof incTf==='number' ? 'metric-val' : 'metric-val val-fail');
-    $('dam-inc-time').textContent = incRow?.ymdhm ? '기준: ' + fmtDatetime(incRow.ymdhm) : '';
-
-    setMetricVal('dam-swl-val', typeof srchSwl==='number' ? srchSwl.toFixed(2) : '조회 실패', typeof srchSwl==='number' ? 'metric-val' : 'metric-val val-fail');
-    $('dam-swl-time').textContent = srchRow?.ymdhm ? '기준: ' + fmtDatetime(srchRow.ymdhm) : '';
-    $('dam-fail-msg').classList.add('hidden');
-
-  } catch(e) {
-    state.damData = { status: 'fail', error: e.message };
-    setQuality('q-dam', 'fail', '조회 실패');
-    $('dam-dtype').style.display = 'none';
-    setMetricVal('dam-val', '조회 실패', 'metric-val val-fail');
-    setMetricVal('dam-inc-val', '조회 실패', 'metric-val val-fail');
-    setMetricVal('dam-swl-val', '조회 실패', 'metric-val val-fail');
-    const failEl = $('dam-fail-msg');
-    failEl.classList.remove('hidden');
-    failEl.textContent = `⚠ 방류량 조회 실패: ${e.message}`;
-    log('[방류 실패]', e.message);
-  }
-
-  // ── 조석 조회 (조석 영향 구간만) ─────────────────────
-  if (!bridge.tideable) {
-    state.tideData = { status: 'skip' };
-    setQuality('q-tide', 'warn', '제외 구간');
-  } else {
-    // KHOA API: 사고 날짜 + 조회 날짜 각각
-    const tideKey = $('tideKey').value.trim();
-    if (!tideKey) {
-      state.tideData = { status: 'fail', error: '조석 API 키 미입력' };
-      setQuality('q-tide', 'fail', '키 없음');
-      setMetricVal('tide-val', '조회 실패', 'metric-val val-fail');
-      setMetricVal('tide-inc-val', '조회 실패', 'metric-val val-fail');
-      setMetricVal('tide-dir-val', '판정 불가', 'metric-val val-na');
-      const failEl = $('tide-fail-msg');
-      failEl.classList.remove('hidden');
-      failEl.textContent = '⚠ 조석 API 키가 입력되지 않았습니다. 조석 조회 불가.';
-    } else {
-      try {
-        // 사고 날짜 조석
-        const incDateFmt = `${incDate.slice(0,4)}${incDate.slice(4,6)}${incDate.slice(6,8)}`;
-        const srchDateFmt = `${srchDate.slice(0,4)}${srchDate.slice(4,6)}${srchDate.slice(6,8)}`;
-
-        const incTideRows  = await fetchTide(incDateFmt);
-        const srchTideRows = srchDateFmt !== incDateFmt ? await fetchTide(srchDateFmt) : incTideRows;
-
-        // 사고 시점 가장 가까운 조석 예보 행 찾기
-        // KHOA 응답: { tph_time: "HH:MM", tph_level: "123", hl_code: "H"/"L" }
-        function findClosestTide(rows, hhmm) {
-          if (!rows || !rows.length) return null;
-          const [hh, mm] = hhmm.slice(0,4).match(/.{1,2}/g).map(Number);
-          const targetMin = hh * 60 + mm;
-          let best = null, bestDiff = Infinity;
-          for (const r of rows) {
-            const t = String(r.tph_time || r.tide_time || '').replace(':','');
-            if (t.length < 4) continue;
-            const rMin = +t.slice(0,2)*60 + +t.slice(2,4);
-            const diff = Math.abs(rMin - targetMin);
-            if (diff < bestDiff) { bestDiff = diff; best = r; }
-          }
-          return best;
-        }
-
-        const incTR  = findClosestTide(incTideRows,  incTime.slice(0,4));
-        const srchTR = findClosestTide(srchTideRows, srchTime.slice(0,4));
-
-        const incLevel  = num(incTR?.tph_level  ?? incTR?.tide_level);
-        const srchLevel = num(srchTR?.tph_level ?? srchTR?.tide_level);
-        const srchCode  = srchTR?.hl_code ?? srchTR?.tide_code ?? '';
-        const tideDir   = srchCode === 'H' ? '만조 (밀물)' : srchCode === 'L' ? '간조 (썰물)' : '방향 불명';
-
-        state.tideData = {
-          status: 'ok',
-          incident: { level: incLevel,  hlCode: incTR?.hl_code },
-          search:   { level: srchLevel, hlCode: srchCode, direction: tideDir },
-        };
-
-        setQuality('q-tide', 'ok', `예보 조회 완료`);
-        setMetricVal('tide-val', typeof srchLevel==='number' ? srchLevel : '조회 실패', typeof srchLevel==='number' ? 'metric-val val-tide' : 'metric-val val-fail');
-        $('tide-time').textContent = srchTR ? `근접 시각: ${srchTR.tph_time ?? srchTR.tide_time ?? ''}` : '';
-        setMetricVal('tide-inc-val', typeof incLevel==='number' ? incLevel : '조회 실패', typeof incLevel==='number' ? 'metric-val' : 'metric-val val-fail');
-        $('tide-inc-time').textContent = incTR ? `근접 시각: ${incTR.tph_time ?? incTR.tide_time ?? ''}` : '';
-        setMetricVal('tide-dir-val', tideDir, srchCode==='H'?'metric-val val-tide':srchCode==='L'?'metric-val val-ok':'metric-val val-na');
-        $('tide-dir-time').textContent = '인천 기준 (DT_0010)';
-        $('tide-fail-msg').classList.add('hidden');
-
-      } catch(e) {
-        state.tideData = { status: 'fail', error: e.message };
-        setQuality('q-tide', 'fail', '조회 실패');
-        setMetricVal('tide-val', '조회 실패', 'metric-val val-fail');
-        setMetricVal('tide-inc-val', '조회 실패', 'metric-val val-fail');
-        setMetricVal('tide-dir-val', '판정 불가', 'metric-val val-na');
-        const failEl = $('tide-fail-msg');
-        failEl.classList.remove('hidden');
-        failEl.textContent = `⚠ 조석 조회 실패: ${e.message}`;
-        log('[조석 실패]', e.message);
-      }
-    }
-  }
-
-  // ── 비교 테이블 & 흐름 판정 ──────────────────────────
-  renderCompare(incYmdhm, srchYmdhm);
-  updateFlowPanel();
-  $('inputStatus').textContent = `조회 완료 — ${new Date().toLocaleTimeString('ko-KR')}`;
-  log('━━━ 조회 완료 ━━━');
-}
-
-// ── 초기화 ───────────────────────────────────────────────
-function init() {
-  // 저장된 키 불러오기
-  $('hrfcoKey').value = localStorage.getItem('hrfco_key') || '';
-  $('tideKey').value  = localStorage.getItem('tide_key')  || '';
-
-  // 교량 목록
-  initBridges();
-
-  // 현재시각 입력
-  $('setNow').addEventListener('click', () => {
-    const now = new Date();
-    $('searchDate').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    $('searchTime').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    $('inputStatus').textContent = '현재시각 입력됨';
-  });
-
-  // 조회 버튼
-  $('runQuery').addEventListener('click', runQuery);
-  $('refreshBtn').addEventListener('click', runQuery);
-
-  // 키 저장/삭제
-  $('saveKeys').addEventListener('click', () => {
-    localStorage.setItem('hrfco_key', $('hrfcoKey').value.trim());
-    localStorage.setItem('tide_key',  $('tideKey').value.trim());
-    $('keyStatus').textContent = '키 저장됨';
-    setTimeout(() => $('keyStatus').textContent = '', 2000);
-  });
-  $('clearKeys').addEventListener('click', () => {
-    localStorage.removeItem('hrfco_key');
-    localStorage.removeItem('tide_key');
-    $('hrfcoKey').value = '';
-    $('tideKey').value  = '';
-    $('keyStatus').textContent = '키 삭제됨';
-    setTimeout(() => $('keyStatus').textContent = '', 2000);
-  });
-
-  // 인증키 보기 토글
-  document.querySelectorAll('[data-toggle]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const inp = $(btn.dataset.toggle);
-      if (!inp) return;
-      inp.type = inp.type === 'password' ? 'text' : 'password';
-      btn.textContent = inp.type === 'password' ? '보기' : '가림';
-    });
-  });
-
-  // 로그 지우기
-  $('clearLog').addEventListener('click', () => { $('rawLog').textContent = '로그 지워짐'; });
-
-  // 오늘 날짜를 조회 날짜 기본값으로
-  const today = new Date();
-  $('searchDate').value = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
-  const now = new Date();
-  $('searchTime').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-}
-
-document.addEventListener('DOMContentLoaded', init);
-</script>
+<script src="js/app.js?v=20260628-phase341-datafirst" defer></script>
 </body>
 </html>

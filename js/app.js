@@ -706,26 +706,60 @@ function normalizePoints(points){
   const min=Math.min(...vals), max=Math.max(...vals);
   return points.map(p=>({time:p.time, value: max===min ? 50 : (p.value-min)/(max-min)*100, raw:p.value}));
 }
-function drawLine(canvas, data, key='value', label=''){
-  const ctx=canvas.getContext('2d'); const ratio=window.devicePixelRatio||1; canvas.width=canvas.clientWidth*ratio; canvas.height=canvas.clientHeight*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
-  const cw=canvas.clientWidth, ch=canvas.clientHeight; ctx.clearRect(0,0,cw,ch); ctx.font='12px system-ui'; ctx.fillStyle='#667085'; ctx.fillText(label,12,18);
-  const pts=data.filter(d=>d && d[key]!=null && d.time).sort((a,b)=>a.time-b.time);
-  if(pts.length<2){ ctx.fillText('그래프 데이터 부족',12,48); return; }
-  const xs=pts.map(p=>p.time.getTime()), ys=pts.map(p=>p[key]); const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); const pad=38;
-  const sx=x=>pad+(x-minX)/(maxX-minX||1)*(cw-pad*1.6); const sy=y=>ch-pad-(y-minY)/(maxY-minY||1)*(ch-pad*2);
-  ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1; for(let i=0;i<4;i++){const y=pad+i*(ch-pad*2)/3;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(cw-pad/2,y);ctx.stroke();}
-  ctx.strokeStyle='#0f62fe'; ctx.lineWidth=2; ctx.beginPath(); pts.forEach((p,i)=>{const x=sx(p.time.getTime()), y=sy(p[key]); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke();
-  ctx.fillStyle='#172033'; const last=pts[pts.length-1]; ctx.beginPath(); ctx.arc(sx(last.time.getTime()),sy(last[key]),4,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#667085'; ctx.fillText(`${minY.toFixed(2)}`,4,sy(minY)); ctx.fillText(`${maxY.toFixed(2)}`,4,sy(maxY)+4); ctx.fillText(hhmm(pts[0].time),pad,ch-8); ctx.fillText(hhmm(last.time),cw-64,ch-8);
+function chartMarkers(){
+  const incident=parseLocal($('incidentDate')?.value,$('incidentTime')?.value);
+  const search=parseLocal($('searchDate')?.value,$('searchTime')?.value);
+  return [
+    incident ? {time:incident, label:'투신 시점', color:'#0f62fe'} : null,
+    search ? {time:search, label:'현 시점', color:'#c53030'} : null
+  ].filter(Boolean);
 }
-function drawMultiLine(canvas, series, label=''){
+function drawMarkerLines(ctx, markers, sx, minX, maxX, top, bottom, options={}){
+  if(!markers || !markers.length) return;
+  const used=[];
+  markers.forEach((m,idx)=>{
+    const tx=m.time.getTime();
+    if(tx<minX || tx>maxX) return;
+    const x=sx(tx);
+    ctx.save();
+    ctx.strokeStyle=m.color; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=m.color; ctx.font='bold 12px system-ui'; ctx.textAlign='center';
+    let y=top + 14 + idx*28;
+    while(used.some(u=>Math.abs(u.x-x)<50 && Math.abs(u.y-y)<22)) y += 22;
+    used.push({x,y});
+    ctx.fillText(m.label,x,y); ctx.fillText(hhmm(m.time),x,y+15);
+    ctx.restore();
+  });
+}
+function drawLine(canvas, data, key='value', label='', markers=chartMarkers()){
+  const ctx=canvas.getContext('2d'); const ratio=window.devicePixelRatio||1; canvas.width=canvas.clientWidth*ratio; canvas.height=canvas.clientHeight*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
+  const cw=canvas.clientWidth, ch=canvas.clientHeight; ctx.clearRect(0,0,cw,ch); ctx.font='14px system-ui'; ctx.fillStyle='#667085'; ctx.fillText(label,14,22);
+  const pts=data.filter(d=>d && d[key]!=null && d.time).sort((a,b)=>a.time-b.time);
+  if(pts.length<2){ ctx.fillText('그래프 데이터 부족',14,56); return; }
+  const xs=pts.map(p=>p.time.getTime()), ys=pts.map(p=>p[key]);
+  let minX=Math.min(...xs), maxX=Math.max(...xs);
+  markers.forEach(m=>{ const t=m.time.getTime(); if(t<minX) minX=t; if(t>maxX) maxX=t; });
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const padL=54, padR=34, padT=54, padB=42;
+  const sx=x=>padL+(x-minX)/(maxX-minX||1)*(cw-padL-padR); const sy=y=>ch-padB-(y-minY)/(maxY-minY||1)*(ch-padT-padB);
+  ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1; for(let i=0;i<5;i++){const y=padT+i*(ch-padT-padB)/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(cw-padR,y);ctx.stroke();}
+  drawMarkerLines(ctx, markers, sx, minX, maxX, padT, ch-padB);
+  ctx.strokeStyle='#0f62fe'; ctx.lineWidth=3; ctx.beginPath(); pts.forEach((p,i)=>{const x=sx(p.time.getTime()), y=sy(p[key]); if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);}); ctx.stroke();
+  ctx.fillStyle='#172033'; const last=pts[pts.length-1]; ctx.beginPath(); ctx.arc(sx(last.time.getTime()),sy(last[key]),5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#667085'; ctx.font='13px system-ui'; ctx.fillText(`${minY.toFixed(2)}`,6,sy(minY)); ctx.fillText(`${maxY.toFixed(2)}`,6,sy(maxY)+4); ctx.fillText(hhmm(new Date(minX)),padL,ch-12); ctx.fillText(hhmm(new Date(maxX)),cw-76,ch-12);
+}
+function drawMultiLine(canvas, series, label='', markers=chartMarkers()){
   const ctx=canvas.getContext('2d'); const ratio=window.devicePixelRatio||1; canvas.width=canvas.clientWidth*ratio; canvas.height=canvas.clientHeight*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
   const cw=canvas.clientWidth, ch=canvas.clientHeight; ctx.clearRect(0,0,cw,ch);
   const all=series.flatMap(s=>s.points).filter(p=>p.time&&p.value!=null);
   ctx.font='15px system-ui'; ctx.fillStyle='#172033'; ctx.fillText(label,16,24);
   if(all.length<2){ ctx.fillStyle='#667085'; ctx.fillText('통합 그래프 데이터 부족',16,60); return; }
-  const xs=all.map(p=>p.time.getTime()), minX=Math.min(...xs), maxX=Math.max(...xs);
-  const padL=58, padR=36, padT=92, padB=42;
+  const xs=all.map(p=>p.time.getTime());
+  let minX=Math.min(...xs), maxX=Math.max(...xs);
+  markers.forEach(m=>{ const t=m.time.getTime(); if(t<minX) minX=t; if(t>maxX) maxX=t; });
+  const padL=62, padR=38, padT=104, padB=46;
   const sx=x=>padL+(x-minX)/(maxX-minX||1)*(cw-padL-padR); const sy=y=>ch-padB-(y/100)*(ch-padT-padB);
   const colors=['#0f62fe','#b7791f','#078a4f'];
   const legends=[
@@ -737,6 +771,7 @@ function drawMultiLine(canvas, series, label=''){
   ctx.fillStyle='#667085'; ctx.font='12px system-ui'; ctx.fillText('※ 서로 단위가 달라 실제값이 아니라 0~100 정규화로 변화 방향만 비교합니다.',18,76);
   ctx.strokeStyle='#e5e7eb'; ctx.lineWidth=1;
   for(let i=0;i<5;i++){const y=padT+i*(ch-padT-padB)/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(cw-padR,y);ctx.stroke(); ctx.fillStyle='#8a95a8'; ctx.font='12px system-ui'; ctx.fillText(String(100-i*25),18,y+4);}
+  drawMarkerLines(ctx, markers, sx, minX, maxX, padT, ch-padB);
   series.forEach((s,si)=>{
     const pts=s.points.filter(p=>p.time&&p.value!=null).sort((a,b)=>a.time-b.time);
     if(pts.length<2) return;
@@ -824,12 +859,12 @@ async function runQuery(){
     {name:'방류',points:normalizePoints(damPts)},
     {name:'조석',points:normalizePoints(tidePts)}
   ], `${b.bridge} · ${pretty(incident)} ~ ${pretty(search)}`);
-  $('combinedChartNote').textContent = `파란선=수위(m), 갈색선=방류량(㎥/s), 초록선=조석(cm). 통합 그래프는 단위가 다른 값을 0~100으로 바꾼 비교용입니다. 실제 수치 판단은 위 핵심 데이터와 아래 개별 그래프를 기준으로 보세요. 수위필드=${waterMetric.key||'없음'}, 수위관측소 fw=참고흐름, 방류필드=${damMetric.key||'없음'}`;
+  $('combinedChartNote').textContent = `파란선=수위(m), 갈색선=방류량(㎥/s), 초록선=조석(cm). 파란 점선=투신 시점, 빨간 점선=현 시점입니다. 통합 그래프는 단위가 다른 값을 0~100으로 바꾼 비교용이며 실제 수치 판단은 아래 개별 그래프와 핵심 데이터 표를 기준으로 보세요. 수위필드=${waterMetric.key||'없음'}, 수위관측소 fw=참고흐름, 방류필드=${damMetric.key||'없음'}`;
   drawLine($('waterChart'), waterPts, 'value', `${b.station} 수위(m) · ${pretty(incident)} ~ ${pretty(search)}`);
-  $('waterChartNote').textContent = currentState.wTrend ? `조회시점 기준 최근 1시간 수위 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m · 관측값 시간차는 입력시각과 가장 가까운 HRFCO 관측시각의 차이입니다.` : '최근 1시간 변화 계산에 필요한 시계열이 부족합니다.';
+  $('waterChartNote').textContent = currentState.wTrend ? `파란 점선=투신 시점, 빨간 점선=현 시점. 조회시점 기준 최근 1시간 수위 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m · 관측값 시간차는 입력시각과 가장 가까운 HRFCO 관측시각의 차이입니다.` : '파란 점선=투신 시점, 빨간 점선=현 시점. 최근 1시간 변화 계산에 필요한 시계열이 부족합니다.';
   drawLine($('damChart'), damPts, 'value', `팔당댐 방류량(㎥/s)`);
-  $('damChartNote').textContent = currentState.damImpact ? `조회시점 교량 영향 방류량: ${currentState.damImpact.value.toFixed(1)}㎥/s · 팔당 ${b.releaseLag}분 지연 보정 · ${dataQualityForPoint(currentState.damImpact)}` : '방류량 미조회';
-  if(tideRows.length){ drawLine($('tideChart'), tidePts, 'value', `인천 조위(cm) · ${TIDE_STATION}`); $('tideChartNote').textContent = currentState.tide ? `인천 조석값에 교량별 지연시간(${b.offset||0}분)을 더해 교량 기준으로 보정했습니다. 입력시각과 조석 기준값 차이 ${currentState.tide.diffMin}분.` : '조석 매칭 실패'; }
+  $('damChartNote').textContent = currentState.damImpact ? `파란 점선=투신 시점, 빨간 점선=현 시점. 조회시점 교량 영향 방류량: ${currentState.damImpact.value.toFixed(1)}㎥/s · 팔당 ${b.releaseLag}분 지연 보정 · ${dataQualityForPoint(currentState.damImpact)}` : '파란 점선=투신 시점, 빨간 점선=현 시점. 방류량 미조회';
+  if(tideRows.length){ drawLine($('tideChart'), tidePts, 'value', `인천 조위(cm) · ${TIDE_STATION}`); $('tideChartNote').textContent = currentState.tide ? `파란 점선=투신 시점, 빨간 점선=현 시점. 인천 조석값에 교량별 지연시간(${b.offset||0}분)을 더해 교량 기준으로 보정했습니다. 입력시각과 조석 기준값 차이 ${currentState.tide.diffMin}분.` : '파란 점선=투신 시점, 빨간 점선=현 시점. 조석 매칭 실패'; }
   else { drawLine($('tideChart'), [], 'value', '조석'); $('tideChartNote').textContent='조석 API 미조회'; }
   $('tideSummary').innerHTML = currentState.tide ? `<div class="summary-big">${currentState.tide.phase}</div><div>${fmtTidePoint(b,currentState.tide)}</div>` : `<div class="summary-big">${b.tide?'조석 미조회':'조석 적용 제외'}</div>`;
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}], b, currentState);

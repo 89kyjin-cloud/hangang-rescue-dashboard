@@ -580,14 +580,17 @@ async function fetchDamRelease(startYmdhm, endYmdhm) {
 }
 
 // ── 조석 API ─────────────────────────────────────────────
-// KHOA 조석 예보 API (ObsCode: 동작 관측소 DT_0037 등)
+// KHOA 실측 조위 API (tideObsRecordData) — CORS 허용 엔드포인트
+// 인천 관측소 DT_0010 기준 (신곡수중보 하류 구간 적용)
 async function fetchTide(dateStr) {
+  // dateStr: "YYYYMMDD"
   const key = $('tideKey').value.trim();
-  if (!key) throw new Error('조석 API 인증키가 입력되지 않았습니다');
-  // 인천 조석 (DT_0010): 신곡수중보 하류 기준 가장 가까운 공식 관측소
+  if (!key) throw new Error('조석 API 키 미입력');
+
   const obsCode = 'DT_0010';
-  const url = `${TIDE_BASE}?ServiceKey=${encodeURIComponent(key)}&ObsCode=${obsCode}&Date=${dateStr}&ResultType=json`;
+  const url = `https://www.khoa.go.kr/api/oceangrid/tideObsRecordData/search.do?ServiceKey=${encodeURIComponent(key)}&ObsCode=${obsCode}&Date=${dateStr}&ResultType=json`;
   log('[조석 요청]', maskKey(url, key));
+
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), 15000);
   let res;
@@ -596,14 +599,27 @@ async function fetchTide(dateStr) {
   } finally {
     clearTimeout(tid);
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
   let json;
   try { json = JSON.parse(text); } catch(e) { throw new Error('JSON 파싱 실패: ' + text.slice(0, 200)); }
-  const result = json?.result;
-  if (!result || result.length === 0) throw new Error('조석 데이터 없음 (빈 응답)');
-  log('[조석 응답]', result.length + '행');
-  return result; // [{ tph_time, tph_level, hl_code }, ...]
+
+  // KHOA 실측 응답: { result: { meta, data: [{record_time, tide_level}, ...] } }
+  const data = (json && json.result && Array.isArray(json.result.data))
+    ? json.result.data
+    : (Array.isArray(json && json.result) ? json.result : (Array.isArray(json && json.data) ? json.data : []));
+
+  if (!data.length) throw new Error('조석 데이터 없음 — 관측소 코드·날짜·API키 확인 필요');
+  log('[조석 응답]', data.length + '행', data[0]);
+
+  // 통일 형태로 변환
+  return data.map(function(r) {
+    return {
+      tph_time:  r.record_time || r.tph_time || r.obs_time || '',
+      tph_level: r.tide_level  || r.tph_level || r.wl || null,
+      hl_code:   r.hl_code || '',
+    };
+  });
 }
 
 // ── 날짜 파싱 ────────────────────────────────────────────

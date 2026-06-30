@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>HanRiver Environment Dashboard v1.0 Phase 3.4.7</title>
+  <title>HanRiver Environment Dashboard v1.0 Phase 3.5.0</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1>HanRiver Environment Dashboard</h1>
-    <p>v1.0 Phase 3.4.7 · 3초 판단 · 변화량·근거 카드 · 그래프 개선</p>
+    <p>v1.0 Phase 3.5.0 · 그래프 시간축 10분 단위</p>
   </div>
   <span class="badge">검증 우선</span>
 </header>
@@ -21,26 +21,29 @@
     <p>이 화면은 수위·방류량·조석·기상 데이터를 검증하기 위한 분석 보조 도구입니다. 실제 수색 지시나 작전 범위 결정은 현장 지휘·공식 절차를 따르세요.</p>
   </section>
 
-  <!-- ① API 키 + 조회 조건 -->
   <section class="grid two">
     <div class="card">
       <h2>① API 키</h2>
       <p class="muted">기본값은 숨김입니다. 필요할 때만 보기 버튼을 누르세요. 원자료 로그에는 키가 자동 마스킹됩니다.</p>
+
       <label>한강홍수통제소 인증키</label>
       <div class="key-row">
         <input id="hrfcoKey" type="password" placeholder="HRFCO API Key" autocomplete="off" spellcheck="false" />
         <button type="button" class="secondary small" data-toggle-key="hrfcoKey">보기</button>
       </div>
+
       <label>조석 API 인증키</label>
       <div class="key-row">
         <input id="tideKey" type="password" placeholder="KHOA/Data.go.kr Tide API Key" autocomplete="off" spellcheck="false" />
         <button type="button" class="secondary small" data-toggle-key="tideKey">보기</button>
       </div>
+
       <label>기상청 인증키</label>
       <div class="key-row">
         <input id="weatherKey" type="password" placeholder="KMA API Key" autocomplete="off" spellcheck="false" />
         <button type="button" class="secondary small" data-toggle-key="weatherKey">보기</button>
       </div>
+
       <div class="row">
         <button id="saveKeys">키 저장</button>
         <button id="clearKeys" class="secondary">키 삭제</button>
@@ -56,21 +59,21 @@
       <div class="grid two compact">
         <div>
           <label>사고 날짜</label>
-          <input id="incidentDate" type="text" inputmode="numeric" placeholder="20260621" />
+          <input id="incidentDate" inputmode="numeric" placeholder="20260621" />
         </div>
         <div>
           <label>사고 시간</label>
-          <input id="incidentTime" type="text" inputmode="numeric" placeholder="1300" />
+          <input id="incidentTime" inputmode="numeric" placeholder="1300" />
         </div>
       </div>
       <div class="grid two compact">
         <div>
           <label>조회 날짜</label>
-          <input id="searchDate" type="text" inputmode="numeric" placeholder="20260622" />
+          <input id="searchDate" inputmode="numeric" placeholder="20260622" />
         </div>
         <div>
           <label>조회 시간</label>
-          <input id="searchTime" type="text" inputmode="numeric" placeholder="1100" />
+          <input id="searchTime" inputmode="numeric" placeholder="1100" />
         </div>
       </div>
       <div class="row">
@@ -81,33 +84,17 @@
     </div>
   </section>
 
-  <!-- ③ 데이터 신뢰도 -->
   <section class="card">
     <h2>③ 데이터 신뢰도</h2>
     <div id="qualityGrid" class="quality-grid"></div>
   </section>
 
-  <!-- ④ 핵심 데이터 판정 -->
   <section class="card data-first">
     <h2>④ 핵심 데이터 판정</h2>
     <p class="muted">수위·방류량·조석을 먼저 확정하고, 그래프와 수색 참고판정은 이 값 기준으로 표시합니다.</p>
     <div id="dataFirstPanel" class="data-panel"></div>
   </section>
 
-  <!-- ★ NEW: 변화량 카드 -->
-  <section class="card" id="deltaSection" style="display:none">
-    <h2>⑤ 변화량 (사고시점 → 조회시점)</h2>
-    <div id="deltaPanel" class="delta-grid"></div>
-  </section>
-
-  <!-- ★ NEW: 판정 근거 카드 -->
-  <section class="card" id="reasonSection" style="display:none">
-    <h2>⑥ 판정 근거</h2>
-    <p class="muted">각 항목이 물 방향 판정에 미친 영향입니다. 실제 수색 판단은 현장 확인 우선입니다.</p>
-    <div id="reasonPanel"></div>
-  </section>
-
-  <!-- 선택 교량 환경 + 모델 근거 -->
   <section class="grid two">
     <div class="card result-card">
       <h2>선택 교량 환경</h2>
@@ -119,69 +106,55 @@
     </div>
   </section>
 
-  <!-- 투신·조회 비교 -->
+
   <section class="card">
     <h2>투신시점 · 조회시점 환경 비교</h2>
     <p class="muted">투신시점과 현재/조회시점의 수위, 교량 영향 방류량, 조석 영향, 물 방향, 물살 참고판정을 나란히 비교합니다.</p>
     <div id="pointCompare"></div>
   </section>
 
-  <!-- 수위 그래프 -->
   <section class="card">
     <h2>투신시점 → 조회시점 수위 변화</h2>
-    <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.<br>
-    <span class="legend-dot" style="background:#0f62fe"></span> 파란 점선 = 투신시점 &nbsp;
-    <span class="legend-dot" style="background:#c53030"></span> 빨간 점선 = 조회시점</p>
+    <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.</p>
     <canvas id="waterChart" height="360"></canvas>
     <div id="waterChartNote" class="muted"></div>
   </section>
 
-  <!-- 방류량 그래프 -->
   <section class="card">
     <h2>방류량 변화</h2>
-    <div id="damStatBar" class="dam-stat-bar"></div>
     <canvas id="damChart" height="360"></canvas>
     <div id="damChartNote" class="muted"></div>
   </section>
 
-  <!-- 조석 그래프 -->
   <section class="card">
     <h2>조석 검증</h2>
     <div id="tideSummary"></div>
-    <div id="tideNextTurn" class="tide-next-turn"></div>
     <canvas id="tideChart" height="360"></canvas>
     <div id="tideChartNote" class="muted"></div>
   </section>
 
-  <!-- 교량 현황판 -->
+  <section class="card advanced-graph">
+    <details id="combinedDetails">
+      <summary>통합 참고 그래프 보기 (고급 사용자용)</summary>
+      <p class="muted">수위·방류량·조석은 단위가 달라 0~100 정규화값으로 표시합니다. 실제 판단은 위 개별 그래프와 핵심 데이터 카드를 기준으로 보세요.</p>
+      <canvas id="combinedChart" height="500"></canvas>
+      <div id="combinedChartNote" class="muted"></div>
+    </details>
+  </section>
+
   <section class="card">
     <h2>한강 전체 교량 현황판</h2>
     <div id="bridgeBoard" class="bridge-board"></div>
   </section>
 
-  <!-- ★ 통합 그래프 — 맨 아래, 기본 접힘 -->
-  <section class="card">
-    <button type="button" class="toggle-btn" id="combinedToggle" aria-expanded="false">
-      ▶ 통합 참고 그래프 (고급 사용자용)
-    </button>
-    <div id="combinedSection" class="collapsible-section" style="display:none">
-      <p class="muted" style="margin-top:8px">투신시점부터 조회시점까지의 흐름을 한 화면에 비교합니다. 각 지표는 서로 단위가 달라 0~100 정규화값으로 표시합니다.</p>
-      <canvas id="combinedChart" height="500"></canvas>
-      <div id="combinedChartNote" class="muted"></div>
-    </div>
-  </section>
-
-  <!-- ★ 원자료 로그 — 기본 접힘 -->
-  <section class="card">
-    <button type="button" class="toggle-btn" id="logToggle" aria-expanded="false">
-      ▶ 원자료 로그 보기
-    </button>
-    <div id="logSection" class="collapsible-section" style="display:none">
+  <section class="card raw-log-card">
+    <details id="rawLogDetails">
+      <summary>원자료 로그 보기</summary>
       <pre id="rawLog"></pre>
-    </div>
+    </details>
   </section>
 </main>
 
-<script src="js/app.js?v=20260629-phase347-3sec" defer></script>
+<script src="js/app.js?v=20260629-phase349-interactive" defer></script>
 </body>
 </html>

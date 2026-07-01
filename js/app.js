@@ -367,8 +367,8 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
 function directionLabel(b,wTrend,damImpact,tide,tideActive){
   const damHigh=damImpact?.value!=null&&damImpact.value>=1000;
   if(!b.tide) return damHigh?'방류 영향 하류방향 우세 가능':'조석 제외 · 자연 하류 흐름 가능';
-  if(tideActive===null) return damHigh?'방류 영향 하류방향 가능 (신곡보 수위 미확인)':'신곡수중보 수위 미확인 · 조석 전파 여부 판단 불가';
-  if(!tideActive) return damHigh?'방류 영향 하류방향 우세 가능 (조석 차단)':'조석 차단 (신곡보 낮음) · 자연 하류 흐름 가능';
+  if(tideActive===null) return damHigh?'방류 영향 하류방향 가능 (신곡수중보 수위 미확인)':'신곡수중보 수위 미확인 · 조석 전파 여부 판단 불가';
+  if(!tideActive) return damHigh?'방류 영향 하류방향 우세 가능 (조석 차단)':'조석 차단 (신곡수중보 낮음) · 자연 하류 흐름 가능';
   if(!tide) return damHigh?'방류 영향 하류방향 가능':'조석 전파 중 · 조위 자료 없음';
   if(tide.phase.includes('밀물')) return damHigh?'밀물 유입 + 방류 하류방향 충돌 가능':'물이 들어오는 영향 가능';
   if(tide.phase.includes('썰물')) return '물이 나가는 영향 가능';
@@ -498,8 +498,8 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
     <span class="pill">대표 관측소: ${b.station}</span>
     <span class="pill">${b.tide?'조석 구간':'조석 제외'}</span>
     <span class="pill">교량 ${BRIDGES.length}개 등록</span>
-    <div class="kv"><b>현재 수위</b><span>${fmtWaterPoint(currentState.water)} <small class="muted">수심 아님</small></span></div>
     <div class="kv"><b>투신 수위</b><span>${fmtWaterPoint(incidentState.water)}</span></div>
+    <div class="kv"><b>현재 수위</b><span>${fmtWaterPoint(currentState.water)} <small class="muted">수심 아님</small></span></div>
     <div class="kv"><b>현재 방류 영향</b><span>${fmtDamPoint(currentState.damImpact,currentState.damImpactTime)}</span></div>
     <div class="kv"><b>투신 방류 영향</b><span>${fmtDamPoint(incidentState.damImpact,incidentState.damImpactTime)}</span></div>
     <div class="kv"><b>투신시점 물때</b><span>${incidentDt?fmtTideNumber(incidentDt):'날짜 미입력'}</span></div>
@@ -576,7 +576,7 @@ function renderBoard(results=[],selectedBridge=null,currentState=null){
 
 // ── 신뢰도 패널 (품질 그리드) ────────────────────────────────
 function renderQuality(q={}){
-  const labels=[['수위',q.water],['방류',q.dam],['조석',q.tide],['신곡보',q.singok||'대기']];
+  const labels=[['수위',q.water],['방류',q.dam],['조석',q.tide],['신곡수중보',q.singok||'대기']];
   $('qualityGrid').innerHTML=labels.map(([name,state])=>{
     const cls=state==='실측'||state==='정상'?'ok':(state==='검증필요'||state==='미조회'||state==='제외'||!state?'hold':'fail');
     return`<div class="q"><strong>${name}</strong><span class="${cls}">${state||'대기'}</span></div>`;
@@ -604,6 +604,46 @@ function drawLine(canvas,data,key='value',label='',markers=[],range=null){
   ctx.strokeStyle='#0f62fe';ctx.lineWidth=3;ctx.beginPath();pts.forEach((p,i)=>{const x=sx(p.time.getTime()),y=sy(p[key]);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
   ctx.fillStyle='#172033';const last=pts[pts.length-1];ctx.beginPath();ctx.arc(sx(last.time.getTime()),sy(last[key]),5,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#667085';ctx.font='13px system-ui';ctx.fillText(hhmm(new Date(minX)),padL,ch-12);ctx.fillText(hhmm(new Date(maxX)),cw-78,ch-12);
+
+  // ★ 클릭 핀: 클릭한 시점의 수위/방류량 상세 말풍선 표시 (다시 클릭하면 해제)
+  canvas._drawState={pts,minX,maxX,minY,maxY,padL,padR,padT,padB,sx,sy,key,cw,ch};
+  const drawPin = (pin) => {
+    if(!pin) return;
+    const ds=canvas._drawState;
+    const px=ds.sx(pin.time.getTime()), py=ds.sy(pin[ds.key]);
+    ctx.save();
+    ctx.strokeStyle='#f59e0b';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(px,ds.padT);ctx.lineTo(px,ds.ch-ds.padB);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#f59e0b';ctx.beginPath();ctx.arc(px,py,7,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();
+    const bw=190,bh=58,bx=Math.min(px+10,ds.cw-bw-8),by=Math.max(ds.padT+4,py-66);
+    ctx.fillStyle='rgba(16,24,40,0.93)';
+    ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx,by,bw,bh,8);else ctx.rect(bx,by,bw,bh);ctx.fill();
+    ctx.fillStyle='#f59e0b';ctx.font='700 13px system-ui';ctx.textAlign='left';
+    ctx.fillText(hhmm(pin.time),bx+12,by+20);
+    ctx.fillStyle='#e2e8f0';ctx.font='14px system-ui';
+    const unitLabel=key==='value'?(label.includes('m)')?' m':label.includes('㎥')?' ㎥/s':' cm'):'';
+    ctx.fillText(Number(pin[key]).toFixed(2)+unitLabel,bx+12,by+42);
+    ctx.restore();
+  };
+  canvas._drawPin=drawPin;
+  if(canvas._pin) drawPin(canvas._pin); // 재그리기 시 기존 핀 유지
+  canvas.onclick=function(e){
+    const rect=canvas.getBoundingClientRect();
+    const clickX=(e.clientX-rect.left);
+    const ds=canvas._drawState; if(!ds) return;
+    const tClick=ds.minX+(clickX-ds.padL)/(ds.cw-ds.padL-ds.padR)*(ds.maxX-ds.minX);
+    let best=null,bestDiff=Infinity;
+    ds.pts.forEach(p=>{const d=Math.abs(p.time.getTime()-tClick);if(d<bestDiff){bestDiff=d;best=p;}});
+    if(!best) return;
+    // 같은 포인트 다시 클릭하면 해제
+    const same=canvas._pin&&Math.abs(canvas._pin.time.getTime()-best.time.getTime())<30000;
+    canvas._pin=same?null:best;
+    // 그래프 전체를 다시 그리기 위해 drawLine 재호출
+    drawLine(canvas,data,key,label,markers,range);
+  };
+  canvas.style.cursor='crosshair';
 }
 function drawMultiLine(canvas,series,label='',markers=[]){
   const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;canvas.width=canvas.clientWidth*ratio;canvas.height=canvas.clientHeight*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);
@@ -760,7 +800,7 @@ async function runQuery(){
     const el=$('tideNextTurn');if(!el)return;
     if(!currentState.tide||currentState.tideActive!==true){el.innerHTML='';return;}
     const t=currentState.tide,offset=b.offset||0;
-    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) + ${offset}분 보정 · 신곡보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
+    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) + ${offset}분 보정 · 신곡수중보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
     if(t.nextTurn){const bt=new Date(t.nextTurn.time.getTime()+offset*60000);html+=`<div class="tide-turn-item"><b>다음 ${t.nextTurn.type}</b><span>${hhmm(bt)}</span><div class="tide-ref-note">교량 보정(+${offset}분) · 인천 ${hhmm(t.nextTurn.time)}</div></div>`;}
     if(t.rateCmHr!==null)html+=`<div class="tide-turn-item"><b>변화율</b><span>${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h</span><div class="tide-ref-note">인천 기준</div></div>`;
     el.innerHTML=html;
@@ -776,7 +816,7 @@ async function runQuery(){
     $('tideChartNote').textContent=b.tide?'조석 API 미조회':'조석 적용 제외 구간';
   }
 
-  $('tideSummary').innerHTML=currentState.tide?`<div class="summary-big">${currentState.tide.phase}</div><div>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</div>`:`<div class="summary-big">${!b.tide?'조석 적용 제외':currentState.tideActive===false?'⛔ 조석 차단 (신곡보 낮음)':singokTideState.status==='unknown'?'신곡수중보 수위 조회 실패':'조석 미조회'}</div>`;
+  $('tideSummary').innerHTML=currentState.tide?`<div class="summary-big">${currentState.tide.phase}</div><div>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</div>`:`<div class="summary-big">${!b.tide?'조석 적용 제외':currentState.tideActive===false?'⛔ 조석 차단 (신곡수중보 낮음)':singokTideState.status==='unknown'?'신곡수중보 수위 조회 실패':'조석 미조회'}</div>`;
 
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}],b,currentState);
   $('inputStatus').textContent=`조회 완료${dataCapped?` · ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:''} · 신곡수중보 swl=${singokTideState.swl?.toFixed(2)??'조회실패'}m`;

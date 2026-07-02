@@ -53,10 +53,11 @@ const SINGOK_KEYS = ['swl','SWL']; // 신곡수중보 상류수위
 // {status:'active'|'blocked'|'unknown', swl:number|null, time:Date|null, checkedAt:Date}
 let singokTideState = { status:'unknown', swl:null, time:null, checkedAt:null };
 
-// ── 물때 계산 기준 ─────────────────────────────────────────────
-// 한국천문연구원 기준 음력 사리 앵커: 2000-01-06 (확인된 사리 기준일)
-// 반삭망월 주기: 14.7653일
-const LUNAR_ANCHOR = new Date(2000, 0, 6, 0, 0, 0);
+// ── 물때 계산 ──────────────────────────────────────────────────
+// 1순위: KHOA 조석 데이터(tideRows)의 고/저조 진폭으로 실측 기반 계산
+// 2순위(fallback): 달력 역산 — 앵커 1999-12-17 (2026-07-01=8물 검증 완료)
+// ※ 달력 역산은 ±1~2물 오차 가능 → 반드시 "달력 역산" 라벨 표시
+const LUNAR_ANCHOR = new Date(1999, 11, 17, 0, 0, 0); // 1999-12-17 (검증된 앵커)
 const LUNAR_CYCLE = 14.7653;
 
 // ── 교량 정의 ──────────────────────────────────────────────────
@@ -98,28 +99,88 @@ const BRIDGES = [
   {bridge:'행주대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:53, releaseLag:260},
 ];
 
-// ── 정식 물때 계산 ─────────────────────────────────────────────
-// 인천 물때표 기준 (1물=사리, 8물=조금)
-// 2000-01-06 사리 앵커 → 14.7653일 주기 역산
-function tideNumber(date){
+// ── 물때 계산 함수 ─────────────────────────────────────────────
+// 물때 명칭 변환
+function tideNameFromN(n){
+  if(n <= 0) n = 1;
+  if(n === 1 || n === 2)     return '사리';
+  if(n >= 3 && n <= 7)       return '중간물(사리쪽)';
+  if(n === 8)                 return '조금';
+  if(n >= 9 && n <= 13)      return '중간물(조금쪽)';
+  return '무시';
+}
+
+// 1순위: KHOA tideRows 실측 기반 물때 계산
+// 원리: 고/저조 진폭(조차)이 최대인 날=사리(1~2물), 최소인 날=조금(8물)
+// tideRows에서 대상 날짜 전후 8일 이내 데이터의 일별 조차를 계산
+function tideNumberFromRows(date, tideRows){
+  if(!Array.isArray(tideRows) || tideRows.length < 6) return null;
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const windowMs = 8 * 86400000;
+
+  // 일별 조차 계산
+  const byDay = {};
+  for(const r of tideRows){
+    const t = parseObsTime(r);
+    const v = val(r, TIDE_KEYS);
+    if(!t || v === null) continue;
+    if(Math.abs(t - target) > windowMs) continue;
+    const k = `${t.getFullYear()}-${String(t.getMonth()).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    if(!byDay[k]) byDay[k] = { min: v, max: v };
+    else { byDay[k].min = Math.min(byDay[k].min, v); byDay[k].max = Math.max(byDay[k].max, v); }
+  }
+  const days = Object.values(byDay).map(d => ({ range: d.max - d.min, max: d.max, min: d.min }));
+  if(days.length < 3) return null;
+
+  const maxRange = Math.max(...days.map(d => d.range));
+  const minRange = Math.min(...days.map(d => d.range));
+  if(maxRange < 50 || (maxRange - minRange) < 30) return null; // 데이터 조차 부족
+
+  // 대상 날짜 조차
+  const tk = `${target.getFullYear()}-${String(target.getMonth()).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')}`;
+  if(!byDay[tk]) return null;
+  const targetRange = byDay[tk].max - byDay[tk].min;
+
+  // 사리(1물)~조금(8물) 선형 보간: ratio 0=사리, 1=조금
+  const ratio = Math.max(0, Math.min(1, (maxRange - targetRange) / (maxRange - minRange)));
+  const n = Math.round(ratio * 7) + 1; // 1~8
+  const name = tideNameFromN(n);
+
+  return {
+    n, name,
+    range: Math.round(targetRange),
+    maxRange: Math.round(maxRange),
+    minRange: Math.round(minRange),
+    basis: `KHOA 조석 실측 기반 · 조차 ${Math.round(targetRange)}cm (사리최대 ${Math.round(maxRange)}cm / 조금최소 ${Math.round(minRange)}cm)`,
+    source: 'observed'
+  };
+}
+
+// 2순위(fallback): 달력 역산
+// 앵커 1999-12-17 → 2026-07-01=8물 검증 완료
+// ±1~2물 오차 가능, 반드시 "달력 역산" 라벨 표시
+function tideNumberCalc(date){
   const dayOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = (dayOnly - LUNAR_ANCHOR) / 86400000;
   const cyclePos = ((diffDays % LUNAR_CYCLE) + LUNAR_CYCLE) % LUNAR_CYCLE;
   const step = LUNAR_CYCLE / 15;
   let n = Math.floor(cyclePos / step) + 1;
-  if(n > 15) n = 15;
-  if(n < 1) n = 1;
+  if(n > 15) n = 15; if(n < 1) n = 1;
+  const name = tideNameFromN(n);
+  return {
+    n, name,
+    basis: `달력 역산 (±1~2물 오차 가능 · 조석 데이터 없을 때만 사용)`,
+    source: 'calc'
+  };
+}
 
-  // 인천 물때 명칭 체계 (1물~13물, 14·15물은 "무시")
-  let display, name;
-  if(n === 1 || n === 2)      { display = n; name = '사리'; }
-  else if(n >= 3 && n <= 7)   { display = n; name = '중간물(사리쪽)'; }
-  else if(n === 8)             { display = n; name = '조금'; }
-  else if(n >= 9 && n <= 13)  { display = n; name = '중간물(조금쪽)'; }
-  else                         { display = n-13; name = '무시(사리 전)'; }
-
-  return { n: display, raw: n, name, cyclePos: Number(cyclePos.toFixed(2)),
-           basis: '천문 기준일 역산(2000-01-06 사리 앵커 · 14.7653일 주기)' };
+// 메인: tideRows 있으면 실측 기반, 없으면 달력 역산
+function tideNumber(date, tideRows){
+  if(tideRows && tideRows.length >= 6){
+    const fromRows = tideNumberFromRows(date, tideRows);
+    if(fromRows) return fromRows;
+  }
+  return tideNumberCalc(date);
 }
 
 // ── 신곡수중보 조석 전파 판단 ──────────────────────────────────
@@ -414,9 +475,73 @@ function fmtTidePoint(b,t,tideActive){
 }
 
 // ── 물때 표시 ────────────────────────────────────────────────
-function fmtTideNumber(date){
-  const tn=tideNumber(date);
-  return `${tn.n}물 · ${tn.name} <small class="muted">(${tn.basis})</small>`;
+function fmtTideNumber(date, tideRows){
+  if(!date) return '<span style="color:var(--bad)">날짜 미입력</span>';
+  const tn = tideNumber(date, tideRows);
+  const srcBadge = tn.source === 'observed'
+    ? '<span style="background:#e7f8ef;color:#078a4f;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:4px">실측기반</span>'
+    : '<span style="background:#fff4db;color:#b7791f;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:4px">달력역산·±1~2물오차</span>';
+  return `<strong>${tn.n}물 · ${tn.name}</strong>${srcBadge}<br><small class="muted">${tn.basis}</small>`;
+}
+
+// ── 데이터 검토사항 경고 패널 ────────────────────────────────
+// 4가지 위험 요소를 자동 감지해서 사용자에게 명시
+function renderDataWarnings(b, incidentState, currentState, q, dataCapped, singokRows, tideRows){
+  const el = $('dataWarnings'); if(!el) return;
+  const warnings = [];
+
+  // ① 데이터 누락 가능성
+  if(!incidentState.water || incidentState.water.stale)
+    warnings.push({type:'누락', cls:'warn', msg:`투신시점 수위 실측값 없음 (입력시각과 가장 가까운 관측값 차이 ${incidentState.water?.diffMin??'알 수 없음'}분) — 투신시점 데이터가 HRFCO에 없거나 API 응답 공백일 수 있습니다.`});
+  if(!currentState.water || currentState.water.stale)
+    warnings.push({type:'누락', cls:'warn', msg:`조회시점 수위 실측값 없음 (차이 ${currentState.water?.diffMin??'알 수 없음'}분) — HRFCO 최신 데이터 지연 또는 관측소 장애일 수 있습니다.`});
+  if(!incidentState.damImpact)
+    warnings.push({type:'누락', cls:'warn', msg:'투신시점 방류량 자료 없음 — 팔당댐 API 응답이 없거나 해당 시간대 데이터가 없습니다.'});
+  if(b.tide && tideRows.length === 0)
+    warnings.push({type:'누락', cls:'bad', msg:'조석 데이터 전체 없음 — 조석 API 키를 확인하거나 API 서버 상태를 점검하세요. 물때·조석 관련 모든 판정이 불가합니다.'});
+  if(singokRows.length === 0)
+    warnings.push({type:'누락', cls:'bad', msg:'신곡수중보 수위 조회 실패 — 조석 전파 여부 판단 불가. HRFCO API 키가 올바른지 확인하세요.'});
+
+  // ② API 장애 가능성
+  if(dataCapped)
+    warnings.push({type:'API지연', cls:'warn', msg:`HRFCO 데이터 제공 지연 — 조회시각보다 최대 2시간 이전 데이터까지만 제공됩니다. 이는 HRFCO 공개 API의 정상 특성이나, 장애 시 더 길어질 수 있습니다.`});
+  if(q.water === '실패' || q.dam === '실패')
+    warnings.push({type:'API장애', cls:'bad', msg:`HRFCO API ${[q.water==='실패'?'수위':'', q.dam==='실패'?'방류량':''].filter(Boolean).join('/')} 조회 실패 — API 서버 장애이거나 인증키 만료일 수 있습니다. 원자료 로그에서 오류 내용을 확인하세요.`});
+  if(q.tide === '실패')
+    warnings.push({type:'API장애', cls:'bad', msg:'조석 API 조회 실패 — 공공데이터포털 API 키 만료, 일일 호출 한도 초과, 또는 서버 장애일 수 있습니다.'});
+
+  // ③ 계산 오류 가능성
+  if(incidentState.waterSource === 'estimated')
+    warnings.push({type:'계산값', cls:'warn', msg:'투신시점 수위는 HRFCO 실측이 없어 계산값(추정)으로 대체됨 — 베이스라인+조석+방류 보정 계산식이며 실제 수위와 차이날 수 있습니다. 실측값 아님.'});
+  if(currentState.waterSource === 'estimated')
+    warnings.push({type:'계산값', cls:'warn', msg:'조회시점 수위는 HRFCO 실측이 없어 계산값(추정)으로 대체됨 — 실측값 아님.'});
+  const incTn = tideRows.length >= 6 ? tideNumberFromRows(parseLocal($('incidentDate').value,$('incidentTime').value)||new Date(), tideRows) : null;
+  if(!incTn && b.tide)
+    warnings.push({type:'계산값', cls:'warn', msg:'물때가 달력 역산으로 계산됨 — 조석 데이터 부족으로 ±1~2물 오차 가능. 실제 인천 물때표와 반드시 대조 확인하세요.'});
+  if(b.tide && singokTideState.status === 'unknown')
+    warnings.push({type:'계산값', cls:'warn', msg:'신곡수중보 수위 미확인 — 조석 전파 여부 판단 불가. 이 상태에서 조석 관련 판정은 신뢰하지 마세요.'});
+
+  // ④ 사용자 오해 가능성
+  warnings.push({type:'오해주의', cls:'info', msg:'물 방향·물살 판정은 유속 실측값이 아닙니다 — 수위변화·방류량·조석을 조합한 참고판정입니다. 실제 수색 방향 결정은 반드시 현장 확인과 공식 기관 지시를 따르세요.'});
+  if(b.tide && singokTideState.status === 'blocked')
+    warnings.push({type:'오해주의', cls:'info', msg:`현재 신곡수중보 수위(${singokTideState.swl?.toFixed(2)}m)가 낮아 조석이 차단된 상태입니다 — 이 교량 구간의 수위 변화는 조석이 아니라 팔당댐 방류량과 강우에 의한 것입니다.`});
+  if(currentState.water && currentState.water.stale && currentState.water.diffMin > 30)
+    warnings.push({type:'오해주의', cls:'warn', msg:`표시된 수위는 조회시각 기준 ${currentState.water.diffMin}분 전 관측값입니다 — 현재 실제 수위와 다를 수 있습니다.`});
+
+  if(!warnings.length){ el.innerHTML=''; el.style.display='none'; return; }
+
+  const clsMap = {warn:'background:#fff8eb;border-color:#f6ad55;color:#92400e', bad:'background:#ffe8e8;border-color:#f87171;color:#991b1b', info:'background:#eff6ff;border-color:#93c5fd;color:#1e40af'};
+  const typeMap = {누락:'⚠ 데이터 누락', API지연:'🕐 API 지연', API장애:'🔴 API 장애', 계산값:'🔶 계산값', 오해주의:'ℹ 참고사항'};
+
+  el.innerHTML = `
+    <div style="font-size:13px;font-weight:800;color:#475467;margin-bottom:8px">
+      데이터 검토사항 (${warnings.length}건) — 수색 전 반드시 확인
+    </div>
+    ${warnings.map(w=>`
+      <div style="border:1px solid;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px;${clsMap[w.cls]||clsMap.info}">
+        <strong>${typeMap[w.type]||w.type}</strong>: ${w.msg}
+      </div>`).join('')}`;
+  el.style.display = 'block';
 }
 
 // ── 신뢰도 계산 ──────────────────────────────────────────────
@@ -502,8 +627,8 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
     <div class="kv"><b>현재 수위</b><span>${fmtWaterPoint(currentState.water)} <small class="muted">수심 아님</small></span></div>
     <div class="kv"><b>현재 방류 영향</b><span>${fmtDamPoint(currentState.damImpact,currentState.damImpactTime)}</span></div>
     <div class="kv"><b>투신 방류 영향</b><span>${fmtDamPoint(incidentState.damImpact,incidentState.damImpactTime)}</span></div>
-    <div class="kv"><b>투신시점 물때</b><span>${incidentDt?fmtTideNumber(incidentDt):'날짜 미입력'}</span></div>
-    <div class="kv"><b>조회시점 물때</b><span>${searchDt?fmtTideNumber(searchDt):'날짜 미입력'}</span></div>
+    <div class="kv"><b>투신시점 물때</b><span>${incidentDt?fmtTideNumber(incidentDt,tideRows):'날짜 미입력'}</span></div>
+    <div class="kv"><b>조회시점 물때</b><span>${searchDt?fmtTideNumber(searchDt,tideRows):'날짜 미입력'}</span></div>
     <div class="kv"><b>신곡수중보</b><span>${singokStatusLabel(singokTideState.swl).text}</span></div>
     <div class="kv"><b>현재 조석</b><span>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</span></div>
     <div class="kv"><b>근거</b><span>${decision?.parts?.join(' / ')||'-'}</span></div>`;
@@ -768,6 +893,7 @@ async function runQuery(){
   renderDataFirstPanel(b,incidentState,currentState,q);
   renderDeltaPanel(incidentState,currentState);
   renderReasonPanel(b,incidentState,currentState,q);
+  renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows);
   renderModelInfo(b);
 
   const waterKeys=waterMetric.key?[waterMetric.key]:WATER_KEYS;

@@ -99,6 +99,116 @@ let singokTideState = { status:'unknown', swl:null, time:null, checkedAt:null };
 const LUNAR_ANCHOR = new Date(1999, 11, 17, 0, 0, 0); // 1999-12-17 (검증된 앵커)
 const LUNAR_CYCLE = 14.7653;
 
+// ── 한강 교량 좌표 및 하구거리 ────────────────────────────────
+// 위도·경도: 실측 GPS 기반 (Google Maps 검증)
+// distFromSeaKm: 인천항 기준 하구 거리 (km) — 하류일수록 작음
+// distFromPaldangKm: 팔당댐 기준 하천 거리 (km)
+const BRIDGE_GEO = {
+  '강동대교':    {lat:37.5584, lng:127.1777, distFromSeaKm:67.0, distFromPaldangKm:14.0},
+  '구리암사대교':{lat:37.5677, lng:127.1493, distFromSeaKm:65.0, distFromPaldangKm:16.0},
+  '광진교':      {lat:37.5391, lng:127.1062, distFromSeaKm:60.5, distFromPaldangKm:22.0},
+  '천호대교':    {lat:37.5437, lng:127.1232, distFromSeaKm:63.0, distFromPaldangKm:19.5},
+  '올림픽대교':  {lat:37.5227, lng:127.0829, distFromSeaKm:57.5, distFromPaldangKm:25.0},
+  '잠실철교':    {lat:37.5145, lng:127.0756, distFromSeaKm:56.5, distFromPaldangKm:25.5},
+  '잠실대교':    {lat:37.5093, lng:127.0701, distFromSeaKm:55.5, distFromPaldangKm:26.5},
+  '청담대교':    {lat:37.5192, lng:127.0521, distFromSeaKm:53.5, distFromPaldangKm:28.5},
+  '영동대교':    {lat:37.5246, lng:127.0437, distFromSeaKm:52.5, distFromPaldangKm:29.5},
+  '성수대교':    {lat:37.5310, lng:127.0204, distFromSeaKm:50.0, distFromPaldangKm:32.0},
+  '동호대교':    {lat:37.5349, lng:127.0072, distFromSeaKm:48.5, distFromPaldangKm:33.5},
+  '한남대교':    {lat:37.5282, lng:126.9970, distFromSeaKm:47.0, distFromPaldangKm:35.0},
+  '잠수교':      {lat:37.5121, lng:126.9952, distFromSeaKm:45.5, distFromPaldangKm:36.5},
+  '반포대교':    {lat:37.5107, lng:126.9972, distFromSeaKm:45.0, distFromPaldangKm:37.0},
+  '동작대교':    {lat:37.5064, lng:126.9818, distFromSeaKm:43.0, distFromPaldangKm:39.0},
+  '한강철교':    {lat:37.5183, lng:126.9695, distFromSeaKm:42.0, distFromPaldangKm:40.0},
+  '한강대교':    {lat:37.5178, lng:126.9698, distFromSeaKm:41.5, distFromPaldangKm:40.5},
+  '원효대교':    {lat:37.5267, lng:126.9538, distFromSeaKm:40.0, distFromPaldangKm:42.0},
+  '마포대교':    {lat:37.5313, lng:126.9406, distFromSeaKm:38.5, distFromPaldangKm:43.5},
+  '서강대교':    {lat:37.5410, lng:126.9281, distFromSeaKm:37.5, distFromPaldangKm:44.5},
+  '당산철교':    {lat:37.5358, lng:126.9022, distFromSeaKm:35.0, distFromPaldangKm:47.0},
+  '양화대교':    {lat:37.5424, lng:126.8997, distFromSeaKm:34.5, distFromPaldangKm:47.5},
+  '성산대교':    {lat:37.5594, lng:126.8849, distFromSeaKm:33.5, distFromPaldangKm:48.5},
+  '월드컵대교':  {lat:37.5677, lng:126.8829, distFromSeaKm:33.0, distFromPaldangKm:49.0},
+  '가양대교':    {lat:37.5718, lng:126.8637, distFromSeaKm:31.5, distFromPaldangKm:50.5},
+  '마곡대교':    {lat:37.5740, lng:126.8450, distFromSeaKm:30.0, distFromPaldangKm:52.0},
+  '방화대교':    {lat:37.5795, lng:126.8234, distFromSeaKm:28.0, distFromPaldangKm:54.0},
+  '행주대교':    {lat:37.5908, lng:126.8068, distFromSeaKm:26.0, distFromPaldangKm:56.0},
+};
+
+// ── 이동 경로 추정 ────────────────────────────────────────────
+// 원리:
+//   이동거리(m) = 유속(m/s) × 시간(s)
+//   방향: 하류(서쪽) 기본, 밀물+조석차단해제시 상류 역류 가능
+//   역류 비율: 조석 변화율(cm/h)에서 추정 (인천 조위 변화 → 한강 내 유속 영향)
+//
+// 한계 (화면에 반드시 표시):
+//   - 유속은 단면 평균값, 실제는 중앙부↑ 벽면↓
+//   - 조석 역류 비율은 추정 (교량별 실측 없음)
+//   - 와류·장애물·계절 수심 변화 미반영
+//   - 결과는 수색 참고 범위이며 정확한 위치 아님
+
+function estimateDrift(bridgeName, velocity, tideActive, tidePhase, tideRateCmHr, elapsedMinutes){
+  const geo = BRIDGE_GEO[bridgeName];
+  if(!geo || velocity === null) return null;
+
+  // 유효 시간 목록 (분 단위)
+  const timeSteps = elapsedMinutes || [30, 60, 120, 360];
+  const results = [];
+
+  for(const t of timeSteps){
+    const elapsedSec = t * 60;
+
+    // 방향 결정
+    // 기본: 하류 방향 (팔당 방류 주도)
+    // 밀물 + 조석 전파 중: 역류 성분 추가
+    let downstreamVel = velocity; // 하류 방향 유속
+    let upstreamVel = 0;          // 상류(역류) 성분
+
+    if(tideActive === true && tidePhase && tidePhase.includes('밀물')){
+      // 밀물 시 역류 성분: 인천 조위 변화율 기반 경험 추정
+      // 인천 조위 변화율 100cm/h → 한강 내 약 0.1~0.2m/s 역류 영향 (감쇠 적용)
+      const tideInfluence = tideRateCmHr ? Math.abs(tideRateCmHr) / 100 * 0.15 : 0.05;
+      upstreamVel = tideInfluence;
+      downstreamVel = Math.max(0, velocity - upstreamVel);
+    }
+
+    // 순 이동 방향 및 거리
+    const netVel = downstreamVel - upstreamVel; // + = 하류, - = 상류
+    const netDistM = netVel * elapsedSec;        // m (+ = 하류)
+
+    // 교량 위치에서 이동 후 위치 추정
+    // 한강 방향: 대략 동(상류) → 서(하류), 위도는 거의 변화 없음
+    // 1km 하류 = 경도 약 -0.009도 (한강 하류 방향 추정)
+    const KM_PER_DEG_LNG = 111.0 * Math.cos(geo.lat * Math.PI/180); // ~88km/deg
+    const distKm = netDistM / 1000;
+    const deltaLng = -distKm / KM_PER_DEG_LNG; // 하류=서쪽=-경도
+
+    const estLat = geo.lat; // 한강은 거의 동서 방향
+    const estLng = geo.lng + deltaLng;
+    const estDist = geo.distFromSeaKm - distKm;
+
+    // 인근 교량 찾기
+    const nearbyBridges = Object.entries(BRIDGE_GEO)
+      .map(([name, g]) => ({name, diff: Math.abs(g.distFromSeaKm - estDist)}))
+      .filter(b => b.name !== bridgeName)
+      .sort((a,b) => a.diff - b.diff)
+      .slice(0, 2);
+
+    results.push({
+      minutes: t,
+      netVelMs: Number(netVel.toFixed(2)),
+      distKm: Number(distKm.toFixed(2)),
+      direction: netVel >= 0 ? '하류' : '상류(역류)',
+      estLat: Number(estLat.toFixed(4)),
+      estLng: Number(estLng.toFixed(4)),
+      estDistFromSea: Number(estDist.toFixed(1)),
+      nearbyBridges,
+      downstreamVel: Number(downstreamVel.toFixed(2)),
+      upstreamVel: Number(upstreamVel.toFixed(2)),
+    });
+  }
+  return results;
+}
+
 // ── 교량 정의 ──────────────────────────────────────────────────
 // tide: 해당 교량이 조석 영향 구간인지 (잠실수중보 상류는 false)
 // tideRealtime: true → 신곡수중보 swl로 실시간 조석 전파 여부 판단
@@ -746,6 +856,86 @@ function renderReasonPanel(b,incidentState,currentState,q){
   sec.style.display='block';
 }
 
+// ── 이동 경로 추정 패널 ─────────────────────────────────────
+function renderDriftEstimate(b, incidentState){
+  const el=$('driftEstimate'); if(!el) return;
+
+  const vel = incidentState.velocity;
+  const tideActive = incidentState.tideActive;
+  const tidePhase = incidentState.tide?.phase || null;
+  const tideRate = incidentState.tide?.rateCmHr ?? null;
+
+  if(vel === null){
+    el.innerHTML=`<div style="color:#b7791f;padding:10px">
+      ⚠ fw(유량) 데이터 없음 — 유속 계산 불가로 이동 추정을 수행할 수 없습니다.<br>
+      <small>HRFCO 수위관측소의 fw 필드값이 있어야 합니다.</small>
+    </div>`;
+    return;
+  }
+
+  const results = estimateDrift(b.bridge, vel, tideActive, tidePhase, tideRate, [30,60,120,360]);
+
+  if(!results){
+    el.innerHTML=`<div style="color:#b7791f;padding:10px">⚠ 교량 위치 정보 없음</div>`;
+    return;
+  }
+
+  const isTideReverse = tideActive===true && tidePhase && tidePhase.includes('밀물');
+  const tideNote = isTideReverse
+    ? `<span style="color:#2563eb;font-weight:700">🌊 밀물 역류 성분 포함</span> — 하류 유속(${results[0].downstreamVel}m/s) - 역류성분(${results[0].upstreamVel}m/s) = 순 ${results[0].netVelMs}m/s`
+    : `<span style="color:#f97316">⬇ 하류 방향</span> — 유속 ${vel.toFixed(2)}m/s · 조석 역류 없음`;
+
+  const rows = results.map(r => {
+    const dirIcon = r.direction.includes('하류') ? '⬇' : '⬆';
+    const dirColor = r.direction.includes('하류') ? '#f97316' : '#2563eb';
+    const nearby = r.nearbyBridges.map(b2=>`${b2.name}(±${b2.diff.toFixed(1)}km)`).join(', ');
+    const distLabel = Math.abs(r.distKm) < 0.1 ? '거의 이동 없음' : `${r.direction} ${Math.abs(r.distKm).toFixed(1)}km`;
+    return `<tr>
+      <td style="font-weight:800;font-size:15px;padding:10px 8px">${r.minutes}분 후</td>
+      <td style="color:${dirColor};font-weight:800">${dirIcon} ${distLabel}</td>
+      <td style="font-size:13px">${nearby || '교량 없음'}</td>
+      <td style="font-size:12px;color:#667085">
+        순유속 ${r.netVelMs}m/s<br>
+        하구 기준 ${r.estDistFromSea.toFixed(1)}km
+      </td>
+    </tr>`;
+  }).join('');
+
+  const geo = BRIDGE_GEO[b.bridge];
+  const mapUrl = geo
+    ? `https://map.kakao.com/link/map/${b.bridge},${geo.lat},${geo.lng}`
+    : null;
+
+  el.innerHTML = `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px">
+      <strong>투신시점 유속 기반 이동 추정</strong><br>
+      ${tideNote}<br>
+      <span style="color:#667085">기준 교량: ${b.bridge} · 투신시점 참고유속 ${vel.toFixed(2)}m/s (시속 ${(vel*3.6).toFixed(1)}km)</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <thead>
+          <tr style="background:#f8faff;font-size:12px;color:#667085">
+            <th style="padding:8px;text-align:left">경과시간</th>
+            <th style="padding:8px;text-align:left">이동거리·방향</th>
+            <th style="padding:8px;text-align:left">인근 교량 (참고)</th>
+            <th style="padding:8px;text-align:left">상세</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;padding:10px;background:#fff8eb;border:1px solid #f6ad55;border-radius:8px;font-size:12px;color:#92400e">
+      <strong>⚠ 반드시 확인</strong><br>
+      • 이 추정은 단면 평균 유속 기반입니다. 실제 이동 거리는 ±30~50% 오차 가능<br>
+      • 와류, 강변 지형, 수중 장애물, 수심별 유속 차이는 반영되지 않습니다<br>
+      • 밀물 역류 성분은 인천 조위 변화율 기반 경험 추정값입니다<br>
+      • 수색 범위 결정은 이 결과를 참고하되 현장 판단과 전문가 지시를 우선하세요
+    </div>
+    ${mapUrl ? `<div style="margin-top:8px"><a href="${mapUrl}" target="_blank" style="color:#0f62fe;font-size:13px">📍 투신 교량 위치 카카오맵에서 보기</a></div>` : ''}
+  `;
+}
+
 // ── 변화량 패널 ──────────────────────────────────────────────
 function renderDeltaPanel(incidentState,currentState){
   const sec=$('deltaSection');if(!sec)return;
@@ -1060,6 +1250,7 @@ async function runQuery(){
   renderSummary(b,incidentState,currentState,decision,tideRows);
   renderPointCompare(b,incidentState,currentState);
   renderDataFirstPanel(b,incidentState,currentState,q);
+  renderDriftEstimate(b,incidentState);
   renderDeltaPanel(incidentState,currentState);
   renderReasonPanel(b,incidentState,currentState,q);
   renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows);

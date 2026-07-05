@@ -16,33 +16,108 @@
  * ================================================================
  */
 
-// ── 관측소별 단면 정보 (유속 계산용) ──────────────────────────
-// 출처: HRFCO 수문조사연보 + 한강수계 수리조사 문헌 기반 추정값
-// 유속(m/s) = fw(m³/s) / 유수단면적(m²)
-// 유수단면적 = 하폭(m) × (수위 - 하상고)(m) × 단면형상계수
-// ※ 하상고·형상계수는 추정값 — 정확한 값은 HRFCO 협조 요청 필요
+// ── 공식 수위유량곡선식 (HQ Curve) ───────────────────────────
+// 출처: 공공데이터포털 "환경부 한강홍수통제소_홍수예보_수위유량곡선식_20210803"
+// (로그인 없이 다운로드 가능, data.go.kr/data/15085917)
+// 형식: Q = a*(h+b)^c  (Q=유량 m³/s, h=수위 m)
+// 적용: fw(유량) 없는 관측소에서 수위만으로 유량 계산
+// ※ 범위 밖 수위는 가장 가까운 구간 경계값으로 클램핑
+const HQ_CURVES = {
+  '1018640': { // 광진교 (2011-01-01 적용)
+    name:'광진교', source:'공공데이터포털 HQ곡선',
+    segments:[
+      {min:1.34, max:2.50,  formula:(h)=> 20.769  * Math.pow(h+2.501, 3.414)},
+      {min:2.50, max:4.42,  formula:(h)=>124.768  * Math.pow(h+2.800, 2.220)},
+      {min:4.42, max:10.76, formula:(h)=>468.536  * Math.pow(h+2.063, 1.640)},
+    ]
+  },
+  '1018662': { // 청담대교 (2001-01-01 적용) — 잠수교·반포2교도 준용
+    name:'청담대교', source:'공공데이터포털 HQ곡선',
+    segments:[
+      {min:0.99, max:5.82, formula:(h)=>250.980 * Math.pow(Math.max(0,h-0.005), 2.0584)},
+    ]
+  },
+  '1018683': { // 한강대교 (2018-01-01 적용) — H-ADCP 실측 fw가 있어 검증용
+    name:'한강대교', source:'공공데이터포털 HQ곡선',
+    segments:[
+      {min:3.31, max:5.25,  formula:(h)=>320.809 * Math.pow(h+1.270, 1.926)},
+      {min:5.25, max:8.97,  formula:(h)=>854.144 * Math.pow(h+1.250, 1.406)},
+      {min:8.97, max:14.40, formula:(h)=>325.446 * Math.pow(h-1.500, 2.105)},
+    ]
+  },
+  '1019630': { // 행주대교 (2001-01-01 적용)
+    name:'행주대교', source:'공공데이터포털 HQ곡선',
+    segments:[
+      {min:1.03, max:10.20, formula:(h)=>633.35 * Math.pow(Math.max(0,h-1.025), 2.041)},
+    ]
+  },
+};
+// 잠수교·반포2교는 HQ 곡선 없음 → 청담대교 준용
+HQ_CURVES['1018680'] = {...HQ_CURVES['1018662'], name:'잠수교(청담대교 준용)', source:'청담대교 HQ 준용'};
+HQ_CURVES['1018681'] = {...HQ_CURVES['1018662'], name:'반포2교(청담대교 준용)', source:'청담대교 HQ 준용'};
+
+// HQ 곡선으로 유량(Q) 계산
+function calcQfromHQ(wl, stationCode){
+  const curve = HQ_CURVES[stationCode];
+  if(!curve || wl === null) return null;
+  const segs = curve.segments;
+  // 수위 범위 클램핑
+  const minWl = segs[0].min, maxWl = segs[segs.length-1].max;
+  const clampedWl = Math.max(minWl, Math.min(maxWl, wl));
+  // 해당 구간 찾기
+  for(const seg of segs){
+    if(clampedWl >= seg.min && clampedWl <= seg.max){
+      const Q = seg.formula(clampedWl);
+      return (Number.isFinite(Q) && Q >= 0) ? Number(Q.toFixed(1)) : null;
+    }
+  }
+  // 마지막 구간 적용
+  const lastSeg = segs[segs.length-1];
+  const Q = lastSeg.formula(clampedWl);
+  return (Number.isFinite(Q) && Q >= 0) ? Number(Q.toFixed(1)) : null;
+}
+
+// ── 관측소별 단면 정보 ────────────────────────────────────────
+// 출처: HRFCO 수문조사연보 문헌 기반 추정값 (하폭·하상고)
+// ※ 정확한 단면적은 HRFCO 협조 요청 필요
 const STATION_SECTIONS = {
   '1018640': {name:'광진교',   width:500, bedEl:-1.5, shape:0.65},
   '1018662': {name:'청담대교', width:560, bedEl:-1.8, shape:0.65},
   '1018680': {name:'잠수교',   width:530, bedEl:-1.5, shape:0.65},
   '1018681': {name:'반포2교',  width:520, bedEl:-1.4, shape:0.65},
-  '1018683': {name:'한강대교', width:490, bedEl:-1.5, shape:0.65}, // H-ADCP 실측 fw 있음
+  '1018683': {name:'한강대교', width:490, bedEl:-1.5, shape:0.65},
   '1019630': {name:'행주대교', width:430, bedEl:-1.2, shape:0.65},
 };
 
-// 유속 계산: fw(유량)와 수위(wl)로부터 참고 유속 산출
-// fw가 있으면 단면적 기반 계산, 없으면 null
+// ── 유속 계산 (우선순위) ─────────────────────────────────────
+// 1순위: fw 실측유량 ÷ 단면적
+// 2순위: HQ 곡선(공식) ÷ 단면적  ← 신규 추가
+// 3순위: 방류량 기반 추정 ÷ 단면적
 function calcVelocity(fw, wl, stationCode){
-  if(fw === null || fw === undefined) return null;
-  if(wl === null || wl === undefined) return null;
   const sec = STATION_SECTIONS[stationCode];
-  if(!sec) return null;
+  if(!sec || wl === null) return null;
   const depth = wl - sec.bedEl;
   if(depth <= 0.1) return null;
   const area = sec.width * depth * sec.shape;
-  const vel = fw / area;
-  if(!Number.isFinite(vel) || vel < 0 || vel > 10) return null;
-  return Number(vel.toFixed(2));
+
+  // 1순위: fw 실측
+  if(fw !== null && fw !== undefined){
+    const vel = fw / area;
+    if(Number.isFinite(vel) && vel >= 0 && vel <= 10)
+      return {vel: Number(vel.toFixed(2)), source:'fw실측', Q: Number(fw.toFixed(1))};
+  }
+
+  // 2순위: HQ 공식 곡선 (공공데이터포털)
+  const Q_hq = calcQfromHQ(wl, stationCode);
+  if(Q_hq !== null){
+    const vel = Q_hq / area;
+    if(Number.isFinite(vel) && vel >= 0 && vel <= 10){
+      const curve = HQ_CURVES[stationCode];
+      return {vel: Number(vel.toFixed(2)), source:`HQ곡선(${curve?.source||'공식'})`, Q: Q_hq};
+    }
+  }
+
+  return null;
 }
 
 // 유속 단계 판정 (수색 참고용)
@@ -563,10 +638,13 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
     } else if(water){ waterSource='observed_stale_noestimate'; }
   }
 
-  // ★ 유속 계산 (fw 실측 유량 + 수위 기반)
+  // ★ 유속 계산 (1순위: fw실측, 2순위: HQ곡선, 3순위: 방류량 추정)
   const fwVal = waterFlow ? waterFlow.value : null;
   const wlVal = water ? water.value : null;
-  const velocity = calcVelocity(fwVal, wlVal, b.code);
+  const velResult = calcVelocity(fwVal, wlVal, b.code); // {vel, source, Q} or null
+  const velocity = velResult ? velResult.vel : null;
+  const velSource = velResult ? velResult.source : null;
+  const velQ      = velResult ? velResult.Q : null;
   const velInfo = velocityLabel(velocity);
 
   const direction=directionLabel(b,wTrend,damImpact,tide,tideActive);
@@ -576,7 +654,7 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push(damMetric?.blank?'통제소 방류 응답 공백':'방류량 보정값 없음');
   notes.push(tideStatusNote);
   if(waterSource==='estimated') notes.push('⚠ 수위 실측값 없음 → 계산값(추정)으로 대체');
-  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo};
+  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ};
 }
 
 // ── 방향/속도 판정 ───────────────────────────────────────────
@@ -752,11 +830,11 @@ function renderDataFirstPanel(b=null,incidentState=null,currentState=null,q={}){
     <div class="data-card"><b>방류</b>${dataBadge(q.dam)}<div class="data-grid-mini"><span>투신</span><span>${fmtCorePoint(incidentState.damImpact,'cms')}</span><span>조회</span><span>${fmtCorePoint(currentState.damImpact,'cms')}</span></div></div>
     <div class="data-card"><b>조석</b>${dataBadge(q.tide)}<div class="data-grid-mini"><span>투신</span><span>${fmtTidePoint(b,incidentState.tide,incidentState.tideActive)}</span><span>조회</span><span>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</span></div></div>
     <div class="data-card" style="border-color:#bfdbfe">
-      <b>🌊 참고 유속</b><span class="data-badge ${incidentState.velocity!==null?'good':'hold'}">${incidentState.velocity!==null?'계산됨':'fw없음'}</span>
+      <b>🌊 참고 유속</b><span class="data-badge ${incidentState.velocity!==null?'good':'hold'}">${incidentState.velSource||'없음'}</span>
       <div class="data-grid-mini">
-        <span>투신</span><span>${incidentState.velocity!==null?`<strong>${incidentState.velocity.toFixed(2)}m/s</strong> ${incidentState.velInfo?.label||''}`:'자료 없음'}</span>
-        <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s</strong> ${currentState.velInfo?.label||''}`:'자료 없음'}</span>
-        <span>기준</span><span><small>fw÷단면적 · 추정치 포함</small></span>
+        <span>투신</span><span>${incidentState.velocity!==null?`<strong>${incidentState.velocity.toFixed(2)}m/s</strong> · ${incidentState.velInfo?.label||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
+        <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s</strong> · ${currentState.velInfo?.label||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
+        <span>출처</span><span><small>${incidentState.velSource||'fw·HQ 데이터 없음'} · 단면적 추정치 포함</small></span>
       </div>
     </div>`;
 }
@@ -773,8 +851,12 @@ function renderPointCompare(b,incidentState,currentState){
     ${row('조석 영향',fmtTidePoint(b,incidentState.tide,incidentState.tideActive),fmtTidePoint(b,currentState.tide,currentState.tideActive))}
     ${row('물 방향',incidentState.direction,currentState.direction)}
     ${row('참고 유속',
-      incidentState.velocity!==null ? `<strong>${incidentState.velocity.toFixed(2)}m/s</strong> (${(incidentState.velocity*3.6).toFixed(1)}km/h) · ${incidentState.velInfo?.label||''}` : 'fw 없음',
-      currentState.velocity!==null  ? `<strong>${currentState.velocity.toFixed(2)}m/s</strong> (${(currentState.velocity*3.6).toFixed(1)}km/h) · ${currentState.velInfo?.label||''}` : 'fw 없음'
+      incidentState.velocity!==null
+        ? `<strong>${incidentState.velocity.toFixed(2)}m/s</strong> (${(incidentState.velocity*3.6).toFixed(1)}km/h) · ${incidentState.velInfo?.label||''}<br><small style="color:#667085">${incidentState.velSource||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s</small>`
+        : '<span style="color:#b7791f">유속 계산 불가</span>',
+      currentState.velocity!==null
+        ? `<strong>${currentState.velocity.toFixed(2)}m/s</strong> (${(currentState.velocity*3.6).toFixed(1)}km/h) · ${currentState.velInfo?.label||''}<br><small style="color:#667085">${currentState.velSource||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s</small>`
+        : '<span style="color:#b7791f">유속 계산 불가</span>'
     )}
     ${row('물살 판단',incidentState.speed,currentState.speed)}
     <p class="muted">물 방향·물살은 유속 실측값이 아니라 수위변화·방류량·인천 조석·신곡수중보 실측 수위를 조합한 참고판정입니다.</p>`;
@@ -800,16 +882,20 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
     <div class="kv" style="background:#f0f7ff;border-radius:6px;padding:8px 10px">
       <b>🌊 투신시점 참고유속</b>
       <span>${incidentState.velocity!==null
-        ? `<strong style="font-size:18px">${incidentState.velocity.toFixed(2)} m/s</strong> (시속 ${(incidentState.velocity*3.6).toFixed(1)}km) · ${incidentState.velInfo?.note||''}`
-        : '<span style="color:#b7791f">fw 유량값 없음 — 유속 계산 불가</span>'
-      }<br><small class="muted">※ fw(유량)÷단면적 계산값 · 하상고·하폭 추정 포함 · HRFCO 협조 전 참고용</small></span>
+        ? `<strong style="font-size:22px">${incidentState.velocity.toFixed(2)} m/s</strong> · 시속 ${(incidentState.velocity*3.6).toFixed(1)}km · ${incidentState.velInfo?.label||''}`
+        : '<span style="color:#b7791f">유속 계산 불가</span>'
+      }<br>
+      ${incidentState.velocity!==null?`<small class="muted">출처: ${incidentState.velSource} · 유량 Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small>`:''}
+      </span>
     </div>
     <div class="kv" style="background:#f0f7ff;border-radius:6px;padding:8px 10px">
       <b>🌊 조회시점 참고유속</b>
       <span>${currentState.velocity!==null
-        ? `<strong style="font-size:18px">${currentState.velocity.toFixed(2)} m/s</strong> (시속 ${(currentState.velocity*3.6).toFixed(1)}km) · ${currentState.velInfo?.note||''}`
-        : '<span style="color:#b7791f">fw 유량값 없음 — 유속 계산 불가</span>'
-      }<br><small class="muted">※ fw(유량)÷단면적 계산값 · 하상고·하폭 추정 포함 · HRFCO 협조 전 참고용</small></span>
+        ? `<strong style="font-size:22px">${currentState.velocity.toFixed(2)} m/s</strong> · 시속 ${(currentState.velocity*3.6).toFixed(1)}km · ${currentState.velInfo?.label||''}`
+        : '<span style="color:#b7791f">유속 계산 불가</span>'
+      }<br>
+      ${currentState.velocity!==null?`<small class="muted">출처: ${currentState.velSource} · 유량 Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small>`:''}
+      </span>
     </div>
     <div class="kv"><b>현재 조석</b><span>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</span></div>
     <div class="kv"><b>근거</b><span>${decision?.parts?.join(' / ')||'-'}</span></div>`;
@@ -860,64 +946,98 @@ function renderReasonPanel(b,incidentState,currentState,q){
 function renderDriftEstimate(b, incidentState){
   const el=$('driftEstimate'); if(!el) return;
 
-  const vel = incidentState.velocity;
-  const tideActive = incidentState.tideActive;
-  const tidePhase = incidentState.tide?.phase || null;
-  const tideRate = incidentState.tide?.rateCmHr ?? null;
+  let vel = incidentState.velocity;           // makePointState에서 이미 계산됨
+  let velSource = incidentState.velSource || '';
 
+  // ── 유속이 없으면 방류량 기반 최후 fallback ───────────────────
+  // (fw실측, HQ곡선 모두 실패한 경우)
   if(vel === null){
-    el.innerHTML=`<div style="color:#b7791f;padding:10px">
-      ⚠ fw(유량) 데이터 없음 — 유속 계산 불가로 이동 추정을 수행할 수 없습니다.<br>
-      <small>HRFCO 수위관측소의 fw 필드값이 있어야 합니다.</small>
-    </div>`;
+    const dam = incidentState.damImpact?.value ?? null;
+    const wl  = incidentState.water?.value ?? null;
+    if(dam !== null && wl !== null){
+      const sec = STATION_SECTIONS[b.code];
+      if(sec){
+        const depth = wl - sec.bedEl;
+        if(depth > 0.1){
+          const area = sec.width * depth * sec.shape;
+          const estVel = dam / area;
+          if(Number.isFinite(estVel) && estVel > 0 && estVel < 10){
+            vel = Number(estVel.toFixed(2));
+            velSource = '방류량 추정(3순위·오차 큼)';
+          }
+        }
+      }
+    }
+  }
+
+  // ── 유속도 없고 방류량도 없는 경우 ───────────────────────────
+  if(vel === null){
+    el.innerHTML = `
+      <div style="background:#fff8eb;border:1px solid #f6ad55;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e">
+        <strong>⚠ 이동 경로 추정 불가</strong><br>
+        투신시점 수위관측소의 fw(유량) 데이터와 방류량 데이터가 모두 없어 유속을 계산할 수 없습니다.<br>
+        <small>원자료 로그에서 수위 데이터의 fw 필드 값을 확인하세요.</small>
+      </div>`;
     return;
   }
+
+  const tideActive = incidentState.tideActive;
+  const tidePhase  = incidentState.tide?.phase || null;
+  const tideRate   = incidentState.tide?.rateCmHr ?? null;
 
   const results = estimateDrift(b.bridge, vel, tideActive, tidePhase, tideRate, [30,60,120,360]);
 
   if(!results){
-    el.innerHTML=`<div style="color:#b7791f;padding:10px">⚠ 교량 위치 정보 없음</div>`;
+    el.innerHTML = `<div style="background:#fff8eb;border:1px solid #f6ad55;border-radius:8px;padding:12px;font-size:13px;color:#92400e">
+      ⚠ 교량 위치 정보 없음 — BRIDGE_GEO에 "${b.bridge}" 좌표가 등록되지 않았습니다.</div>`;
     return;
   }
 
   const isTideReverse = tideActive===true && tidePhase && tidePhase.includes('밀물');
-  const tideNote = isTideReverse
-    ? `<span style="color:#2563eb;font-weight:700">🌊 밀물 역류 성분 포함</span> — 하류 유속(${results[0].downstreamVel}m/s) - 역류성분(${results[0].upstreamVel}m/s) = 순 ${results[0].netVelMs}m/s`
-    : `<span style="color:#f97316">⬇ 하류 방향</span> — 유속 ${vel.toFixed(2)}m/s · 조석 역류 없음`;
+  const directionSummary = isTideReverse
+    ? `🌊 밀물 역류 포함 — 순유속 ${results[0].netVelMs}m/s (하류 ${results[0].downstreamVel} - 역류 ${results[0].upstreamVel})`
+    : `⬇ 하류 방향 — 유속 ${vel.toFixed(2)}m/s · 조석 역류 없음`;
+
+  const velBadge = velSource.includes('fw실측')
+    ? `<span style="background:#e7f8ef;color:#078a4f;font-size:11px;font-weight:800;padding:2px 7px;border-radius:4px;margin-left:6px">fw 실측</span>`
+    : velSource.includes('HQ')
+    ? `<span style="background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:800;padding:2px 7px;border-radius:4px;margin-left:6px">HQ 공식곡선</span>`
+    : `<span style="background:#fff4db;color:#b7791f;font-size:11px;font-weight:800;padding:2px 7px;border-radius:4px;margin-left:6px">방류량 추정</span>`;
 
   const rows = results.map(r => {
-    const dirIcon = r.direction.includes('하류') ? '⬇' : '⬆';
+    const dirIcon  = r.direction.includes('하류') ? '⬇' : '⬆';
     const dirColor = r.direction.includes('하류') ? '#f97316' : '#2563eb';
-    const nearby = r.nearbyBridges.map(b2=>`${b2.name}(±${b2.diff.toFixed(1)}km)`).join(', ');
-    const distLabel = Math.abs(r.distKm) < 0.1 ? '거의 이동 없음' : `${r.direction} ${Math.abs(r.distKm).toFixed(1)}km`;
-    return `<tr>
-      <td style="font-weight:800;font-size:15px;padding:10px 8px">${r.minutes}분 후</td>
-      <td style="color:${dirColor};font-weight:800">${dirIcon} ${distLabel}</td>
-      <td style="font-size:13px">${nearby || '교량 없음'}</td>
-      <td style="font-size:12px;color:#667085">
+    const distTxt  = Math.abs(r.distKm) < 0.05 ? '거의 정체' : `${r.direction} ${Math.abs(r.distKm).toFixed(1)}km`;
+    const nearby   = r.nearbyBridges.map(nb=>`${nb.name}(±${nb.diff.toFixed(1)}km)`).join(', ');
+    return `<tr style="border-bottom:1px solid #e5e7eb">
+      <td style="padding:10px 8px;font-weight:800;font-size:15px;white-space:nowrap">${r.minutes}분 후</td>
+      <td style="padding:10px 8px;color:${dirColor};font-weight:800;font-size:15px">${dirIcon} ${distTxt}</td>
+      <td style="padding:10px 8px;font-size:13px">${nearby||'—'}</td>
+      <td style="padding:10px 8px;font-size:12px;color:#667085">
         순유속 ${r.netVelMs}m/s<br>
-        하구 기준 ${r.estDistFromSea.toFixed(1)}km
+        하구 ${r.estDistFromSea.toFixed(1)}km
       </td>
     </tr>`;
   }).join('');
 
   const geo = BRIDGE_GEO[b.bridge];
-  const mapUrl = geo
-    ? `https://map.kakao.com/link/map/${b.bridge},${geo.lat},${geo.lng}`
-    : null;
+  const mapLink = geo
+    ? `<a href="https://map.kakao.com/link/map/${encodeURIComponent(b.bridge)},${geo.lat},${geo.lng}" target="_blank"
+         style="color:#0f62fe;font-size:13px;text-decoration:none">📍 투신 교량 카카오맵에서 보기</a>`
+    : '';
 
   el.innerHTML = `
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px">
-      <strong>투신시점 유속 기반 이동 추정</strong><br>
-      ${tideNote}<br>
-      <span style="color:#667085">기준 교량: ${b.bridge} · 투신시점 참고유속 ${vel.toFixed(2)}m/s (시속 ${(vel*3.6).toFixed(1)}km)</span>
+      <strong>기준 교량: ${b.bridge}</strong> · 투신시점 유속 <strong>${vel.toFixed(2)}m/s</strong>
+      (시속 ${(vel*3.6).toFixed(1)}km)${velBadge}<br>
+      ${directionSummary}
     </div>
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;min-width:360px">
         <thead>
-          <tr style="background:#f8faff;font-size:12px;color:#667085">
+          <tr style="background:#f0f4ff;font-size:12px;color:#667085">
             <th style="padding:8px;text-align:left">경과시간</th>
-            <th style="padding:8px;text-align:left">이동거리·방향</th>
+            <th style="padding:8px;text-align:left">이동 거리·방향</th>
             <th style="padding:8px;text-align:left">인근 교량 (참고)</th>
             <th style="padding:8px;text-align:left">상세</th>
           </tr>
@@ -925,15 +1045,14 @@ function renderDriftEstimate(b, incidentState){
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <div style="margin-top:10px;padding:10px;background:#fff8eb;border:1px solid #f6ad55;border-radius:8px;font-size:12px;color:#92400e">
-      <strong>⚠ 반드시 확인</strong><br>
-      • 이 추정은 단면 평균 유속 기반입니다. 실제 이동 거리는 ±30~50% 오차 가능<br>
-      • 와류, 강변 지형, 수중 장애물, 수심별 유속 차이는 반영되지 않습니다<br>
-      • 밀물 역류 성분은 인천 조위 변화율 기반 경험 추정값입니다<br>
-      • 수색 범위 결정은 이 결과를 참고하되 현장 판단과 전문가 지시를 우선하세요
+    <div style="margin-top:10px;padding:10px 14px;background:#fff8eb;border:1px solid #f6ad55;border-radius:8px;font-size:12px;color:#92400e;line-height:1.6">
+      <strong>⚠ 오차 범위 및 주의사항</strong><br>
+      • 실제 이동거리는 <strong>±30~50% 오차</strong> 가능 (단면 평균 유속 기반)<br>
+      • 와류·강변 지형·수중 장애물·수심별 유속 차이 미반영<br>
+      • 밀물 역류 성분은 인천 조위 변화율 기반 경험 추정값<br>
+      • <strong>수색 범위 결정은 이 결과를 참고하되 현장 판단과 전문가 지시 우선</strong>
     </div>
-    ${mapUrl ? `<div style="margin-top:8px"><a href="${mapUrl}" target="_blank" style="color:#0f62fe;font-size:13px">📍 투신 교량 위치 카카오맵에서 보기</a></div>` : ''}
-  `;
+    <div style="margin-top:8px">${mapLink}</div>`;
 }
 
 // ── 변화량 패널 ──────────────────────────────────────────────

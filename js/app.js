@@ -1409,14 +1409,14 @@ async function runQuery(){
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링
-  renderSummary(b,incidentState,currentState,decision,tideRows);
-  renderPointCompare(b,incidentState,currentState);
-  renderDataFirstPanel(b,incidentState,currentState,q);
-  renderDriftEstimate(b,incidentState);
-  renderDeltaPanel(incidentState,currentState);
-  renderReasonPanel(b,incidentState,currentState,q);
-  renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows);
-  renderModelInfo(b);
+  try{ renderSummary(b,incidentState,currentState,decision,tideRows); }catch(e){ log('[오류] renderSummary',e.message,e.stack?.split('\n')[1]); }
+  try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }
+  try{ renderDataFirstPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderDataFirstPanel',e.message); }
+  try{ renderDriftEstimate(b,incidentState); }catch(e){ log('[오류] renderDriftEstimate',e.message); }
+  try{ renderDeltaPanel(incidentState,currentState); }catch(e){ log('[오류] renderDeltaPanel',e.message); }
+  try{ renderReasonPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderReasonPanel',e.message); }
+  try{ renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows); }catch(e){ log('[오류] renderDataWarnings',e.message); }
+  try{ renderModelInfo(b); }catch(e){ log('[오류] renderModelInfo',e.message); }
 
   const waterKeys=waterMetric.key?[waterMetric.key]:WATER_KEYS;
   const damKeys=damMetric.key?[damMetric.key]:DAM_KEYS;

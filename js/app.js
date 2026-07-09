@@ -1147,10 +1147,14 @@ function rowsToPoints(rows,keys){ return rows.map(r=>({time:parseObsTime(r),valu
 function normalizePoints(points){ const vals=points.map(p=>p.value).filter(v=>v!=null);if(vals.length<2)return[];const min=Math.min(...vals),max=Math.max(...vals);return points.map(p=>({time:p.time,value:max===min?50:(p.value-min)/(max-min)*100,raw:p.value})); }
 function drawTimeMarker(ctx,x,padT,ch,padB,label,color){ ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,ch-padB);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.font='700 12px system-ui';ctx.textAlign='center';const safeX=Math.max(42,Math.min(ctx.canvas.clientWidth-42,x));ctx.fillText(label,safeX,padT-18);ctx.restore(); }
 function drawLine(canvas,data,key='value',label='',markers=[],range=null){
+  // ★ 모바일 대응: clientWidth가 0이면 RAF로 한 프레임 뒤에 재시도
+  if(!canvas.clientWidth || !canvas.clientHeight){
+    requestAnimationFrame(()=>drawLine(canvas,data,key,label,markers,range));
+    return;
+  }
   const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;
-  // ★ 모바일 대응: clientWidth가 0이면 부모 요소 또는 화면 너비로 fallback
-  const cw = canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth || 360;
-  const ch = canvas.clientHeight || 280;
+  const cw = canvas.clientWidth;
+  const ch = canvas.clientHeight;
   canvas.width=cw*ratio; canvas.height=ch*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
   ctx.clearRect(0,0,cw,ch);ctx.font='14px system-ui';ctx.fillStyle='#172033';ctx.fillText(label,14,24);
   let pts=data.filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
@@ -1229,10 +1233,14 @@ function drawLine(canvas,data,key='value',label='',markers=[],range=null){
   canvas.style.cursor='crosshair';
 }
 function drawMultiLine(canvas,series,label='',markers=[]){
+  // ★ 모바일 대응: clientWidth가 0이면 RAF로 한 프레임 뒤에 재시도
+  if(!canvas.clientWidth || !canvas.clientHeight){
+    requestAnimationFrame(()=>drawMultiLine(canvas,series,label,markers));
+    return;
+  }
   const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;
-  // ★ 모바일 대응: clientWidth가 0이면 부모 또는 화면 너비로 fallback
-  const cw = canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth || 360;
-  const ch = canvas.clientHeight || 500;
+  const cw = canvas.clientWidth;
+  const ch = canvas.clientHeight;
   canvas.width=cw*ratio; canvas.height=ch*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
   ctx.clearRect(0,0,cw,ch);
   const all=series.flatMap(s=>s.points).filter(p=>p.time&&p.value!=null);

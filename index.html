@@ -143,7 +143,7 @@
     <p class="muted">그래프는 선택 교량의 대표 수위관측소 기준입니다. 수위(m)는 수심이 아니라 관측소 기준값입니다.<br>
     <span class="legend-dot" style="background:#0f62fe"></span> 파란 점선 = 투신시점 &nbsp;
     <span class="legend-dot" style="background:#c53030"></span> 빨간 점선 = 조회시점</p>
-    <div id="waterChart" style="width:100%;height:320px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;padding:8px;box-sizing:border-box"><canvas id="waterChartCanvas"></canvas></div>
+    <div id="waterChart" style="width:100%;min-height:280px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden"></div>
     <div id="waterChartNote" class="muted"></div>
   </section>
 
@@ -151,7 +151,7 @@
   <section class="card">
     <h2>방류량 변화</h2>
     <div id="damStatBar" class="dam-stat-bar"></div>
-    <div id="damChart" style="width:100%;height:320px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;padding:8px;box-sizing:border-box"><canvas id="damChartCanvas"></canvas></div>
+    <div id="damChart" style="width:100%;min-height:280px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden"></div>
     <div id="damChartNote" class="muted"></div>
   </section>
 
@@ -160,7 +160,7 @@
     <h2>조석 검증</h2>
     <div id="tideSummary"></div>
     <div id="tideNextTurn" class="tide-next-turn"></div>
-    <div id="tideChart" style="width:100%;height:320px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;padding:8px;box-sizing:border-box"><canvas id="tideChartCanvas"></canvas></div>
+    <div id="tideChart" style="width:100%;min-height:280px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden"></div>
     <div id="tideChartNote" class="muted"></div>
   </section>
 
@@ -177,7 +177,7 @@
     </button>
     <div id="combinedSection" class="collapsible-section" style="display:none">
       <p class="muted" style="margin-top:8px">투신시점부터 조회시점까지의 흐름을 한 화면에 비교합니다. 각 지표는 서로 단위가 달라 0~100 정규화값으로 표시합니다.</p>
-      <div id="combinedChart" style="width:100%;height:480px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;padding:8px;box-sizing:border-box"><canvas id="combinedChartCanvas"></canvas></div>
+      <div id="combinedChart" style="width:100%;min-height:440px;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden"></div>
       <div id="combinedChartNote" class="muted"></div>
     </div>
   </section>
@@ -193,6 +193,6 @@
   </section>
 </main>
 
-<script src="js/app.js?v=20260710-svg-v3" defer></script>
+<script src="js/app.js?v=20260710-svg-v4" defer></script>
 </body>
 </html>

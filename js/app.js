@@ -1151,13 +1151,15 @@ function _hhmm(d){ return `${String(d.getHours()).padStart(2,'0')}:${String(d.ge
 function drawLine(chartId, data, key, label, markers, range){
   label = label||''; markers = markers||[]; range = range||null;
   
-  // ID로 컨테이너 찾기 (div 또는 canvas의 부모)
+  // ID로 컨테이너 찾기
   let el = document.getElementById(chartId);
-  if(!el) return;
+  log('[그래프]', chartId, 'el='+!!el, 'data='+(data&&data.length), 'key='+key);
+  if(!el){ log('[그래프 오류]', chartId, '엘리먼트 없음'); return; }
   if(el.tagName==='CANVAS') el = el.parentElement||el;
 
   // 데이터 필터링
   let pts = (data||[]).filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
+  log('[그래프 pts]', chartId, 'pts='+pts.length);
   if(range&&range.start&&range.end){
     pts = pts.filter(p=>p.time.getTime()>=range.start.getTime()&&p.time.getTime()<=range.end.getTime());
   }

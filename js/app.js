@@ -1145,169 +1145,153 @@ function renderQuality(q={}){
 // ── 그래프 ──────────────────────────────────────────────────
 function rowsToPoints(rows,keys){ return rows.map(r=>({time:parseObsTime(r),value:val(r,keys)})).filter(p=>p.time&&p.value!=null); }
 function normalizePoints(points){ const vals=points.map(p=>p.value).filter(v=>v!=null);if(vals.length<2)return[];const min=Math.min(...vals),max=Math.max(...vals);return points.map(p=>({time:p.time,value:max===min?50:(p.value-min)/(max-min)*100,raw:p.value})); }
-// ── 순수 SVG 그래프 (외부 라이브러리 없음, 모바일 완벽 호환) ──────
+// ── 그래프 (SVG 인라인, 외부 의존 없음) ─────────────────────────
 function _hhmm(d){ return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-function _fmtAxisT(ts, spanDays){
-  const d=new Date(ts);
-  const h=_hhmm(d);
-  return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${h}`:h;
-}
-function _getContainer(idOrEl){
-  if(typeof idOrEl==='string') return document.getElementById(idOrEl);
-  if(idOrEl && idOrEl.tagName==='CANVAS') return idOrEl.parentElement||idOrEl;
-  return idOrEl;
-}
 
-function drawLine(idOrEl, data, key='value', label='', markers=[], range=null){
-  const container = _getContainer(idOrEl);
-  if(!container) return;
+function drawLine(chartId, data, key, label, markers, range){
+  label = label||''; markers = markers||[]; range = range||null;
+  
+  // ID로 컨테이너 찾기 (div 또는 canvas의 부모)
+  let el = document.getElementById(chartId);
+  if(!el) return;
+  if(el.tagName==='CANVAS') el = el.parentElement||el;
 
+  // 데이터 필터링
   let pts = (data||[]).filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
   if(range&&range.start&&range.end){
-    const rs=range.start.getTime(),re=range.end.getTime();
-    pts=pts.filter(p=>p.time.getTime()>=rs&&p.time.getTime()<=re);
+    pts = pts.filter(p=>p.time.getTime()>=range.start.getTime()&&p.time.getTime()<=range.end.getTime());
   }
 
-  const W=100, H=70; // viewBox 단위 (%)
-  const PL=12,PR=4,PT=10,PB=8; // 패딩 %
-
   if(pts.length<2){
-    container.innerHTML=`<div style="padding:16px 12px;color:#667085;font-size:13px;font-weight:600">${label}<br><span style="font-weight:400">데이터 부족</span></div>`;
+    el.innerHTML = `<p style="padding:16px;color:#667085;font-size:13px">${label} — 데이터 부족</p>`;
+    el.style = 'background:#fff;border:1px solid #e6e8ef;border-radius:12px;min-height:120px';
     return;
   }
 
-  const xs=pts.map(p=>p.time.getTime());
-  const ys=pts.map(p=>p[key]);
-  const minX=range&&range.start?range.start.getTime():Math.min(...xs);
-  const maxX=range&&range.end?range.end.getTime():Math.max(...xs);
-  const minY=Math.min(...ys), maxY=Math.max(...ys);
-  const spanX=maxX-minX||1, spanY=maxY-minY||1;
-  const spanDays=spanX/86400000;
+  const xs = pts.map(p=>p.time.getTime());
+  const ys = pts.map(p=>p[key]);
+  const minX = range&&range.start ? range.start.getTime() : Math.min(...xs);
+  const maxX = range&&range.end   ? range.end.getTime()   : Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = maxX-minX||1, spanY = maxY-minY||1;
+  const spanDays = spanX/86400000;
 
-  const gL=PL,gR=W-PR,gT=PT,gB=H-PB;
-  const gW=gR-gL,gH=gB-gT;
+  // SVG 좌표계: 1000x320 기준
+  const W=1000, H=320, PL=90, PR=20, PT=50, PB=45;
+  const gW=W-PL-PR, gH=H-PT-PB;
+  const sx = x => PL+(x-minX)/spanX*gW;
+  const sy = y => PT+(1-(y-minY)/spanY)*gH;
 
-  const sx=x=>gL+(x-minX)/spanX*gW;
-  const sy=y=>gT+(1-(y-minY)/spanY)*gH;
+  const fmtT = ts => {
+    const d=new Date(ts);
+    const hm=_hhmm(d);
+    return spanDays>=1 ? `${d.getMonth()+1}/${d.getDate()} ${hm}` : hm;
+  };
 
-  // Y축 눈금 5개
-  let gridSvg='', yLabelSvg='';
+  // Y 눈금
+  let gridY='', labY='';
   for(let i=0;i<=4;i++){
-    const yp=gT+i*gH/4;
-    const v=maxY-(spanY)*i/4;
-    gridSvg+=`<line x1="${gL}" y1="${yp.toFixed(2)}" x2="${gR}" y2="${yp.toFixed(2)}" stroke="#e5e7eb" stroke-width="0.3"/>`;
-    yLabelSvg+=`<text x="${gL-0.5}" y="${(yp+0.8).toFixed(2)}" text-anchor="end" font-size="2.5" fill="#8a95a8">${v.toFixed(1)}</text>`;
+    const yp=PT+i*gH/4;
+    const v=maxY-spanY*i/4;
+    gridY+=`<line x1="${PL}" y1="${yp}" x2="${W-PR}" y2="${yp}" stroke="#e5e7eb" stroke-width="1"/>`;
+    labY+=`<text x="${PL-6}" y="${yp+4}" text-anchor="end" font-size="18" fill="#8a95a8">${v.toFixed(2)}</text>`;
   }
 
-  // X축 눈금 4개
-  let xLabelSvg='';
-  for(let i=0;i<=3;i++){
-    const tx=minX+spanX*i/3;
-    const xp=sx(tx);
-    const safe=Math.max(gL+2,Math.min(gR-2,xp));
-    xLabelSvg+=`<text x="${safe.toFixed(2)}" y="${(H-1).toFixed(2)}" text-anchor="middle" font-size="2.3" fill="#8a95a8">${_fmtAxisT(tx,spanDays)}</text>`;
+  // X 눈금
+  let labX='';
+  for(let i=0;i<=4;i++){
+    const tx=minX+spanX*i/4;
+    const xp=Math.max(PL+20,Math.min(W-PR-20,sx(tx)));
+    labX+=`<text x="${xp}" y="${H-8}" text-anchor="middle" font-size="18" fill="#8a95a8">${fmtT(tx)}</text>`;
   }
 
-  // 데이터 라인
-  const pathD=pts.map((p,i)=>{
-    const x=sx(p.time.getTime()).toFixed(2);
-    const y=sy(p[key]).toFixed(2);
-    return `${i===0?'M':'L'}${x},${y}`;
-  }).join(' ');
-
-  const last=pts[pts.length-1];
-  const lx=sx(last.time.getTime()).toFixed(2);
-  const ly=sy(last[key]).toFixed(2);
-
-  // 마커 점선
-  let markerSvg='';
-  markers.filter(m=>m&&m.time).forEach(m=>{
+  // 마커
+  let mkSvg='';
+  (markers||[]).filter(m=>m&&m.time).forEach(m=>{
     const tx=m.time.getTime();
     if(tx<minX||tx>maxX) return;
-    const mx=sx(tx).toFixed(2);
-    const safeX=Math.max(gL+1,Math.min(gR-1,sx(tx)));
-    markerSvg+=`<line x1="${mx}" y1="${gT}" x2="${mx}" y2="${gB}" stroke="${m.color||'#c53030'}" stroke-width="0.5" stroke-dasharray="1.5,1"/>`;
-    markerSvg+=`<text x="${safeX.toFixed(2)}" y="${(gT-1).toFixed(2)}" text-anchor="middle" font-size="2.5" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''}</text>`;
+    const mx=sx(tx);
+    const safeX=Math.max(PL+30,Math.min(W-PR-30,mx));
+    mkSvg+=`<line x1="${mx}" y1="${PT}" x2="${mx}" y2="${PT+gH}" stroke="${m.color||'#c53030'}" stroke-width="2" stroke-dasharray="8,6"/>`;
+    mkSvg+=`<text x="${safeX}" y="${PT-10}" text-anchor="middle" font-size="20" font-weight="bold" fill="${m.color||'#c53030'}">${m.label||''}</text>`;
   });
 
-  container.innerHTML=`<div style="width:100%;padding:0">
-    <div style="font-size:12px;font-weight:700;color:#172033;padding:8px 12px 4px">${label}</div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
-      ${gridSvg}${yLabelSvg}${xLabelSvg}${markerSvg}
-      <path d="${pathD}" fill="none" stroke="#0f62fe" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${lx}" cy="${ly}" r="1.2" fill="#0f62fe"/>
-    </svg>
-  </div>`;
-  container.style.cssText='width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
+  // 라인
+  const pathD = pts.map((p,i)=>`${i===0?'M':'L'}${sx(p.time.getTime()).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ');
+  const last = pts[pts.length-1];
+
+  el.innerHTML = `
+    <div style="padding:8px 12px 0;font-size:13px;font-weight:700;color:#172033">${label}</div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+      ${gridY}${labY}${labX}${mkSvg}
+      <path d="${pathD}" fill="none" stroke="#0f62fe" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${sx(last.time.getTime()).toFixed(1)}" cy="${sy(last[key]).toFixed(1)}" r="6" fill="#0f62fe"/>
+    </svg>`;
+  el.style.cssText = 'width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
 }
 
-function drawMultiLine(idOrEl, series, label='', markers=[]){
-  const container = _getContainer(idOrEl);
-  if(!container) return;
+function drawMultiLine(chartId, series, label, markers){
+  label = label||''; markers = markers||[];
+  let el = document.getElementById(chartId);
+  if(!el) return;
+  if(el.tagName==='CANVAS') el = el.parentElement||el;
 
   const colors=['#0f62fe','#b7791f','#078a4f'];
   const names=['수위(m)','방류량(㎥/s)','조석(cm)'];
   const srcs=['교량 관측소','팔당댐+보정','인천+보정'];
 
-  const validSeries=series.filter(s=>s.points&&s.points.filter(p=>p.time&&p.value!=null).length>=2);
-  if(!validSeries.length){
-    container.innerHTML=`<div style="padding:16px;color:#667085;font-size:13px">통합 그래프 데이터 부족</div>`;
+  const valid = (series||[]).filter(s=>(s.points||[]).filter(p=>p.time&&p.value!=null).length>=2);
+  if(!valid.length){
+    el.innerHTML='<p style="padding:16px;color:#667085;font-size:13px">통합 그래프 데이터 부족</p>';
+    el.style='background:#fff;border:1px solid #e6e8ef;border-radius:12px;min-height:100px';
     return;
   }
 
-  const W=100, SLOT=22; // 각 시리즈 슬롯 높이
-  const H=validSeries.length*SLOT+16;
-  const PL=12,PR=4;
-
-  let svgBody='';
-  // 제목
-  svgBody+=`<text x="2" y="5" font-size="3" font-weight="700" fill="#172033">${label}</text>`;
-  markers.forEach((m,i)=>{
-    svgBody+=`<text x="${2+i*40}" y="9.5" font-size="2.5" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''} ${m.time?_hhmm(m.time):''}</text>`;
+  const W=1000, SLOT=200, PT=80, PL=80, PR=20;
+  const H=valid.length*SLOT+PT+30;
+  let svg='';
+  svg+=`<text x="10" y="28" font-size="20" font-weight="bold" fill="#172033">${label}</text>`;
+  (markers||[]).forEach((m,i)=>{
+    svg+=`<text x="${10+i*300}" y="55" font-size="18" font-weight="bold" fill="${m.color||'#c53030'}">${m.label||''} ${m.time?_hhmm(m.time):''}</text>`;
   });
 
-  let vIdx=0;
-  series.forEach((s,si)=>{
+  let vi=0;
+  (series||[]).forEach((s,si)=>{
     const pts=(s.points||[]).filter(p=>p.time&&p.value!=null).sort((a,b)=>a.time-b.time);
-    if(pts.length<2){vIdx++;return;}
+    if(pts.length<2){vi++;return;}
     const color=colors[si%colors.length];
-    const slotTop=12+vIdx*SLOT;
-    const slotBot=slotTop+SLOT-2;
-    const gH=slotBot-slotTop, gW=W-PL-PR;
+    const sTop=PT+vi*SLOT, gH=SLOT-20, gW=W-PL-PR;
     const xs=pts.map(p=>p.time.getTime());
     const ys=pts.map(p=>p.value);
     const minX=Math.min(...xs),maxX=Math.max(...xs)||minX+1;
     const minY=Math.min(...ys),maxY=Math.max(...ys)||minY+1;
     const sx2=x=>PL+(x-minX)/(maxX-minX)*gW;
-    const sy2=y=>slotTop+(1-(y-minY)/(maxY-minY))*gH;
-    const spanDays2=(maxX-minX)/86400000;
+    const sy2=y=>sTop+(1-(y-minY)/(maxY-minY))*gH;
+    const spanDays=(maxX-minX)/86400000;
+    const fmtT2=ts=>{const d=new Date(ts);const hm=_hhmm(d);return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;};
 
-    svgBody+=`<line x1="${PL}" y1="${slotTop}" x2="${W-PR}" y2="${slotTop}" stroke="#e0e4ee" stroke-width="0.3"/>`;
-    svgBody+=`<text x="2" y="${(slotTop+4).toFixed(1)}" font-size="2.5" font-weight="700" fill="${color}">${names[si]||s.name}</text>`;
-    svgBody+=`<text x="2" y="${(slotTop+7.5).toFixed(1)}" font-size="2" fill="#8a95a8">${srcs[si]||''}</text>`;
-    svgBody+=`<text x="${(PL-0.5).toFixed(1)}" y="${(slotTop+3).toFixed(1)}" text-anchor="end" font-size="2.3" fill="${color}">${maxY.toFixed(1)}</text>`;
-    svgBody+=`<text x="${(PL-0.5).toFixed(1)}" y="${(slotBot-0.5).toFixed(1)}" text-anchor="end" font-size="2.3" fill="${color}">${minY.toFixed(1)}</text>`;
+    svg+=`<line x1="${PL}" y1="${sTop}" x2="${W-PR}" y2="${sTop}" stroke="#e0e4ee" stroke-width="1"/>`;
+    svg+=`<text x="8" y="${sTop+24}" font-size="20" font-weight="bold" fill="${color}">${names[si]||s.name}</text>`;
+    svg+=`<text x="8" y="${sTop+44}" font-size="16" fill="#8a95a8">${srcs[si]||''}</text>`;
+    svg+=`<text x="${PL-6}" y="${sTop+16}" text-anchor="end" font-size="16" fill="${color}">${maxY.toFixed(1)}</text>`;
+    svg+=`<text x="${PL-6}" y="${sTop+gH}" text-anchor="end" font-size="16" fill="${color}">${minY.toFixed(1)}</text>`;
 
-    markers.filter(m=>m&&m.time).forEach(m=>{
+    (markers||[]).filter(m=>m&&m.time).forEach(m=>{
       const tx=m.time.getTime();
       if(tx<minX||tx>maxX)return;
-      const mx=sx2(tx).toFixed(2);
-      svgBody+=`<line x1="${mx}" y1="${slotTop}" x2="${mx}" y2="${slotBot}" stroke="${m.color||'#c53030'}" stroke-width="0.4" stroke-dasharray="1.5,1"/>`;
+      const mx=sx2(tx);
+      svg+=`<line x1="${mx.toFixed(1)}" y1="${sTop}" x2="${mx.toFixed(1)}" y2="${sTop+gH}" stroke="${m.color||'#c53030'}" stroke-width="2" stroke-dasharray="6,4"/>`;
     });
 
-    const pathD2=pts.map((p,i)=>`${i===0?'M':'L'}${sx2(p.time.getTime()).toFixed(2)},${sy2(p.value).toFixed(2)}`).join(' ');
-    svgBody+=`<path d="${pathD2}" fill="none" stroke="${color}" stroke-width="0.7" stroke-linejoin="round"/>`;
-
-    // X축 라벨 (시작/끝)
-    svgBody+=`<text x="${PL}" y="${(slotBot+3).toFixed(1)}" font-size="2" fill="#8a95a8">${_fmtAxisT(minX,spanDays2)}</text>`;
-    svgBody+=`<text x="${(W-PR).toFixed(1)}" y="${(slotBot+3).toFixed(1)}" text-anchor="end" font-size="2" fill="#8a95a8">${_fmtAxisT(maxX,spanDays2)}</text>`;
-    vIdx++;
+    const pathD=pts.map((p,i)=>`${i===0?'M':'L'}${sx2(p.time.getTime()).toFixed(1)},${sy2(p.value).toFixed(1)}`).join(' ');
+    svg+=`<path d="${pathD}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>`;
+    svg+=`<text x="${PL}" y="${sTop+gH+18}" font-size="16" fill="#8a95a8">${fmtT2(minX)}</text>`;
+    svg+=`<text x="${W-PR}" y="${sTop+gH+18}" text-anchor="end" font-size="16" fill="#8a95a8">${fmtT2(maxX)}</text>`;
+    vi++;
   });
 
-  container.innerHTML=`<div style="width:100%;padding:0">
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${svgBody}</svg>
-  </div>`;
-  container.style.cssText='width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
+  el.innerHTML=`<div style="padding:8px 12px 0"><svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${svg}</svg></div>`;
+  el.style.cssText='width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
 }
 
 

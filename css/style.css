@@ -133,8 +133,8 @@ button.small{padding:9px 11px;min-width:54px}
 
 /* ── 캔버스 ── */
 canvas{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;display:block}
-.card canvas#combinedChart{min-height:500px}
-.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:360px}
+.card canvas#combinedChart{min-height:500px;height:500px;display:block;width:100%}
+.card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:360px;height:360px;display:block;width:100%}
 #combinedChartNote,#waterChartNote,#damChartNote,#tideChartNote{font-size:13px;line-height:1.5;margin-top:8px}
 
 /* ── 원자료 로그 ── */
@@ -159,8 +159,8 @@ pre{white-space:pre-wrap;word-break:break-all;background:#0b1020;color:#d8e1ff;b
   .data-panel{grid-template-columns:1fr}
   .delta-grid{grid-template-columns:1fr}
   .reason-grid{grid-template-columns:1fr}
-  canvas{min-height:240px}
-  .card canvas#combinedChart{min-height:430px}
-  .card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px}
+  canvas{min-height:240px;height:240px;display:block;width:100%}
+  .card canvas#combinedChart{min-height:430px;height:430px;display:block;width:100%}
+  .card canvas#waterChart,.card canvas#damChart,.card canvas#tideChart{min-height:320px;height:320px;display:block;width:100%}
   .delta-value{font-size:24px}
 }

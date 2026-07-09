@@ -150,7 +150,13 @@ function maskSecrets(s){
 // ── 상수 ──────────────────────────────────────────────────────
 const DAM_CODE = '1017310';               // 팔당댐
 const SINGOK_BO_CODE = '2022510';         // 신곡수중보 (확인됨 2026-07-01)
-const SINGOK_TIDE_THRESHOLD = 2.4;        // 신곡수중보 마루高 기준 (m), 이 이상이면 조석 전파
+// 신곡수중보 조석 판단 기준 (swl/owl 수위차 기반)
+// owl(하류수위) - swl(상류수위) > 기준값이면 역류(조석 영향)
+// owl > swl: 하류(바다쪽)가 높다 → 역류 발생 → 조석 영향 있음
+// owl < swl: 상류가 높다 → 정상 하류 흐름 → 조석 영향 미미
+const SINGOK_REVERSE_THRESHOLD = 0.0;    // owl - swl > 0: 역류 발생 (강한 영향)
+const SINGOK_WEAK_THRESHOLD    = -0.3;   // owl - swl > -0.3: 역류 가능성 (약한 영향)
+// owl - swl <= -0.3: 정상 하류 흐름 (영향 미미)
 const TIDE_STATION = 'DT_0001';           // 인천 조위관측소
 const MAX_NEAREST_MIN = 40;
 
@@ -161,7 +167,8 @@ const DAM_FIXED_KEY = 'tototf';
 const WATER_KEYS = ['wl','WL','obswl','OBSWL','obsWl','obs_wl','wlevel','WLEVEL','waterLevel','WaterLevel','waterlevel','WATERLEVEL','swl','SWL','wlobs','WLOBS','wlv','WLV','rfwl','RFWL','fw','FW'];
 const DAM_KEYS = ['tototf','TOTOTF','totOutflow','totalOutflow','tot_outflow','otf','OTF','edq','EDQ','outflow','OUTFLOW','discharge','DISCHARGE','fw','FW','tdsrf','TDSRF','flow','FLOW','q','Q'];
 const TIDE_KEYS = ['tdlvHgt','tdlv_hgt','tideHeight','tideHgt','tide_hgt','tideLevel','tide_level','tphLevel','tph_level','level','obsLevel','obs_level','wl','value','fcstValue'];
-const SINGOK_KEYS = ['swl','SWL']; // 신곡수중보 상류수위
+const SINGOK_KEYS     = ['swl','SWL']; // 신곡수중보 상류수위
+const SINGOK_OWL_KEYS = ['owl','OWL']; // 신곡수중보 하류수위
 
 // ── 신곡수중보 조석 전파 상태 (전역) ──────────────────────────
 // {status:'active'|'blocked'|'unknown', swl:number|null, time:Date|null, checkedAt:Date}
@@ -408,23 +415,41 @@ function tideNumber(date, tideRows){
 }
 
 // ── 신곡수중보 조석 전파 판단 ──────────────────────────────────
-function isTideActiveAt(singokSwl){
-  if(singokSwl === null || singokSwl === undefined) return null; // 알 수 없음
-  return singokSwl >= SINGOK_TIDE_THRESHOLD;
+// ── 신곡수중보 조석 영향 판단 (owl-swl 수위차 기반) ────────────────
+// owl(하류) - swl(상류) 수위차로 역류 강도를 판단
+// 수위차 > 0    : 하류가 높음 → 역류 발생 중 → 조석 강한 영향
+// 수위차 > -0.3 : 역류 가능성 → 조석 약한 영향
+// 수위차 ≤ -0.3 : 정상 하류 흐름 → 조석 영향 미미
+function singokTideLevel(swl, owl){
+  if(swl===null || owl===null) return null; // 데이터 없음
+  const diff = owl - swl; // 양수 = 역류, 음수 = 정상흐름
+  if(diff > SINGOK_REVERSE_THRESHOLD)  return 'strong';  // 역류 발생
+  if(diff > SINGOK_WEAK_THRESHOLD)     return 'weak';    // 역류 가능성
+  return 'none';                                          // 정상 하류
 }
-function singokStatusLabel(swl){
-  const active = isTideActiveAt(swl);
-  if(active === null) return { text:'신곡수중보 수위 조회 실패 — 조석 전파 여부 판단 불가', cls:'warn', icon:'⚠' };
-  if(active) return { text:`신곡수중보 상류수위 ${swl.toFixed(2)}m ≥ ${SINGOK_TIDE_THRESHOLD}m → 조석 전파 중`, cls:'ok', icon:'🌊' };
-  return { text:`신곡수중보 상류수위 ${swl.toFixed(2)}m < ${SINGOK_TIDE_THRESHOLD}m → 조석 차단`, cls:'hold', icon:'⛔' };
+
+function singokStatusLabel(swl, owl){
+  const level = singokTideLevel(swl, owl);
+  const diff = (swl!==null && owl!==null) ? (owl-swl).toFixed(2) : null;
+  const swlTxt = swl!==null ? swl.toFixed(2)+'m' : '?';
+  const owlTxt = owl!==null ? owl.toFixed(2)+'m' : '?';
+  const diffTxt = diff!==null ? `(owl-swl=${diff}m)` : '';
+  if(level===null)    return { text:`신곡수중보 수위 조회 실패 — 조석 영향 판단 불가`, cls:'warn', icon:'⚠', level:'unknown' };
+  if(level==='strong') return { text:`신곡수중보 역류 발생 🌊 owl ${owlTxt} > swl ${swlTxt} ${diffTxt} → 조석 강한 영향`, cls:'ok', icon:'🌊', level };
+  if(level==='weak')   return { text:`신곡수중보 역류 가능성 owl ${owlTxt} ≈ swl ${swlTxt} ${diffTxt} → 조석 약한 영향`, cls:'warn', icon:'〜', level };
+  return { text:`신곡수중보 정상 하류 흐름 swl ${swlTxt} > owl ${owlTxt} ${diffTxt} → 조석 영향 미미`, cls:'hold', icon:'⬇', level };
 }
-// 해당 교량에 실제 조석이 영향을 주는지 (신곡수중보 실측 반영)
-function bridgeTideActive(b, singokSwl){
-  if(!b.tide) return false; // 잠실수중보 상류: 항상 제외
+
+// 교량별 실질 조석 영향 여부
+// 잠실수중보 상류는 항상 제외, 하류는 owl-swl 수위차로 판단
+function bridgeTideActive(b, singokSwl, singokOwl){
+  if(!b.tide) return false;        // 잠실수중보 상류: 항상 제외
   if(!b.tideRealtime) return false;
-  const active = isTideActiveAt(singokSwl);
-  if(active === null) return null; // 알 수 없음 → null 반환
-  return active;
+  const level = singokTideLevel(singokSwl, singokOwl);
+  if(level === null) return null;  // 데이터 없음 → 판단 불가
+  if(level === 'strong') return true;   // 역류 발생 → 조석 영향 있음
+  if(level === 'weak')   return 'weak'; // 역류 가능성 → 약한 영향
+  return false;                         // 정상 하류 → 영향 미미
 }
 
 // ── 날짜/시간 유틸 ────────────────────────────────────────────
@@ -605,7 +630,7 @@ function estimateWaterLevel(waterRows,waterKeys,time,tide,damImpact,damRows,damK
 }
 
 // ── makePointState ────────────────────────────────────────────
-function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtTime){
+function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtTime,singokOwlAtTime){
   const waterKeys=waterMetric?.key?[waterMetric.key]:WATER_KEYS;
   const damKeys=damMetric?.key?[damMetric.key]:DAM_KEYS;
   let water=nearest(waterRows,time,waterKeys);
@@ -614,17 +639,28 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const damImpactTime=new Date(time.getTime()-(b.releaseLag||0)*60000);
   const damImpact=nearest(damRows,damImpactTime,damKeys,90);
 
-  // 조석: 신곡수중보 실시간 판단
-  const tideActive=bridgeTideActive(b,singokSwlAtTime);
+  // ── 조석: owl-swl 수위차 기반 실시간 판단 ──────────────────────
+  const tideActive=bridgeTideActive(b, singokSwlAtTime, singokOwlAtTime);
+  const tideLevel = singokTideLevel(singokSwlAtTime, singokOwlAtTime);
+  const singokDiff = (singokSwlAtTime!==null && singokOwlAtTime!==null)
+    ? (singokOwlAtTime - singokSwlAtTime).toFixed(2) : null;
   let tide=null;
-  if(tideActive===true && tideRows.length){
+  // 강한 영향 또는 약한 영향이면 조석 데이터 적용
+  if((tideActive===true || tideActive==='weak') && tideRows.length){
     tide=tideAt(tideRows,time,b.offset||0);
   }
-  const tideStatusNote = b.tide
-    ? (tideActive===null?'신곡수중보 수위 조회 실패 → 조석 전파 여부 판단 불가'
-      :tideActive?`신곡수중보 swl ${singokSwlAtTime?.toFixed(2)}m ≥ ${SINGOK_TIDE_THRESHOLD}m → 조석 전파 중`
-      :`신곡수중보 swl ${singokSwlAtTime?.toFixed(2)}m < ${SINGOK_TIDE_THRESHOLD}m → 조석 차단`)
-    : '잠실수중보 상류: 조석 적용 제외';
+  let tideStatusNote;
+  if(!b.tide){
+    tideStatusNote = '잠실수중보 상류: 조석 적용 제외';
+  } else if(tideActive===null){
+    tideStatusNote = '신곡수중보 수위 조회 실패 → 조석 영향 판단 불가';
+  } else if(tideActive===true){
+    tideStatusNote = `🌊 신곡수중보 역류 중 (owl-swl=${singokDiff}m) → 조석 강한 영향`;
+  } else if(tideActive==='weak'){
+    tideStatusNote = `〜 신곡수중보 역류 가능 (owl-swl=${singokDiff}m) → 조석 약한 영향`;
+  } else {
+    tideStatusNote = `⬇ 신곡수중보 정상 하류 흐름 (owl-swl=${singokDiff}m) → 조석 영향 미미`;
+  }
 
   // 수위 우선순위
   let waterSource='none';
@@ -1322,18 +1358,32 @@ async function runQuery(){
   // ① 신곡수중보 수위 조회 (조석 판단 핵심)
   try{
     singokRows=await getSingokBoData(key,start,end);
-    const singokAtSearch=nearest(singokRows,search,SINGOK_KEYS,60);
-    const singokAtIncident=nearest(singokRows,incident,SINGOK_KEYS,60);
+    const singokAtSearch   = nearest(singokRows, search,   SINGOK_KEYS,     60);
+    const singokAtIncident = nearest(singokRows, incident, SINGOK_KEYS,     60);
+    const singokOwlSearch  = nearest(singokRows, search,   SINGOK_OWL_KEYS, 60);
+    const singokOwlIncident= nearest(singokRows, incident, SINGOK_OWL_KEYS, 60);
     // 조회시점 기준으로 전역 상태 업데이트
     if(singokAtSearch){
-      const swl=singokAtSearch.value;
-      singokTideState={status:swl>=SINGOK_TIDE_THRESHOLD?'active':'blocked',swl,time:singokAtSearch.time,checkedAt:new Date()};
-      q.singok=swl>=SINGOK_TIDE_THRESHOLD?`전파 중 (${swl.toFixed(2)}m)`:`차단 (${swl.toFixed(2)}m)`;
+      const swl = singokAtSearch.value;
+      const owl = singokOwlSearch?.value ?? null;
+      const diff = owl!==null ? owl-swl : null;
+      const level = singokTideLevel(swl, owl);
+      singokTideState = {
+        status: level==='strong'?'active':level==='weak'?'weak':'blocked',
+        swl, owl, diff, level, time:singokAtSearch.time, checkedAt:new Date()
+      };
+      q.singok = level==='strong'?`역류 중 (owl-swl=${diff?.toFixed(2)}m)`
+               : level==='weak'  ?`역류 가능 (owl-swl=${diff?.toFixed(2)}m)`
+               : level==='none'  ?`정상흐름 (owl-swl=${diff?.toFixed(2)}m)`
+               : '조회 실패';
     } else {
-      singokTideState={status:'unknown',swl:null,time:null,checkedAt:new Date()};
+      singokTideState={status:'unknown',swl:null,owl:null,diff:null,level:null,time:null,checkedAt:new Date()};
       q.singok='조회 실패';
     }
-    log('[신곡수중보]',`조회시점 swl=${singokAtSearch?.value?.toFixed(2)??'없음'}m`,`사고시점 swl=${singokAtIncident?.value?.toFixed(2)??'없음'}m`,`기준: ≥${SINGOK_TIDE_THRESHOLD}m → 조석 전파`);
+    log('[신곡수중보]',
+      `조회 swl=${singokAtSearch?.value?.toFixed(2)??'?'}m owl=${singokOwlSearch?.value?.toFixed(2)??'?'}m`,
+      `사고 swl=${singokAtIncident?.value?.toFixed(2)??'?'}m owl=${singokOwlIncident?.value?.toFixed(2)??'?'}m`,
+      `판단기준: owl-swl > 0 → 역류(강), > -0.3 → 역류가능(약), 이하 → 정상흐름`);
   }catch(e){ singokTideState={status:'unknown',swl:null,time:null,checkedAt:new Date()}; q.singok='조회 실패'; log('[신곡수중보 실패]',e.message); }
   renderSingokStatus();
 
@@ -1357,12 +1407,14 @@ async function runQuery(){
   renderQuality(q);
 
   // 신곡수중보 swl을 시점별로 추출
-  const singokSwlAtSearch  = nearest(singokRows,search,SINGOK_KEYS,60)?.value??null;
-  const singokSwlAtIncident= nearest(singokRows,incident,SINGOK_KEYS,60)?.value??null;
+  const singokSwlAtSearch   = nearest(singokRows,search,   SINGOK_KEYS,     60)?.value??null;
+  const singokOwlAtSearch   = nearest(singokRows,search,   SINGOK_OWL_KEYS, 60)?.value??null;
+  const singokSwlAtIncident = nearest(singokRows,incident, SINGOK_KEYS,     60)?.value??null;
+  const singokOwlAtIncident = nearest(singokRows,incident, SINGOK_OWL_KEYS, 60)?.value??null;
 
   // 포인트 상태 계산
-  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtIncident);
-  const currentState =makePointState('조회시점',b,search,  waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtSearch);
+  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtIncident,singokOwlAtIncident);
+  const currentState =makePointState('조회시점',b,search,  waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtSearch,  singokOwlAtSearch);
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링

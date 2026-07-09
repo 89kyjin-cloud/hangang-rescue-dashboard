@@ -1307,7 +1307,7 @@ async function runQuery(){
   $('inputStatus').textContent='조회 중...';renderModelInfo(b);
 
   const start=floorTo10Min(new Date(incident.getTime()-Math.max(90,(b.releaseLag||0)+90)*60000));
-  const nowLimit=floorTo10Min(new Date(Date.now()-90*60000));
+  const nowLimit=floorTo10Min(new Date(Date.now()-10*60000)); // API 5분 지연 확인됨 (2026-07-09 검증)
   const rawEnd=floorTo10Min(new Date(search.getTime()+90*60000));
   const end=rawEnd>nowLimit?nowLimit:rawEnd;
   const dataCapped=end<search;

@@ -1145,242 +1145,169 @@ function renderQuality(q={}){
 // ── 그래프 ──────────────────────────────────────────────────
 function rowsToPoints(rows,keys){ return rows.map(r=>({time:parseObsTime(r),value:val(r,keys)})).filter(p=>p.time&&p.value!=null); }
 function normalizePoints(points){ const vals=points.map(p=>p.value).filter(v=>v!=null);if(vals.length<2)return[];const min=Math.min(...vals),max=Math.max(...vals);return points.map(p=>({time:p.time,value:max===min?50:(p.value-min)/(max-min)*100,raw:p.value})); }
-// ── Chart.js 기반 그래프 (모바일 완벽 호환) ─────────────────────
-const _chartInstances = {};
-
-function _destroyChart(id){
-  if(_chartInstances[id]){
-    try{_chartInstances[id].destroy();}catch(e){}
-    delete _chartInstances[id];
-  }
+// ── 순수 SVG 그래프 (외부 라이브러리 없음, 모바일 완벽 호환) ──────
+function _hhmm(d){ return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function _fmtAxisT(ts, spanDays){
+  const d=new Date(ts);
+  const h=_hhmm(d);
+  return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${h}`:h;
+}
+function _getContainer(idOrEl){
+  if(typeof idOrEl==='string') return document.getElementById(idOrEl);
+  if(idOrEl && idOrEl.tagName==='CANVAS') return idOrEl.parentElement||idOrEl;
+  return idOrEl;
 }
 
-function _getCanvas(containerId, canvasId){
-  const container = $(containerId);
-  if(!container) return null;
-  let cv = container.querySelector('canvas');
-  if(!cv){
-    cv = document.createElement('canvas');
-    container.innerHTML = '';
-    container.appendChild(cv);
-  }
-  return cv;
-}
+function drawLine(idOrEl, data, key='value', label='', markers=[], range=null){
+  const container = _getContainer(idOrEl);
+  if(!container) return;
 
-function drawLine(containerId, data, key='value', label='', markers=[], range=null){
-  // containerId는 canvas 엘리먼트이거나 div 컨테이너 id 문자열
-  const id = typeof containerId === 'string' ? containerId
-    : (containerId.id || 'chart_'+Math.random().toString(36).slice(2));
-  
-  const container = typeof containerId === 'string' ? $(containerId) : containerId.parentElement || containerId;
-  if(!container){ return; }
-
-  // 기존 인스턴스 제거
-  _destroyChart(id);
-  container.innerHTML = '';
-  const cv = document.createElement('canvas');
-  container.appendChild(cv);
-
-  let pts = data.filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
+  let pts = (data||[]).filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
   if(range&&range.start&&range.end){
     const rs=range.start.getTime(),re=range.end.getTime();
     pts=pts.filter(p=>p.time.getTime()>=rs&&p.time.getTime()<=re);
   }
 
+  const W=100, H=70; // viewBox 단위 (%)
+  const PL=12,PR=4,PT=10,PB=8; // 패딩 %
+
   if(pts.length<2){
-    container.innerHTML=`<div style="padding:20px;color:#667085;font-size:13px">📊 ${label}<br>그래프 데이터 부족</div>`;
+    container.innerHTML=`<div style="padding:16px 12px;color:#667085;font-size:13px;font-weight:600">${label}<br><span style="font-weight:400">데이터 부족</span></div>`;
     return;
   }
 
-  const spanDays=(Math.max(...pts.map(p=>p.time.getTime()))-Math.min(...pts.map(p=>p.time.getTime())))/86400000;
-  const labels = pts.map(p=>{
-    const d=p.time;
-    const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;
-  });
-  const values = pts.map(p=>p[key]);
+  const xs=pts.map(p=>p.time.getTime());
+  const ys=pts.map(p=>p[key]);
+  const minX=range&&range.start?range.start.getTime():Math.min(...xs);
+  const maxX=range&&range.end?range.end.getTime():Math.max(...xs);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const spanX=maxX-minX||1, spanY=maxY-minY||1;
+  const spanDays=spanX/86400000;
 
-  // 수직 마커선 (annotation 없이 직접 플러그인으로)
-  const markerLines = markers.filter(m=>m&&m.time).map(m=>{
+  const gL=PL,gR=W-PR,gT=PT,gB=H-PB;
+  const gW=gR-gL,gH=gB-gT;
+
+  const sx=x=>gL+(x-minX)/spanX*gW;
+  const sy=y=>gT+(1-(y-minY)/spanY)*gH;
+
+  // Y축 눈금 5개
+  let gridSvg='', yLabelSvg='';
+  for(let i=0;i<=4;i++){
+    const yp=gT+i*gH/4;
+    const v=maxY-(spanY)*i/4;
+    gridSvg+=`<line x1="${gL}" y1="${yp.toFixed(2)}" x2="${gR}" y2="${yp.toFixed(2)}" stroke="#e5e7eb" stroke-width="0.3"/>`;
+    yLabelSvg+=`<text x="${gL-0.5}" y="${(yp+0.8).toFixed(2)}" text-anchor="end" font-size="2.5" fill="#8a95a8">${v.toFixed(1)}</text>`;
+  }
+
+  // X축 눈금 4개
+  let xLabelSvg='';
+  for(let i=0;i<=3;i++){
+    const tx=minX+spanX*i/3;
+    const xp=sx(tx);
+    const safe=Math.max(gL+2,Math.min(gR-2,xp));
+    xLabelSvg+=`<text x="${safe.toFixed(2)}" y="${(H-1).toFixed(2)}" text-anchor="middle" font-size="2.3" fill="#8a95a8">${_fmtAxisT(tx,spanDays)}</text>`;
+  }
+
+  // 데이터 라인
+  const pathD=pts.map((p,i)=>{
+    const x=sx(p.time.getTime()).toFixed(2);
+    const y=sy(p[key]).toFixed(2);
+    return `${i===0?'M':'L'}${x},${y}`;
+  }).join(' ');
+
+  const last=pts[pts.length-1];
+  const lx=sx(last.time.getTime()).toFixed(2);
+  const ly=sy(last[key]).toFixed(2);
+
+  // 마커 점선
+  let markerSvg='';
+  markers.filter(m=>m&&m.time).forEach(m=>{
     const tx=m.time.getTime();
-    const idx=pts.reduce((best,p,i)=>{
-      return Math.abs(p.time.getTime()-tx)<Math.abs(pts[best].time.getTime()-tx)?i:best;
-    },0);
-    return {idx, label:m.label||'', color:m.color||'#c53030'};
+    if(tx<minX||tx>maxX) return;
+    const mx=sx(tx).toFixed(2);
+    const safeX=Math.max(gL+1,Math.min(gR-1,sx(tx)));
+    markerSvg+=`<line x1="${mx}" y1="${gT}" x2="${mx}" y2="${gB}" stroke="${m.color||'#c53030'}" stroke-width="0.5" stroke-dasharray="1.5,1"/>`;
+    markerSvg+=`<text x="${safeX.toFixed(2)}" y="${(gT-1).toFixed(2)}" text-anchor="middle" font-size="2.5" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''}</text>`;
   });
 
-  const markerPlugin = {
-    id:'markerPlugin',
-    afterDraw(chart){
-      const ctx=chart.ctx;
-      const xScale=chart.scales.x;
-      const yScale=chart.scales.y;
-      markerLines.forEach(m=>{
-        const x=xScale.getPixelForIndex(m.idx);
-        ctx.save();
-        ctx.strokeStyle=m.color;
-        ctx.lineWidth=2;
-        ctx.setLineDash([5,4]);
-        ctx.beginPath();
-        ctx.moveTo(x,yScale.top);
-        ctx.lineTo(x,yScale.bottom);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle=m.color;
-        ctx.font='bold 11px system-ui';
-        ctx.textAlign='center';
-        ctx.fillText(m.label,x,yScale.top-6);
-        ctx.restore();
-      });
-    }
-  };
-
-  _chartInstances[id] = new Chart(cv,{
-    type:'line',
-    data:{
-      labels,
-      datasets:[{
-        data:values,
-        borderColor:'#0f62fe',
-        borderWidth:2.5,
-        pointRadius:0,
-        pointHoverRadius:5,
-        pointHoverBackgroundColor:'#0f62fe',
-        fill:false,
-        tension:0.1,
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      animation:{duration:300},
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:false},
-        title:{display:true,text:label,font:{size:12,weight:'bold'},color:'#172033',padding:{bottom:8}},
-        tooltip:{
-          callbacks:{
-            label:(ctx)=>`${ctx.parsed.y.toFixed(2)}`
-          }
-        }
-      },
-      scales:{
-        x:{
-          ticks:{maxTicksLimit:5,maxRotation:0,color:'#8a95a8',font:{size:11}},
-          grid:{color:'#e5e7eb'}
-        },
-        y:{
-          ticks:{maxTicksLimit:5,color:'#8a95a8',font:{size:11}},
-          grid:{color:'#e5e7eb'}
-        }
-      }
-    },
-    plugins:[markerPlugin]
-  });
+  container.innerHTML=`<div style="width:100%;padding:0">
+    <div style="font-size:12px;font-weight:700;color:#172033;padding:8px 12px 4px">${label}</div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+      ${gridSvg}${yLabelSvg}${xLabelSvg}${markerSvg}
+      <path d="${pathD}" fill="none" stroke="#0f62fe" stroke-width="0.8" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${lx}" cy="${ly}" r="1.2" fill="#0f62fe"/>
+    </svg>
+  </div>`;
+  container.style.cssText='width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
 }
 
-function drawMultiLine(containerId, series, label='', markers=[]){
-  const id = typeof containerId==='string' ? containerId
-    : (containerId.id||'multi_'+Math.random().toString(36).slice(2));
-  const container = typeof containerId==='string' ? $(containerId) : containerId.parentElement||containerId;
+function drawMultiLine(idOrEl, series, label='', markers=[]){
+  const container = _getContainer(idOrEl);
   if(!container) return;
 
-  _destroyChart(id);
-  container.innerHTML='';
-  const cv=document.createElement('canvas');
-  container.appendChild(cv);
-
   const colors=['#0f62fe','#b7791f','#078a4f'];
-  const seriesNames=['수위(m)','방류량(㎥/s)','조석(cm)'];
+  const names=['수위(m)','방류량(㎥/s)','조석(cm)'];
+  const srcs=['교량 관측소','팔당댐+보정','인천+보정'];
 
-  // 모든 시리즈의 시간을 공통 라벨로 합치기
-  const allTimes = new Set();
-  series.forEach(s=>{
-    if(s.points) s.points.forEach(p=>{if(p.time) allTimes.add(p.time.getTime());});
-  });
-  const sortedTimes = [...allTimes].sort((a,b)=>a-b);
-  if(sortedTimes.length<2){
-    container.innerHTML=`<div style="padding:20px;color:#667085;font-size:13px">통합 그래프 데이터 부족</div>`;
+  const validSeries=series.filter(s=>s.points&&s.points.filter(p=>p.time&&p.value!=null).length>=2);
+  if(!validSeries.length){
+    container.innerHTML=`<div style="padding:16px;color:#667085;font-size:13px">통합 그래프 데이터 부족</div>`;
     return;
   }
-  const spanDays=(sortedTimes[sortedTimes.length-1]-sortedTimes[0])/86400000;
-  const timeLabels=sortedTimes.map(t=>{
-    const d=new Date(t);
-    const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;
+
+  const W=100, SLOT=22; // 각 시리즈 슬롯 높이
+  const H=validSeries.length*SLOT+16;
+  const PL=12,PR=4;
+
+  let svgBody='';
+  // 제목
+  svgBody+=`<text x="2" y="5" font-size="3" font-weight="700" fill="#172033">${label}</text>`;
+  markers.forEach((m,i)=>{
+    svgBody+=`<text x="${2+i*40}" y="9.5" font-size="2.5" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''} ${m.time?_hhmm(m.time):''}</text>`;
   });
 
-  const datasets = series.map((s,si)=>{
-    const pts=(s.points||[]).filter(p=>p.time&&p.value!=null);
-    const timeMap={};
-    pts.forEach(p=>timeMap[p.time.getTime()]=p.value);
-    return {
-      label:seriesNames[si]||s.name||`시리즈${si+1}`,
-      data:sortedTimes.map(t=>timeMap[t]??null),
-      borderColor:colors[si%colors.length],
-      borderWidth:2,
-      pointRadius:0,
-      fill:false,
-      tension:0.1,
-      spanGaps:false,
-      yAxisID:`y${si}`,
-    };
+  let vIdx=0;
+  series.forEach((s,si)=>{
+    const pts=(s.points||[]).filter(p=>p.time&&p.value!=null).sort((a,b)=>a.time-b.time);
+    if(pts.length<2){vIdx++;return;}
+    const color=colors[si%colors.length];
+    const slotTop=12+vIdx*SLOT;
+    const slotBot=slotTop+SLOT-2;
+    const gH=slotBot-slotTop, gW=W-PL-PR;
+    const xs=pts.map(p=>p.time.getTime());
+    const ys=pts.map(p=>p.value);
+    const minX=Math.min(...xs),maxX=Math.max(...xs)||minX+1;
+    const minY=Math.min(...ys),maxY=Math.max(...ys)||minY+1;
+    const sx2=x=>PL+(x-minX)/(maxX-minX)*gW;
+    const sy2=y=>slotTop+(1-(y-minY)/(maxY-minY))*gH;
+    const spanDays2=(maxX-minX)/86400000;
+
+    svgBody+=`<line x1="${PL}" y1="${slotTop}" x2="${W-PR}" y2="${slotTop}" stroke="#e0e4ee" stroke-width="0.3"/>`;
+    svgBody+=`<text x="2" y="${(slotTop+4).toFixed(1)}" font-size="2.5" font-weight="700" fill="${color}">${names[si]||s.name}</text>`;
+    svgBody+=`<text x="2" y="${(slotTop+7.5).toFixed(1)}" font-size="2" fill="#8a95a8">${srcs[si]||''}</text>`;
+    svgBody+=`<text x="${(PL-0.5).toFixed(1)}" y="${(slotTop+3).toFixed(1)}" text-anchor="end" font-size="2.3" fill="${color}">${maxY.toFixed(1)}</text>`;
+    svgBody+=`<text x="${(PL-0.5).toFixed(1)}" y="${(slotBot-0.5).toFixed(1)}" text-anchor="end" font-size="2.3" fill="${color}">${minY.toFixed(1)}</text>`;
+
+    markers.filter(m=>m&&m.time).forEach(m=>{
+      const tx=m.time.getTime();
+      if(tx<minX||tx>maxX)return;
+      const mx=sx2(tx).toFixed(2);
+      svgBody+=`<line x1="${mx}" y1="${slotTop}" x2="${mx}" y2="${slotBot}" stroke="${m.color||'#c53030'}" stroke-width="0.4" stroke-dasharray="1.5,1"/>`;
+    });
+
+    const pathD2=pts.map((p,i)=>`${i===0?'M':'L'}${sx2(p.time.getTime()).toFixed(2)},${sy2(p.value).toFixed(2)}`).join(' ');
+    svgBody+=`<path d="${pathD2}" fill="none" stroke="${color}" stroke-width="0.7" stroke-linejoin="round"/>`;
+
+    // X축 라벨 (시작/끝)
+    svgBody+=`<text x="${PL}" y="${(slotBot+3).toFixed(1)}" font-size="2" fill="#8a95a8">${_fmtAxisT(minX,spanDays2)}</text>`;
+    svgBody+=`<text x="${(W-PR).toFixed(1)}" y="${(slotBot+3).toFixed(1)}" text-anchor="end" font-size="2" fill="#8a95a8">${_fmtAxisT(maxX,spanDays2)}</text>`;
+    vIdx++;
   });
 
-  const scales={x:{ticks:{maxTicksLimit:5,maxRotation:0,color:'#8a95a8',font:{size:10}},grid:{color:'#e5e7eb'}}};
-  series.forEach((_,si)=>{
-    scales[`y${si}`]={
-      type:'linear',
-      display:si===0,
-      position:'left',
-      ticks:{maxTicksLimit:4,color:colors[si%colors.length],font:{size:10}},
-      grid:{drawOnChartArea:si===0},
-    };
-  });
-
-  // 마커 플러그인
-  const markerPlugin2={
-    id:'markerPlugin2',
-    afterDraw(chart){
-      const ctx=chart.ctx;
-      const xScale=chart.scales.x;
-      markers.filter(m=>m&&m.time).forEach(m=>{
-        const tx=m.time.getTime();
-        const idx=sortedTimes.reduce((best,t,i)=>Math.abs(t-tx)<Math.abs(sortedTimes[best]-tx)?i:best,0);
-        const x=xScale.getPixelForIndex(idx);
-        const top=chart.chartArea.top, bot=chart.chartArea.bottom;
-        ctx.save();
-        ctx.strokeStyle=m.color||'#c53030';
-        ctx.lineWidth=1.5;
-        ctx.setLineDash([5,4]);
-        ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bot);ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle=m.color||'#c53030';
-        ctx.font='bold 10px system-ui';
-        ctx.textAlign='center';
-        ctx.fillText(m.label||'',x,top-4);
-        ctx.restore();
-      });
-    }
-  };
-
-  _chartInstances[id]=new Chart(cv,{
-    type:'line',
-    data:{labels:timeLabels,datasets},
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      animation:{duration:300},
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:20,padding:8}},
-        title:{display:true,text:label,font:{size:11,weight:'bold'},color:'#172033'},
-        tooltip:{mode:'index',intersect:false}
-      },
-      scales
-    },
-    plugins:[markerPlugin2]
-  });
+  container.innerHTML=`<div style="width:100%;padding:0">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">${svgBody}</svg>
+  </div>`;
+  container.style.cssText='width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
 }
 
 

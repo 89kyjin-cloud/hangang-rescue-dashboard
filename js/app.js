@@ -1145,22 +1145,41 @@ function renderQuality(q={}){
 // ── 그래프 ──────────────────────────────────────────────────
 function rowsToPoints(rows,keys){ return rows.map(r=>({time:parseObsTime(r),value:val(r,keys)})).filter(p=>p.time&&p.value!=null); }
 function normalizePoints(points){ const vals=points.map(p=>p.value).filter(v=>v!=null);if(vals.length<2)return[];const min=Math.min(...vals),max=Math.max(...vals);return points.map(p=>({time:p.time,value:max===min?50:(p.value-min)/(max-min)*100,raw:p.value})); }
-function drawLine(canvasEl, data, key='value', label='', markers=[], range=null){
-  // SVG 기반 그래프 — 모바일/데스크탑 완벽 호환
-  const container = canvasEl.parentElement || canvasEl;
-  
-  // canvas를 div 컨테이너로 교체 (최초 1회)
-  let svgContainer;
-  if(canvasEl.tagName === 'CANVAS'){
-    svgContainer = document.createElement('div');
-    svgContainer.id = canvasEl.id;
-    svgContainer.className = canvasEl.className;
-    svgContainer.style.cssText = `width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;`;
-    canvasEl.parentElement.replaceChild(svgContainer, canvasEl);
-  } else {
-    svgContainer = canvasEl;
-    svgContainer.style.cssText = `width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;`;
+// ── Chart.js 기반 그래프 (모바일 완벽 호환) ─────────────────────
+const _chartInstances = {};
+
+function _destroyChart(id){
+  if(_chartInstances[id]){
+    try{_chartInstances[id].destroy();}catch(e){}
+    delete _chartInstances[id];
   }
+}
+
+function _getCanvas(containerId, canvasId){
+  const container = $(containerId);
+  if(!container) return null;
+  let cv = container.querySelector('canvas');
+  if(!cv){
+    cv = document.createElement('canvas');
+    container.innerHTML = '';
+    container.appendChild(cv);
+  }
+  return cv;
+}
+
+function drawLine(containerId, data, key='value', label='', markers=[], range=null){
+  // containerId는 canvas 엘리먼트이거나 div 컨테이너 id 문자열
+  const id = typeof containerId === 'string' ? containerId
+    : (containerId.id || 'chart_'+Math.random().toString(36).slice(2));
+  
+  const container = typeof containerId === 'string' ? $(containerId) : containerId.parentElement || containerId;
+  if(!container){ return; }
+
+  // 기존 인스턴스 제거
+  _destroyChart(id);
+  container.innerHTML = '';
+  const cv = document.createElement('canvas');
+  container.appendChild(cv);
 
   let pts = data.filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
   if(range&&range.start&&range.end){
@@ -1168,185 +1187,200 @@ function drawLine(canvasEl, data, key='value', label='', markers=[], range=null)
     pts=pts.filter(p=>p.time.getTime()>=rs&&p.time.getTime()<=re);
   }
 
-  const W=360, H=260;
-  const padL=58,padR=20,padT=56,padB=40;
-  const gW=W-padL-padR, gH=H-padT-padB;
-
   if(pts.length<2){
-    svgContainer.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block"><text x="14" y="28" font-size="13" fill="#172033">${label}</text><text x="14" y="56" font-size="13" fill="#667085">그래프 데이터 부족</text></svg>`;
+    container.innerHTML=`<div style="padding:20px;color:#667085;font-size:13px">📊 ${label}<br>그래프 데이터 부족</div>`;
     return;
   }
 
-  const xs=pts.map(p=>p.time.getTime()), ys=pts.map(p=>p[key]);
-  const minX=range&&range.start?range.start.getTime():Math.min(...xs);
-  const maxX=range&&range.end?range.end.getTime():Math.max(...xs);
-  const minY=Math.min(...ys), maxY=Math.max(...ys);
-  const spanX=maxX-minX||1, spanY=maxY-minY||1;
-
-  const sx=x=>padL+(x-minX)/spanX*gW;
-  const sy=y=>padT+gH-(y-minY)/spanY*gH;
-
-  const spanDays=(maxX-minX)/86400000;
-  const fmtT=(ts)=>{
-    const d=new Date(ts);
+  const spanDays=(Math.max(...pts.map(p=>p.time.getTime()))-Math.min(...pts.map(p=>p.time.getTime())))/86400000;
+  const labels = pts.map(p=>{
+    const d=p.time;
     const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;
-  };
+  });
+  const values = pts.map(p=>p[key]);
 
-  // Y축 눈금
-  let gridLines='', yLabels='';
-  for(let i=0;i<=4;i++){
-    const y=padT+i*gH/4;
-    const v=maxY-(maxY-minY)*i/4;
-    gridLines+=`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e7eb" stroke-width="1"/>`;
-    yLabels+=`<text x="${padL-4}" y="${y+4}" text-anchor="end" font-size="11" fill="#8a95a8">${v.toFixed(2)}</text>`;
-  }
-
-  // X축 눈금
-  let xLabels='';
-  for(let i=0;i<=4;i++){
-    const tx=minX+(maxX-minX)*i/4;
-    const xp=sx(tx);
-    const safe=Math.max(30,Math.min(W-30,xp));
-    xLabels+=`<text x="${safe}" y="${H-8}" text-anchor="middle" font-size="11" fill="#8a95a8">${fmtT(tx)}</text>`;
-  }
-
-  // 데이터 라인
-  const pathD=pts.map((p,i)=>`${i===0?'M':'L'}${sx(p.time.getTime()).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ');
-  const lastPt=pts[pts.length-1];
-
-  // 마커 점선
-  let markerSvg='';
-  markers.filter(m=>m&&m.time).forEach(m=>{
+  // 수직 마커선 (annotation 없이 직접 플러그인으로)
+  const markerLines = markers.filter(m=>m&&m.time).map(m=>{
     const tx=m.time.getTime();
-    if(tx<minX||tx>maxX) return;
-    const mx=sx(tx);
-    const safeLabel=Math.max(24,Math.min(W-24,mx));
-    markerSvg+=`<line x1="${mx}" y1="${padT}" x2="${mx}" y2="${H-padB}" stroke="${m.color||'#c53030'}" stroke-width="1.5" stroke-dasharray="5,4"/>`;
-    markerSvg+=`<text x="${safeLabel}" y="${padT-6}" text-anchor="middle" font-size="11" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''}</text>`;
+    const idx=pts.reduce((best,p,i)=>{
+      return Math.abs(p.time.getTime()-tx)<Math.abs(pts[best].time.getTime()-tx)?i:best;
+    },0);
+    return {idx, label:m.label||'', color:m.color||'#c53030'};
   });
 
-  svgContainer.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;cursor:crosshair" id="svg_${svgContainer.id}">
-    <text x="14" y="20" font-size="12" fill="#172033" font-weight="700">${label}</text>
-    ${gridLines}${yLabels}${xLabels}${markerSvg}
-    <path d="${pathD}" fill="none" stroke="#0f62fe" stroke-width="3" stroke-linejoin="round"/>
-    <circle cx="${sx(lastPt.time.getTime()).toFixed(1)}" cy="${sy(lastPt[key]).toFixed(1)}" r="5" fill="#172033"/>
-    <rect x="${padL}" y="${padT}" width="${gW}" height="${gH}" fill="transparent" id="svghit_${svgContainer.id}"/>
-  </svg>`;
-
-  // 클릭 핀 (SVG 터치/클릭)
-  const svgEl=svgContainer.querySelector('svg');
-  const hitEl=svgContainer.querySelector(`#svghit_${svgContainer.id}`);
-  let pinG=null;
-  const handleClick=(e)=>{
-    const rect=svgEl.getBoundingClientRect();
-    const scaleX=W/rect.width;
-    const clickX=((e.touches?e.touches[0].clientX:e.clientX)-rect.left)*scaleX;
-    const tClick=minX+(clickX-padL)/gW*spanX;
-    let best=null,bestDiff=Infinity;
-    pts.forEach(p=>{const d=Math.abs(p.time.getTime()-tClick);if(d<bestDiff){bestDiff=d;best=p;}});
-    if(!best)return;
-    // 핀 제거/추가
-    if(pinG){pinG.remove();pinG=null;}
-    const px=sx(best.time.getTime()),py=sy(best[key]);
-    const timeTxt=spanDays>=1?`${best.time.getFullYear()}.${String(best.time.getMonth()+1).padStart(2,'0')}.${String(best.time.getDate()).padStart(2,'0')} ${hhmm(best.time)}`:hhmm(best.time);
-    const unitLabel=key==='value'?(label.includes('m)')?' m':label.includes('㎥')?' ㎥/s':' cm'):'';
-    const valTxt=Number(best[key]).toFixed(2)+unitLabel;
-    const bx=Math.min(px+8,W-120),by=Math.max(padT+4,py-64);
-    pinG=document.createElementNS('http://www.w3.org/2000/svg','g');
-    pinG.innerHTML=`
-      <line x1="${px}" y1="${padT}" x2="${px}" y2="${H-padB}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,3"/>
-      <circle cx="${px}" cy="${py}" r="7" fill="#f59e0b"/><circle cx="${px}" cy="${py}" r="3" fill="#fff"/>
-      <rect x="${bx}" y="${by}" width="108" height="52" rx="6" fill="rgba(16,24,40,0.92)"/>
-      <text x="${bx+8}" y="${by+18}" font-size="11" font-weight="700" fill="#f59e0b">${timeTxt}</text>
-      <text x="${bx+8}" y="${by+38}" font-size="13" font-weight="700" fill="#e2e8f0">${valTxt}</text>`;
-    svgEl.appendChild(pinG);
+  const markerPlugin = {
+    id:'markerPlugin',
+    afterDraw(chart){
+      const ctx=chart.ctx;
+      const xScale=chart.scales.x;
+      const yScale=chart.scales.y;
+      markerLines.forEach(m=>{
+        const x=xScale.getPixelForIndex(m.idx);
+        ctx.save();
+        ctx.strokeStyle=m.color;
+        ctx.lineWidth=2;
+        ctx.setLineDash([5,4]);
+        ctx.beginPath();
+        ctx.moveTo(x,yScale.top);
+        ctx.lineTo(x,yScale.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle=m.color;
+        ctx.font='bold 11px system-ui';
+        ctx.textAlign='center';
+        ctx.fillText(m.label,x,yScale.top-6);
+        ctx.restore();
+      });
+    }
   };
-  if(hitEl){
-    hitEl.addEventListener('click',handleClick);
-    hitEl.addEventListener('touchend',(e)=>{e.preventDefault();handleClick(e);},{passive:false});
-  }
-  svgContainer._drawData={data,key,label,markers,range};
+
+  _chartInstances[id] = new Chart(cv,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        data:values,
+        borderColor:'#0f62fe',
+        borderWidth:2.5,
+        pointRadius:0,
+        pointHoverRadius:5,
+        pointHoverBackgroundColor:'#0f62fe',
+        fill:false,
+        tension:0.1,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:{duration:300},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        title:{display:true,text:label,font:{size:12,weight:'bold'},color:'#172033',padding:{bottom:8}},
+        tooltip:{
+          callbacks:{
+            label:(ctx)=>`${ctx.parsed.y.toFixed(2)}`
+          }
+        }
+      },
+      scales:{
+        x:{
+          ticks:{maxTicksLimit:5,maxRotation:0,color:'#8a95a8',font:{size:11}},
+          grid:{color:'#e5e7eb'}
+        },
+        y:{
+          ticks:{maxTicksLimit:5,color:'#8a95a8',font:{size:11}},
+          grid:{color:'#e5e7eb'}
+        }
+      }
+    },
+    plugins:[markerPlugin]
+  });
 }
 
-function drawMultiLine(canvasEl,series,label='',markers=[]){
-  const container=canvasEl.parentElement||canvasEl;
-  let svgContainer;
-  if(canvasEl.tagName==='CANVAS'){
-    svgContainer=document.createElement('div');
-    svgContainer.id=canvasEl.id;
-    svgContainer.className=canvasEl.className;
-    svgContainer.style.cssText=`width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;`;
-    canvasEl.parentElement.replaceChild(svgContainer,canvasEl);
-  } else {
-    svgContainer=canvasEl;
-    svgContainer.style.cssText=`width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;`;
-  }
+function drawMultiLine(containerId, series, label='', markers=[]){
+  const id = typeof containerId==='string' ? containerId
+    : (containerId.id||'multi_'+Math.random().toString(36).slice(2));
+  const container = typeof containerId==='string' ? $(containerId) : containerId.parentElement||containerId;
+  if(!container) return;
 
-  const W=360, SLOT=160;
-  const n=series.filter(s=>s.points&&s.points.length>=2).length||1;
-  const H=n*SLOT+80;
-  const padL=52,padR=16,padT=70,padB=36;
+  _destroyChart(id);
+  container.innerHTML='';
+  const cv=document.createElement('canvas');
+  container.appendChild(cv);
+
   const colors=['#0f62fe','#b7791f','#078a4f'];
-  const names=['수위(m)','방류량(㎥/s)','조석(cm)'];
-  const srcs=['교량 관측소 실측','팔당댐+지연보정','인천DT_0001+보정'];
+  const seriesNames=['수위(m)','방류량(㎥/s)','조석(cm)'];
 
-  let svgBody='';
-  // 제목
-  svgBody+=`<text x="12" y="18" font-size="12" font-weight="700" fill="#172033">${label}</text>`;
-  svgBody+=`<text x="12" y="34" font-size="10" fill="#667085">※ 각 지표 독립 Y축 (단위 다름·비교 불가)</text>`;
-
-  // 마커 레이블
-  markers.forEach((m,i)=>{
-    svgBody+=`<text x="${12+i*160}" y="52" font-size="11" font-weight="700" fill="${m.color||'#c53030'}">${m.label||''} ${m.time?hhmm(m.time):''}</text>`;
+  // 모든 시리즈의 시간을 공통 라벨로 합치기
+  const allTimes = new Set();
+  series.forEach(s=>{
+    if(s.points) s.points.forEach(p=>{if(p.time) allTimes.add(p.time.getTime());});
+  });
+  const sortedTimes = [...allTimes].sort((a,b)=>a-b);
+  if(sortedTimes.length<2){
+    container.innerHTML=`<div style="padding:20px;color:#667085;font-size:13px">통합 그래프 데이터 부족</div>`;
+    return;
+  }
+  const spanDays=(sortedTimes[sortedTimes.length-1]-sortedTimes[0])/86400000;
+  const timeLabels=sortedTimes.map(t=>{
+    const d=new Date(t);
+    const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return spanDays>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;
   });
 
-  // 각 시리즈
-  let validIdx=0;
-  series.forEach((s,si)=>{
-    const pts=s.points?s.points.filter(p=>p.time&&p.value!=null).sort((a,b)=>a.time-b.time):[];
-    if(pts.length<2){validIdx++;return;}
-    const color=colors[si%colors.length];
-    const slotTop=padT+validIdx*SLOT;
-    const slotBot=slotTop+SLOT-8;
-    const gH=slotBot-slotTop;
-    const allX=pts.map(p=>p.time.getTime());
-    const allY=pts.map(p=>p.value);
-    const minX=Math.min(...allX),maxX=Math.max(...allX)||minX+1;
-    const minY=Math.min(...allY),maxY=Math.max(...allY)||minY+1;
-    const gW=W-padL-padR;
-    const sx2=x=>padL+(x-minX)/(maxX-minX)*gW;
-    const sy2=y=>slotTop+gH-(y-minY)/(maxY-minY)*gH;
-    // 구분선
-    svgBody+=`<line x1="${padL}" y1="${slotTop}" x2="${W-padR}" y2="${slotTop}" stroke="#e0e4ee" stroke-width="1"/>`;
-    // Y축 라벨
-    svgBody+=`<text x="${padL-2}" y="${slotTop+12}" text-anchor="end" font-size="10" fill="${color}" font-weight="700">${maxY.toFixed(1)}</text>`;
-    svgBody+=`<text x="${padL-2}" y="${slotBot}" text-anchor="end" font-size="10" fill="${color}">${minY.toFixed(1)}</text>`;
-    // 시리즈 이름·출처
-    svgBody+=`<text x="12" y="${slotTop+14}" font-size="11" font-weight="700" fill="${color}">${names[si]||s.name}</text>`;
-    svgBody+=`<text x="12" y="${slotTop+26}" font-size="10" fill="#8a95a8">${srcs[si]||''}</text>`;
-    // 마커 점선
-    markers.filter(m=>m&&m.time).forEach(m=>{
-      const tx=m.time.getTime();
-      if(tx<minX||tx>maxX)return;
-      svgBody+=`<line x1="${sx2(tx)}" y1="${slotTop}" x2="${sx2(tx)}" y2="${slotBot}" stroke="${m.color||'#c53030'}" stroke-width="1.5" stroke-dasharray="4,3"/>`;
-    });
-    // 데이터 라인
-    const pathD2=pts.map((p,i)=>`${i===0?'M':'L'}${sx2(p.time.getTime()).toFixed(1)},${sy2(p.value).toFixed(1)}`).join(' ');
-    svgBody+=`<path d="${pathD2}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`;
-    const last=pts[pts.length-1];
-    svgBody+=`<circle cx="${sx2(last.time.getTime()).toFixed(1)}" cy="${sy2(last.value).toFixed(1)}" r="4" fill="${color}"/>`;
-    // 마지막값 라벨
-    svgBody+=`<text x="${Math.min(W-60,sx2(last.time.getTime())+6)}" y="${Math.max(slotTop+14,Math.min(slotBot-4,sy2(last.value)))}" font-size="11" font-weight="700" fill="${color}">${s.name}</text>`;
-    // X축
-    const spanDays2=(maxX-minX)/86400000;
-    const fmtT2=(ts)=>{const d=new Date(ts);const hm=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;return spanDays2>=1?`${d.getMonth()+1}/${d.getDate()} ${hm}`:hm;};
-    svgBody+=`<text x="${padL}" y="${slotBot+14}" font-size="10" fill="#8a95a8">${fmtT2(minX)}</text>`;
-    svgBody+=`<text x="${W-padR}" y="${slotBot+14}" text-anchor="end" font-size="10" fill="#8a95a8">${fmtT2(maxX)}</text>`;
-    validIdx++;
+  const datasets = series.map((s,si)=>{
+    const pts=(s.points||[]).filter(p=>p.time&&p.value!=null);
+    const timeMap={};
+    pts.forEach(p=>timeMap[p.time.getTime()]=p.value);
+    return {
+      label:seriesNames[si]||s.name||`시리즈${si+1}`,
+      data:sortedTimes.map(t=>timeMap[t]??null),
+      borderColor:colors[si%colors.length],
+      borderWidth:2,
+      pointRadius:0,
+      fill:false,
+      tension:0.1,
+      spanGaps:false,
+      yAxisID:`y${si}`,
+    };
   });
 
-  svgContainer.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${svgBody}</svg>`;
+  const scales={x:{ticks:{maxTicksLimit:5,maxRotation:0,color:'#8a95a8',font:{size:10}},grid:{color:'#e5e7eb'}}};
+  series.forEach((_,si)=>{
+    scales[`y${si}`]={
+      type:'linear',
+      display:si===0,
+      position:'left',
+      ticks:{maxTicksLimit:4,color:colors[si%colors.length],font:{size:10}},
+      grid:{drawOnChartArea:si===0},
+    };
+  });
+
+  // 마커 플러그인
+  const markerPlugin2={
+    id:'markerPlugin2',
+    afterDraw(chart){
+      const ctx=chart.ctx;
+      const xScale=chart.scales.x;
+      markers.filter(m=>m&&m.time).forEach(m=>{
+        const tx=m.time.getTime();
+        const idx=sortedTimes.reduce((best,t,i)=>Math.abs(t-tx)<Math.abs(sortedTimes[best]-tx)?i:best,0);
+        const x=xScale.getPixelForIndex(idx);
+        const top=chart.chartArea.top, bot=chart.chartArea.bottom;
+        ctx.save();
+        ctx.strokeStyle=m.color||'#c53030';
+        ctx.lineWidth=1.5;
+        ctx.setLineDash([5,4]);
+        ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,bot);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle=m.color||'#c53030';
+        ctx.font='bold 10px system-ui';
+        ctx.textAlign='center';
+        ctx.fillText(m.label||'',x,top-4);
+        ctx.restore();
+      });
+    }
+  };
+
+  _chartInstances[id]=new Chart(cv,{
+    type:'line',
+    data:{labels:timeLabels,datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      animation:{duration:300},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{size:11},boxWidth:20,padding:8}},
+        title:{display:true,text:label,font:{size:11,weight:'bold'},color:'#172033'},
+        tooltip:{mode:'index',intersect:false}
+      },
+      scales
+    },
+    plugins:[markerPlugin2]
+  });
 }
 
 
@@ -1478,10 +1512,10 @@ async function runQuery(){
   const tidePts=rowsToPoints(tideRows,TIDE_KEYS);
   const markers=[{time:incident,label:'투신 시점',color:'#0f62fe'},{time:effectiveSearch,label:dataCapped?'최신 관측':'현 시점',color:'#c53030'}];
 
-  drawMultiLine($('combinedChart'),[{name:'수위',points:normalizePoints(waterPts)},{name:'방류',points:normalizePoints(damPts)},{name:'조석',points:normalizePoints(tidePts)}],`${b.bridge} · ${pretty(incident)} ~ ${pretty(effectiveSearch)}`,markers);
+  drawMultiLine('combinedChart',[{name:'수위',points:normalizePoints(waterPts)},{name:'방류',points:normalizePoints(damPts)},{name:'조석',points:normalizePoints(tidePts)}],`${b.bridge} · ${pretty(incident)} ~ ${pretty(effectiveSearch)}`,markers);
   $('combinedChartNote').textContent=`파란선=수위(m), 갈색선=방류량(㎥/s), 초록선=조석(cm). 0~100 정규화 비교용.${dataCapped?` ⚠ 조회시각보다 ${Math.round((search-end)/60000)}분 이전 데이터까지 표시`:''}`;
 
-  drawLine($('waterChart'),waterPts,'value',`${b.station} 수위(m) · ${hhmm(incident)} ~ ${hhmm(effectiveSearch)}`,markers,{start:incident,end:effectiveSearch});
+  drawLine('waterChart',waterPts,'value',`${b.station} 수위(m) · ${hhmm(incident)} ~ ${hhmm(effectiveSearch)}`,markers,{start:incident,end:effectiveSearch});
   $('waterChartNote').textContent=(currentState.wTrend?`최근 1시간 수위 변화: ${currentState.wTrend.delta>0?'+':''}${currentState.wTrend.delta}m`:'최근 1시간 변화 계산에 필요한 시계열이 부족합니다.')+(dataCapped?` ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:' (그래프 범위: 투신~조회시점)');
 
   // 방류량 통계 바
@@ -1493,7 +1527,7 @@ async function runQuery(){
     el.innerHTML=`<div class="dam-stat-item high"><b>최대 방류량</b><span>${maxV.toFixed(0)} ㎥/s</span></div><div class="dam-stat-item current"><b>조회시점 방류량</b><span>${curV!=null?curV.toFixed(0)+'㎥/s':'자료 없음'}</span></div><div class="dam-stat-item low"><b>최소 방류량</b><span>${minV.toFixed(0)} ㎥/s</span></div>`;
   })();
 
-  drawLine($('damChart'),damPts,'value',`팔당댐 방류량(㎥/s) · ${hhmm(incident)} ~ ${hhmm(effectiveSearch)}`,markers,{start:incident,end:effectiveSearch});
+  drawLine('damChart',damPts,'value',`팔당댐 방류량(㎥/s) · ${hhmm(incident)} ~ ${hhmm(effectiveSearch)}`,markers,{start:incident,end:effectiveSearch});
   $('damChartNote').textContent=(currentState.damImpact?`조회시점 교량 영향 방류량: ${currentState.damImpact.value.toFixed(1)}㎥/s · 팔당 ${b.releaseLag}분 지연 보정 · ${dataQualityForPoint(currentState.damImpact)}`:'방류량 미조회')+(dataCapped?` ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:' (그래프 범위: 투신~조회시점)');
 
   // 조석 다음 전환 표시
@@ -1510,10 +1544,10 @@ async function runQuery(){
   const tideRangeStart=new Date(incident.getTime()-30*60000);
   const tideRangeEnd=new Date(effectiveSearch.getTime()+30*60000);
   if(tideRows.length){
-    drawLine($('tideChart'),tidePts,'value',`인천 조위(cm) · ${TIDE_STATION} · ${hhmm(tideRangeStart)} ~ ${hhmm(tideRangeEnd)}`,markers,{start:tideRangeStart,end:tideRangeEnd});
+    drawLine('tideChart',tidePts,'value',`인천 조위(cm) · ${TIDE_STATION} · ${hhmm(tideRangeStart)} ~ ${hhmm(tideRangeEnd)}`,markers,{start:tideRangeStart,end:tideRangeEnd});
     $('tideChartNote').textContent=(currentState.tide?`인천 조석값에 교량별 지연시간(${b.offset||0}분)을 더해 교량 기준으로 보정했습니다.`:'조석 매칭 실패')+(dataCapped?` ⚠ 데이터 ${Math.round((search-end)/60000)}분 지연`:' (그래프 범위: 투신 30분전 ~ 조회 30분후)');
   } else {
-    drawLine($('tideChart'),[],'value','조석',[]);
+    drawLine('tideChart',[],'value','조석',[]);
     $('tideChartNote').textContent=b.tide?'조석 API 미조회':'조석 적용 제외 구간';
   }
 

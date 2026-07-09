@@ -731,7 +731,8 @@ function fmtTrend(t){ return t?`${t.delta>0?'+':''}${t.delta}m / ${t.minutes}분
 function fmtDamPoint(p,impactTime){ return p?`${p.value.toFixed(1)}㎥/s · 팔당 관측 ${pretty(p.time)} · 교량영향 기준 ${pretty(impactTime)} · ${dataQualityForPoint(p)}`:'자료 없음'; }
 function fmtTidePoint(b,t,tideActive){
   if(!b.tide) return '잠실수중보 상류: 조석 적용 제외';
-  if(tideActive===false) return `⛔ 신곡수중보 수위 < ${SINGOK_TIDE_THRESHOLD}m → 조석 차단 (이 시점 조석 영향 없음)`;
+  if(tideActive===false) return `⬇ 신곡수중보 정상 하류 흐름 → 조석 영향 미미 (수위·방류량 주도)`;
+  if(tideActive==='weak') return `〜 신곡수중보 역류 가능성 → 조석 약한 영향 (인천 조위 참고)`;
   if(tideActive===null) return '⚠ 신곡수중보 수위 조회 실패 → 조석 전파 여부 판단 불가';
   if(!t) return '조석 전파 중이나 조위 자료 없음';
   const offset=b.offset||0;
@@ -848,11 +849,16 @@ function renderSingokStatus(){
   if(s.status==='unknown'){
     el.innerHTML=`<div class="q"><strong>신곡수중보</strong><span class="hold">조회 전</span></div>`;return;
   }
-  const lbl=singokStatusLabel(s.swl);
-  const cls=lbl.cls==='ok'?'ok':lbl.cls==='warn'?'hold':'hold';
-  el.innerHTML=`<div style="padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:#fafbff">
+  const lbl=singokStatusLabel(s.swl, s.owl);
+  const bgColor = lbl.level==='strong'?'#e7f8ef':lbl.level==='weak'?'#fff8eb':'#f5f5f5';
+  const borderColor = lbl.level==='strong'?'#078a4f':lbl.level==='weak'?'#f6ad55':'#d1d5db';
+  const diffTxt = s.diff!==null ? `owl(${s.owl?.toFixed(2)}m) - swl(${s.swl?.toFixed(2)}m) = ${s.diff?.toFixed(2)}m` : '';
+  el.innerHTML=`<div style="padding:10px 14px;border-radius:10px;border:1px solid ${borderColor};background:${bgColor}">
     <strong style="font-size:13px">${lbl.icon} ${lbl.text}</strong>
-    <div class="muted" style="font-size:12px;margin-top:4px">관측시각: ${s.time?pretty(s.time):'불명'} · 기준: swl ≥ ${SINGOK_TIDE_THRESHOLD}m 이면 전파</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">
+      ${diffTxt}<br>
+      관측시각: ${s.time?pretty(s.time):'불명'} · 기준: owl-swl > 0 역류강, > -0.3 역류가능, 이하 정상흐름
+    </div>
   </div>`;
 }
 
@@ -914,7 +920,7 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
     <div class="kv"><b>투신 방류 영향</b><span>${fmtDamPoint(incidentState.damImpact,incidentState.damImpactTime)}</span></div>
     <div class="kv"><b>투신시점 물때</b><span>${incidentDt?fmtTideNumber(incidentDt,tideRows):'날짜 미입력'}</span></div>
     <div class="kv"><b>조회시점 물때</b><span>${searchDt?fmtTideNumber(searchDt,tideRows):'날짜 미입력'}</span></div>
-    <div class="kv"><b>신곡수중보</b><span>${singokStatusLabel(singokTideState.swl).text}</span></div>
+    <div class="kv"><b>신곡수중보</b><span>${singokStatusLabel(singokTideState.swl, singokTideState.owl).text}</span></div>
     <div class="kv" style="background:#f0f7ff;border-radius:6px;padding:8px 10px">
       <b>🌊 투신시점 참고유속</b>
       <span>${incidentState.velocity!==null
@@ -955,7 +961,7 @@ function renderModelInfo(b){
     <div class="kv" style="background:${b.tide?'#f5f0ff':'#f5f5f5'};border-radius:6px;padding:8px 10px;margin:4px 0">
       <b>🌊 조석 출처</b>
       <span><strong>${b.tide?`인천 (${TIDE_STATION}) + ${b.offset}분 보정 · 신곡수중보 swl 실시간 판단`:'잠실수중보 상류: 조석 제외'}</strong><br>
-      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, 계산 추정값)을 더한 보정값. 교량 직접 조석 측정값 아님. 신곡수중보 swl < ${SINGOK_TIDE_THRESHOLD}m이면 조석 차단.`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
+      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, 계산 추정값)을 더한 보정값. 교량 직접 조석 측정값 아님.<br>조석 영향 판단: 신곡수중보 owl-swl 수위차 기준 (>0 강한영향 / >-0.3 약한영향 / 이하 영향미미)`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
     </div>`;
 }
 

@@ -1147,8 +1147,12 @@ function rowsToPoints(rows,keys){ return rows.map(r=>({time:parseObsTime(r),valu
 function normalizePoints(points){ const vals=points.map(p=>p.value).filter(v=>v!=null);if(vals.length<2)return[];const min=Math.min(...vals),max=Math.max(...vals);return points.map(p=>({time:p.time,value:max===min?50:(p.value-min)/(max-min)*100,raw:p.value})); }
 function drawTimeMarker(ctx,x,padT,ch,padB,label,color){ ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x,padT);ctx.lineTo(x,ch-padB);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.font='700 12px system-ui';ctx.textAlign='center';const safeX=Math.max(42,Math.min(ctx.canvas.clientWidth-42,x));ctx.fillText(label,safeX,padT-18);ctx.restore(); }
 function drawLine(canvas,data,key='value',label='',markers=[],range=null){
-  const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;canvas.width=canvas.clientWidth*ratio;canvas.height=canvas.clientHeight*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);
-  const cw=canvas.clientWidth,ch=canvas.clientHeight;ctx.clearRect(0,0,cw,ch);ctx.font='14px system-ui';ctx.fillStyle='#172033';ctx.fillText(label,14,24);
+  const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;
+  // ★ 모바일 대응: clientWidth가 0이면 부모 요소 또는 화면 너비로 fallback
+  const cw = canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth || 360;
+  const ch = canvas.clientHeight || 280;
+  canvas.width=cw*ratio; canvas.height=ch*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,cw,ch);ctx.font='14px system-ui';ctx.fillStyle='#172033';ctx.fillText(label,14,24);
   let pts=data.filter(d=>d&&d[key]!=null&&d.time).sort((a,b)=>a.time-b.time);
   if(range&&range.start&&range.end){const rs=range.start.getTime(),re=range.end.getTime();pts=pts.filter(p=>p.time.getTime()>=rs&&p.time.getTime()<=re);}
   if(pts.length<2){ctx.fillStyle='#667085';ctx.fillText('그래프 데이터 부족',14,58);return;}
@@ -1225,8 +1229,12 @@ function drawLine(canvas,data,key='value',label='',markers=[],range=null){
   canvas.style.cursor='crosshair';
 }
 function drawMultiLine(canvas,series,label='',markers=[]){
-  const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;canvas.width=canvas.clientWidth*ratio;canvas.height=canvas.clientHeight*ratio;ctx.setTransform(ratio,0,0,ratio,0,0);
-  const cw=canvas.clientWidth,ch=canvas.clientHeight;ctx.clearRect(0,0,cw,ch);
+  const ctx=canvas.getContext('2d');const ratio=window.devicePixelRatio||1;
+  // ★ 모바일 대응: clientWidth가 0이면 부모 또는 화면 너비로 fallback
+  const cw = canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth || 360;
+  const ch = canvas.clientHeight || 500;
+  canvas.width=cw*ratio; canvas.height=ch*ratio; ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,cw,ch);
   const all=series.flatMap(s=>s.points).filter(p=>p.time&&p.value!=null);
   ctx.font='700 15px system-ui';ctx.fillStyle='#172033';ctx.fillText(label,16,24);
   if(all.length<2){ctx.fillStyle='#667085';ctx.fillText('통합 그래프 데이터 부족',16,60);return;}
@@ -1483,6 +1491,16 @@ async function runQuery(){
 
   renderBoard([{bridge:b.bridge,direction:`${currentState.direction} · ${currentState.speed}`}],b,currentState);
   $('inputStatus').textContent=`조회 완료${dataCapped?` · ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:''} · 신곡수중보 swl=${singokTideState.swl?.toFixed(2)??'조회실패'}m`;
+  // ★ 화면 회전 시 재렌더를 위해 마지막 조회 파라미터 저장
+  window._lastRunQuery = runQuery;
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ★ 모바일 대응: 화면 회전·크기 변경 시 그래프 재렌더
+window.addEventListener('resize', () => {
+  if(window._lastRunQuery) {
+    clearTimeout(window._resizeTimer);
+    window._resizeTimer = setTimeout(()=>{ window._lastRunQuery(); }, 300);
+  }
+});

@@ -124,10 +124,10 @@ function calcVelocity(fw, wl, stationCode){
 function velocityLabel(vel){
   if(vel === null) return null;
   if(vel < 0) return {label:'역류 가능', cls:'tide-in', note:'밀물 또는 조석 역류 구간'};
-  if(vel < 0.3) return {label:'완만', cls:'flow-na', note:`${vel.toFixed(2)}m/s · 조류 영향시 역류 가능`};
-  if(vel < 0.8) return {label:'보통', cls:'flow-out', note:`${vel.toFixed(2)}m/s · 이동 영향 있음`};
-  if(vel < 1.5) return {label:'빠름', cls:'bad', note:`${vel.toFixed(2)}m/s · 익수자 이동 영향 큼`};
-  return {label:'매우 빠름', cls:'bad', note:`${vel.toFixed(2)}m/s · 홍수기 수준`};
+  if(vel < 0.3) return {label:'완만', cls:'flow-na', note:`${vel.toFixed(2)}m/s (${(vel*3.6).toFixed(1)}km/h) · 조류 영향시 역류 가능`};
+  if(vel < 0.8) return {label:'보통', cls:'flow-out', note:`${vel.toFixed(2)}m/s (${(vel*3.6).toFixed(1)}km/h) · 이동 영향 있음`};
+  if(vel < 1.5) return {label:'빠름', cls:'bad', note:`${vel.toFixed(2)}m/s (${(vel*3.6).toFixed(1)}km/h) · 익수자 이동 영향 큼`};
+  return {label:'매우 빠름', cls:'bad', note:`${vel.toFixed(2)}m/s (${(vel*3.6).toFixed(1)}km/h) · 홍수기 수준`};
 }
 
 // ── 전역 유틸 ──────────────────────────────────────────────────
@@ -874,8 +874,8 @@ function renderDataFirstPanel(b=null,incidentState=null,currentState=null,q={}){
     <div class="data-card" style="border-color:#bfdbfe">
       <b>🌊 참고 유속</b><span class="data-badge ${incidentState.velocity!==null?'good':'hold'}">${incidentState.velSource||'없음'}</span>
       <div class="data-grid-mini">
-        <span>투신</span><span>${incidentState.velocity!==null?`<strong>${incidentState.velocity.toFixed(2)}m/s</strong> · ${incidentState.velInfo?.label||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
-        <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s</strong> · ${currentState.velInfo?.label||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
+        <span>투신</span><span>${incidentState.velocity!==null?`<strong>${incidentState.velocity.toFixed(2)}m/s (${(incidentState.velocity*3.6).toFixed(1)}km/h)</strong> · ${incidentState.velInfo?.label||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
+        <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s (${(currentState.velocity*3.6).toFixed(1)}km/h)</strong> · ${currentState.velInfo?.label||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
         <span>출처</span><span><small>${incidentState.velSource||'fw·HQ 데이터 없음'} · 단면적 추정치 포함</small></span>
       </div>
     </div>`;
@@ -906,6 +906,107 @@ function renderPointCompare(b,incidentState,currentState){
 }
 
 // ── 요약 패널 ────────────────────────────────────────────────
+// ── 3초 판단 카드 업데이트 ────────────────────────────────────
+function renderDecisionCard(b, currentState, incidentState, results){
+  // 교량명 + 시각
+  const sd=$('searchDate')?.value, st=$('searchTime')?.value;
+  const sdFmt = sd ? sd.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3') : '';
+  $('decisionBridge') && ($('decisionBridge').textContent = b.bridge);
+  $('decisionTime')   && ($('decisionTime').textContent   = sdFmt + (st?' '+st.slice(0,2)+':'+st.slice(2,4):''));
+
+  // 물 방향
+  const dirEl=$('dc-direction'), dirSub=$('dc-direction-sub');
+  if(dirEl){
+    const dir = currentState.direction||'—';
+    const hasDown = dir.includes('하류')||dir.includes('나가')||dir.includes('썰물');
+    const hasUp   = dir.includes('밀물')||dir.includes('들어오')||dir.includes('역류');
+    dirEl.textContent = hasDown?'↓ 하류':hasUp?'↑ 상류':'— 혼합';
+    dirEl.className   = 'dc-value '+(hasDown?'color-orange':hasUp?'color-blue':'color-muted');
+    if(dirSub) dirSub.textContent = dir;
+  }
+
+  // 유속
+  const velEl=$('dc-velocity'), velSub=$('dc-velocity-sub');
+  if(velEl){
+    if(currentState.velocity!==null){
+      const v=currentState.velocity, kmh=(v*3.6).toFixed(1);
+      const lvl=currentState.velInfo?.label||'';
+      const cls=lvl==='빠름'||lvl==='매우 빠름'?'color-red':lvl==='보통'?'color-yellow':'color-green';
+      velEl.textContent=`${v.toFixed(2)}`;
+      velEl.className='dc-value '+cls;
+      if(velSub) velSub.textContent=`m/s · ${kmh}km/h · ${lvl} · ${currentState.velSource||''}`;
+    } else {
+      velEl.textContent='—';
+      velEl.className='dc-value color-muted';
+      if(velSub) velSub.textContent='유속 데이터 없음';
+    }
+  }
+
+  // 수위
+  const wEl=$('dc-water'), wSub=$('dc-water-sub');
+  if(wEl){
+    if(currentState.water){
+      const w=currentState.water.value;
+      const wInc=incidentState.water?.value??null;
+      const diff=wInc!==null?w-wInc:null;
+      const cls=diff===null?'color-muted':diff>0.05?'color-red':diff<-0.05?'color-blue':'color-green';
+      wEl.textContent=w.toFixed(2)+'m';
+      wEl.className='dc-value '+cls;
+      if(wSub){
+        const diffTxt=diff!==null?(diff>=0?'▲+':'▼')+diff.toFixed(2)+'m vs 투신':'';
+        const src=currentState.water.isEstimate?'계산값(추정)':'실측';
+        wSub.textContent=`${diffTxt} · ${src}${currentState.water.stale?' · 시간차 큼':''}`;
+      }
+    } else {
+      wEl.textContent='—'; wEl.className='dc-value color-muted';
+      if(wSub) wSub.textContent='수위 데이터 없음';
+    }
+  }
+
+  // 조석 + 다음 전환
+  const tEl=$('dc-tide'), tSub=$('dc-tide-sub');
+  if(tEl){
+    if(!b.tide){
+      tEl.textContent='제외'; tEl.className='dc-value color-muted';
+      if(tSub) tSub.textContent='잠실수중보 상류 구간';
+    } else if(currentState.tideActive===false){
+      tEl.textContent='차단'; tEl.className='dc-value color-muted';
+      if(tSub) tSub.textContent='신곡수중보 정상 하류 흐름';
+    } else if(currentState.tide){
+      const phase=currentState.tide.phase;
+      const isMi=phase.includes('밀물');
+      tEl.textContent=isMi?'밀물':'썰물';
+      tEl.className='dc-value '+(isMi?'color-blue':'color-orange');
+      if(tSub){
+        let nextTxt='';
+        if(currentState.tide.nextTurn){
+          const nt=currentState.tide.nextTurn;
+          const bt=new Date(nt.time.getTime()+(b.offset||0)*60000);
+          nextTxt=` · 다음${nt.type}: ${String(bt.getHours()).padStart(2,'0')}:${String(bt.getMinutes()).padStart(2,'0')}`;
+        }
+        tSub.textContent=`${phase}${nextTxt}`;
+      }
+    } else {
+      tEl.textContent='미확인'; tEl.className='dc-value color-muted';
+      if(tSub) tSub.textContent='조석 데이터 없음';
+    }
+  }
+
+  // 이동경로 요약
+  const drEl=$('dc-drift');
+  if(drEl && results && results.length){
+    const r30=results.find(r=>r.minutes===30)||results[0];
+    const r60=results.find(r=>r.minutes===60);
+    const arrow=r30.direction.includes('하류')?'↓':'↑';
+    const src=incidentState.velSource||'';
+    drEl.textContent=`${arrow} ${r30.minutes}분 후 약 ${Math.abs(r30.distKm).toFixed(1)}km `
+      +(r60?`/ ${r60.minutes}분 후 약 ${Math.abs(r60.distKm).toFixed(1)}km `:'')
+      +(r30.nearbyBridges[0]?`(${r30.nearbyBridges[0].name} 인근)`:'');
+  } else if(drEl){
+    drEl.textContent='유속 데이터 부족 — 이동 추정 불가';
+  }
+}
+
 function renderSummary(b,incidentState,currentState,decision,tideRows){
   const searchDt=parseLocal($('searchDate').value,$('searchTime').value);
   const incidentDt=parseLocal($('incidentDate').value,$('incidentTime').value);
@@ -1056,7 +1157,7 @@ function renderDriftEstimate(b, incidentState){
       <td style="padding:10px 8px;color:${dirColor};font-weight:800;font-size:15px">${dirIcon} ${distTxt}</td>
       <td style="padding:10px 8px;font-size:13px">${nearby||'—'}</td>
       <td style="padding:10px 8px;font-size:12px;color:#667085">
-        순유속 ${r.netVelMs}m/s<br>
+        순유속 ${r.netVelMs}m/s (${(r.netVelMs*3.6).toFixed(1)}km/h)<br>
         하구 ${r.estDistFromSea.toFixed(1)}km
       </td>
     </tr>`;
@@ -1195,8 +1296,8 @@ function drawLine(chartId, data, key, label, markers, range){
   for(let i=0;i<=4;i++){
     const yp=PT+i*gH/4;
     const v=maxY-spanY*i/4;
-    gridY+=`<line x1="${PL}" y1="${yp}" x2="${W-PR}" y2="${yp}" stroke="#e5e7eb" stroke-width="1"/>`;
-    labY+=`<text x="${PL-6}" y="${yp+4}" text-anchor="end" font-size="18" fill="#8a95a8">${v.toFixed(2)}</text>`;
+    gridY+=`<line x1="${PL}" y1="${yp}" x2="${W-PR}" y2="${yp}" stroke="#1e2d45" stroke-width="1"/>`;
+    labY+=`<text x="${PL-6}" y="${yp+4}" text-anchor="end" font-size="18" fill="#6b7fa3">${v.toFixed(2)}</text>`;
   }
 
   // X 눈금
@@ -1204,7 +1305,7 @@ function drawLine(chartId, data, key, label, markers, range){
   for(let i=0;i<=4;i++){
     const tx=minX+spanX*i/4;
     const xp=Math.max(PL+20,Math.min(W-PR-20,sx(tx)));
-    labX+=`<text x="${xp}" y="${H-8}" text-anchor="middle" font-size="18" fill="#8a95a8">${fmtT(tx)}</text>`;
+    labX+=`<text x="${xp}" y="${H-8}" text-anchor="middle" font-size="18" fill="#6b7fa3">${fmtT(tx)}</text>`;
   }
 
   // 마커
@@ -1222,14 +1323,90 @@ function drawLine(chartId, data, key, label, markers, range){
   const pathD = pts.map((p,i)=>`${i===0?'M':'L'}${sx(p.time.getTime()).toFixed(1)},${sy(p[key]).toFixed(1)}`).join(' ');
   const last = pts[pts.length-1];
 
+  // 클릭 핀 상태 저장
+  el._chartPts = pts;
+  el._chartKey = key;
+  el._chartRange = {minX,maxX,minY,maxY,spanX,spanY,W,H,PL,PR,PT,PB,gW,gH};
+  el._chartLabel = label;
+
+  const svgId = 'svg_' + chartId;
+  const pinId = 'pin_' + chartId;
+  const tipId = 'tip_' + chartId;
+
   el.innerHTML = `
-    <div style="padding:8px 12px 0;font-size:13px;font-weight:700;color:#172033">${label}</div>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+    <div style="padding:8px 12px 0;font-size:13px;font-weight:700;color:#f0f4ff">${label}</div>
+    <div id="${tipId}" style="display:none;padding:6px 12px;background:#101828;color:#fff;font-size:12px;border-radius:6px;margin:0 12px 4px;line-height:1.6"></div>
+    <svg id="${svgId}" viewBox="0 0 ${W} ${H}" width="100%" style="display:block;cursor:crosshair">
       ${gridY}${labY}${labX}${mkSvg}
       <path d="${pathD}" fill="none" stroke="#0f62fe" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
       <circle cx="${sx(last.time.getTime()).toFixed(1)}" cy="${sy(last[key]).toFixed(1)}" r="6" fill="#0f62fe"/>
+      <g id="${pinId}"></g>
     </svg>`;
-  el.style.cssText = 'width:100%;background:#fff;border:1px solid #e6e8ef;border-radius:12px;overflow:hidden;box-sizing:border-box';
+  el.style.cssText = 'width:100%;background:#1a2235;border:1px solid #1e2d45;border-radius:10px;overflow:hidden;box-sizing:border-box';
+
+  // 클릭/터치 핀 이벤트
+  const svgEl = document.getElementById(svgId);
+  const pinEl = document.getElementById(pinId);
+  const tipEl = document.getElementById(tipId);
+  let pinActive = false;
+
+  function handleChartClick(e){
+    e.preventDefault();
+    const rect = svgEl.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const ratioX = (clientX - rect.left) / rect.width;
+    const svgX = ratioX * W;
+    const tClick = minX + (svgX - PL) / gW * spanX;
+
+    // 가장 가까운 포인트
+    let best = null, bestDiff = Infinity;
+    pts.forEach(p => {
+      const d = Math.abs(p.time.getTime() - tClick);
+      if(d < bestDiff){ bestDiff = d; best = p; }
+    });
+    if(!best) return;
+
+    // 같은 포인트 다시 클릭 → 핀 해제
+    if(pinActive && Math.abs(best.time.getTime() - pinActive) < 30000){
+      pinEl.innerHTML = '';
+      tipEl.style.display = 'none';
+      pinActive = false;
+      return;
+    }
+    pinActive = best.time.getTime();
+
+    const px = (PL + (best.time.getTime()-minX)/spanX*gW).toFixed(1);
+    const py = (PT + (1-(best[key]-minY)/spanY)*gH).toFixed(1);
+
+    // 날짜+시간 포맷
+    const d = best.time;
+    const spanDays2 = spanX/86400000;
+    const timeTxt = spanDays2 >= 1
+      ? `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${_hhmm(d)}`
+      : _hhmm(d);
+
+    // 단위 판별
+    const unitLabel = label.includes('수위') ? 'm'
+      : label.includes('방류') ? '㎥/s'
+      : label.includes('조위') ? 'cm' : '';
+    const valTxt = Number(best[key]).toFixed(2) + unitLabel;
+
+    // SVG 핀
+    pinEl.innerHTML = `
+      <line x1="${px}" y1="${PT}" x2="${px}" y2="${PT+gH}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="4,3"/>
+      <circle cx="${px}" cy="${py}" r="7" fill="#f59e0b"/>
+      <circle cx="${px}" cy="${py}" r="3" fill="#fff"/>
+    `;
+
+    // 말풍선 (SVG 위 div)
+    tipEl.innerHTML = `⏱ ${timeTxt} &nbsp;|&nbsp; 📊 ${valTxt}`;
+    tipEl.style.display = 'block';
+  }
+
+  if(svgEl){
+    svgEl.addEventListener('click', handleChartClick);
+    svgEl.addEventListener('touchstart', handleChartClick, {passive:false});
+  }
 }
 
 function drawMultiLine(chartId, series, label, markers){
@@ -1413,6 +1590,11 @@ async function runQuery(){
   try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }
   try{ renderDataFirstPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderDataFirstPanel',e.message); }
   try{ renderDriftEstimate(b,incidentState); }catch(e){ log('[오류] renderDriftEstimate',e.message); }
+  // ★ 3초 판단 카드 — drift results 추출 후 업데이트
+  try{
+    const driftResults = estimateDrift(b.bridge,incidentState.velocity,incidentState.tideActive,incidentState.tide?.phase,incidentState.tide?.rateCmHr,[30,60,120,360]);
+    renderDecisionCard(b,currentState,incidentState,driftResults);
+  }catch(e){ log('[오류] renderDecisionCard',e.message); }
   try{ renderDeltaPanel(incidentState,currentState); }catch(e){ log('[오류] renderDeltaPanel',e.message); }
   try{ renderReasonPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderReasonPanel',e.message); }
   try{ renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows); }catch(e){ log('[오류] renderDataWarnings',e.message); }

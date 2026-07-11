@@ -328,6 +328,13 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     <div id="tideChartNote" class="chart-note"></div>
   </div>
 
+  <!-- 실시간 수심 카드 -->
+  <div class="card" style="border-color:#1e3a5f">
+    <div class="section-title">🤿 실시간 수심 <span class="muted">(운항기준도 하상고 기반)</span></div>
+    <p class="muted small">현재 수위와 서울형 해도(2026.05) 하상고(EL.m) 기반 참고 수심입니다. 현장 확인 우선.</p>
+    <div id="depthCard"><p class="muted">조회 후 표시됩니다.</p></div>
+  </div>
+
   <!-- 이동경로 추정 -->
   <div class="card" style="border-color:#1e3a5f">
     <div class="section-title">⑤ 이동 경로 추정 <span class="muted">(투신시점 유속 기반 참고)</span></div>
@@ -377,7 +384,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260710-darkui" defer></script>
+<script src="js/app.js?v=20260710-depth" defer></script>
 <script>
 // 조회 조건 접기/펼치기
 document.addEventListener('DOMContentLoaded', function(){

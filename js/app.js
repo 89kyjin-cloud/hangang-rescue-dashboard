@@ -1019,11 +1019,15 @@ function renderDepthCard(b, incidentState, currentState, db){
 
 // ── 3초 판단 카드 업데이트 ────────────────────────────────────
 function renderDecisionCard(b, currentState, incidentState, results, tideRows, searchDt){
-  // 교량명 + 시각
-  const sd=$('searchDate')?.value, st=$('searchTime')?.value;
-  const sdFmt = sd ? sd.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3') : '';
+  // 교량명 + 조회시각 (년.월.일 HH:MM 형식)
+  const sd=$('searchDate')?.value||'', st=$('searchTime')?.value||'';
+  let timeTxt = '';
+  if(sd.length===8){
+    timeTxt = `${sd.slice(0,4)}.${sd.slice(4,6)}.${sd.slice(6,8)}`;
+    if(st.length>=4) timeTxt += ` ${st.slice(0,2)}:${st.slice(2,4)}`;
+  }
   $('decisionBridge') && ($('decisionBridge').textContent = b.bridge);
-  $('decisionTime')   && ($('decisionTime').textContent   = sdFmt + (st?' '+st.slice(0,2)+':'+st.slice(2,4):''));
+  $('decisionTime')   && ($('decisionTime').textContent   = timeTxt);
 
   // 물 방향
   const dirEl=$('dc-direction'), dirSub=$('dc-direction-sub');
@@ -1402,8 +1406,8 @@ function drawLine(chartId, data, key, label, markers, range){
   for(let i=0;i<=4;i++){
     const yp=PT+i*gH/4;
     const v=maxY-spanY*i/4;
-    gridY+=`<line x1="${PL}" y1="${yp}" x2="${W-PR}" y2="${yp}" stroke="#1e2d45" stroke-width="1"/>`;
-    labY+=`<text x="${PL-6}" y="${yp+4}" text-anchor="end" font-size="18" fill="#6b7fa3">${v.toFixed(2)}</text>`;
+    gridY+=`<line x1="${PL}" y1="${yp}" x2="${W-PR}" y2="${yp}" stroke="#1e3050" stroke-width="0.8"/>`;
+    labY+=`<text x="${PL-6}" y="${yp+4}" text-anchor="end" font-size="17" fill="#8a9bbf">${v.toFixed(2)}</text>`;
   }
 
   // X 눈금
@@ -1411,7 +1415,7 @@ function drawLine(chartId, data, key, label, markers, range){
   for(let i=0;i<=4;i++){
     const tx=minX+spanX*i/4;
     const xp=Math.max(PL+20,Math.min(W-PR-20,sx(tx)));
-    labX+=`<text x="${xp}" y="${H-8}" text-anchor="middle" font-size="18" fill="#6b7fa3">${fmtT(tx)}</text>`;
+    labX+=`<text x="${xp}" y="${H-8}" text-anchor="middle" font-size="17" fill="#8a9bbf">${fmtT(tx)}</text>`;
   }
 
   // 마커

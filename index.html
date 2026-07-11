@@ -193,7 +193,63 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 <main>
 
-  <!-- ★ 3초 판단 카드 (최상단 고정) -->
+  <!-- ① 조회 조건 (항상 보임 — 교량·시각) -->
+  <div class="card" style="margin-bottom:10px">
+    <label style="margin-bottom:6px;display:block">교량</label>
+    <select id="bridgeSelect" style="margin-bottom:8px"></select>
+    <p id="bridgeCount" class="muted" style="margin-top:-4px;margin-bottom:10px;font-size:11px"></p>
+    <div class="grid2">
+      <div>
+        <label>사고 날짜</label>
+        <input id="incidentDate" type="text" inputmode="numeric" placeholder="20260621"/>
+      </div>
+      <div>
+        <label>사고 시각</label>
+        <input id="incidentTime" type="text" inputmode="numeric" placeholder="1300"/>
+      </div>
+      <div>
+        <label>조회 날짜</label>
+        <input id="searchDate" type="text" inputmode="numeric" placeholder="20260622"/>
+      </div>
+      <div>
+        <label>조회 시각</label>
+        <input id="searchTime" type="text" inputmode="numeric" placeholder="1100"/>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:10px">
+      <button id="setNow" class="btn-secondary btn-sm">현재시각</button>
+    </div>
+    <p id="inputStatus" class="muted" style="margin-top:6px;font-size:12px"></p>
+    <button id="runQuery" class="btn-primary" style="margin-top:10px">🔍 환경 조회</button>
+
+    <!-- API 키 접기 -->
+    <button class="collapse-btn" id="keyToggle" style="margin-top:12px;margin-bottom:0">
+      <span style="font-size:13px;color:var(--muted)">🔑 API 키 설정</span>
+      <span id="keyToggleIcon" style="color:var(--muted)">▼</span>
+    </button>
+    <div class="collapse-body" id="keyBody">
+      <div style="padding-top:10px">
+        <label>한강홍수통제소</label>
+        <div class="key-row">
+          <input id="hrfcoKey" type="password" placeholder="HRFCO API Key" autocomplete="off" spellcheck="false"/>
+          <button type="button" class="btn-secondary btn-sm" data-toggle-key="hrfcoKey">보기</button>
+        </div>
+        <label>조석 API</label>
+        <div class="key-row">
+          <input id="tideKey" type="password" placeholder="Tide API Key" autocomplete="off" spellcheck="false"/>
+          <button type="button" class="btn-secondary btn-sm" data-toggle-key="tideKey">보기</button>
+        </div>
+        <input id="weatherKey" type="hidden"/>
+        <div class="btn-row" style="margin-top:8px">
+          <button id="saveKeys" class="btn-secondary btn-sm">키 저장</button>
+          <button id="clearKeys" class="btn-danger btn-sm">키 삭제</button>
+          <span id="keyStatus" class="muted" style="padding-top:4px;font-size:12px"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 3초 판단 카드 -->
   <div class="decision-card">
     <div class="decision-top">
       <span class="decision-bridge" id="decisionBridge">교량 선택 후 조회</span>
@@ -216,80 +272,19 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
         <div class="dc-sub" id="dc-water-sub">조회 전</div>
       </div>
       <div class="dc-item">
-        <div class="dc-label">조석 / 다음 전환</div>
+        <div class="dc-label">조석 · 물때</div>
         <div class="dc-value color-muted" id="dc-tide">—</div>
         <div class="dc-sub" id="dc-tide-sub">조회 전</div>
       </div>
-      <div class="dc-item dc-full">
-        <div class="dc-label">이동 경로 (참고)</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text)" id="dc-drift">조회 전 — 투신시점 유속 기반 추정</div>
+      <div class="dc-item dc-full" style="min-height:0;padding:10px">
+        <div id="combinedChart" class="chart-wrap" style="min-height:220px"></div>
+        <div id="combinedChartNote" class="chart-note"></div>
       </div>
     </div>
   </div>
 
   <!-- 경고 -->
   <div id="dataWarnings" style="display:none"></div>
-
-  <!-- 조회 조건 (접기/펼치기) -->
-  <button class="collapse-btn" id="queryToggle">
-    <span>⚙ 조회 조건 설정</span>
-    <span id="queryToggleIcon">▼</span>
-  </button>
-  <div class="collapse-body" id="queryBody">
-    <div class="card">
-      <!-- API 키 -->
-      <div class="section-title">API 키</div>
-      <label>한강홍수통제소</label>
-      <div class="key-row">
-        <input id="hrfcoKey" type="password" placeholder="HRFCO API Key" autocomplete="off" spellcheck="false"/>
-        <button type="button" class="btn-secondary btn-sm" data-toggle-key="hrfcoKey">보기</button>
-      </div>
-      <label>조석 API</label>
-      <div class="key-row">
-        <input id="tideKey" type="password" placeholder="Tide API Key" autocomplete="off" spellcheck="false"/>
-        <button type="button" class="btn-secondary btn-sm" data-toggle-key="tideKey">보기</button>
-      </div>
-      <input id="weatherKey" type="hidden"/>
-      <div class="btn-row">
-        <button id="saveKeys" class="btn-secondary btn-sm">키 저장</button>
-        <button id="clearKeys" class="btn-danger btn-sm">키 삭제</button>
-        <span id="keyStatus" class="muted" style="padding-top:4px"></span>
-      </div>
-
-      <hr class="divider"/>
-
-      <!-- 조회 조건 -->
-      <div class="section-title">교량 및 시각</div>
-      <label>교량</label>
-      <select id="bridgeSelect"></select>
-      <p id="bridgeCount" class="muted" style="margin-top:4px"></p>
-
-      <div class="grid2" style="margin-top:10px">
-        <div>
-          <label>사고 날짜</label>
-          <input id="incidentDate" type="text" inputmode="numeric" placeholder="20260621"/>
-        </div>
-        <div>
-          <label>사고 시간</label>
-          <input id="incidentTime" type="text" inputmode="numeric" placeholder="1300"/>
-        </div>
-        <div>
-          <label>조회 날짜</label>
-          <input id="searchDate" type="text" inputmode="numeric" placeholder="20260622"/>
-        </div>
-        <div>
-          <label>조회 시간</label>
-          <input id="searchTime" type="text" inputmode="numeric" placeholder="1100"/>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button id="setNow" class="btn-secondary btn-sm">현재시각</button>
-      </div>
-      <p id="inputStatus" class="muted" style="margin-top:6px"></p>
-    </div>
-
-    <button id="runQuery" class="btn-primary">🔍 환경 조회</button>
-  </div>
 
   <!-- 데이터 신뢰도 -->
   <div class="card-sm">
@@ -335,12 +330,6 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     <div id="depthCard"><p class="muted">조회 후 표시됩니다.</p></div>
   </div>
 
-  <!-- 이동경로 추정 -->
-  <div class="card" style="border-color:#1e3a5f">
-    <div class="section-title">⑤ 이동 경로 추정 <span class="muted">(투신시점 유속 기반 참고)</span></div>
-    <div id="driftEstimate"><p class="muted">조회 전 상태입니다.</p></div>
-  </div>
-
   <!-- 교량 현황판 -->
   <div class="card">
     <div class="section-title">한강 전체 교량</div>
@@ -384,17 +373,17 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260710-depth" defer></script>
+<script src="js/app.js?v=20260711-nodrift" defer></script>
 <script>
-// 조회 조건 접기/펼치기
 document.addEventListener('DOMContentLoaded', function(){
-  const btn = document.getElementById('queryToggle');
-  const body = document.getElementById('queryBody');
-  const icon = document.getElementById('queryToggleIcon');
-  if(btn && body){
-    btn.addEventListener('click', function(){
-      const open = body.classList.toggle('open');
-      icon.textContent = open ? '▲' : '▼';
+  // API 키 접기/펼치기
+  const keyBtn = document.getElementById('keyToggle');
+  const keyBody = document.getElementById('keyBody');
+  const keyIcon = document.getElementById('keyToggleIcon');
+  if(keyBtn && keyBody){
+    keyBtn.addEventListener('click', function(){
+      const open = keyBody.classList.toggle('open');
+      keyIcon.textContent = open ? '▲' : '▼';
     });
   }
   // 상세 정보 접기

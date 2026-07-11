@@ -24,7 +24,13 @@
   --r:14px;
   --r-sm:10px;
 }
-html{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:15px}
+html{background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  font-size:15px;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
+}
 body{min-height:100vh;padding-bottom:env(safe-area-inset-bottom,20px)}
 
 /* ── 상단바 ── */
@@ -43,7 +49,7 @@ body{min-height:100vh;padding-bottom:env(safe-area-inset-bottom,20px)}
 main{max-width:640px;margin:0 auto;padding:12px 10px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
 .card-sm{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;margin-bottom:8px}
-.section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px}
+.section-title{font-size:12px;font-weight:700;color:#8a9bbf;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px}
 .divider{border:none;border-top:1px solid var(--border);margin:12px 0}
 
 /* ── ★ 3초 판단 카드 ── */
@@ -59,9 +65,9 @@ main{max-width:640px;margin:0 auto;padding:12px 10px}
 .decision-time{font-size:11px;color:var(--muted)}
 .decision-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .dc-item{background:#0d1525;border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 10px}
-.dc-label{font-size:11px;color:var(--muted);margin-bottom:6px;font-weight:600}
+.dc-label{font-size:11px;color:#8a9bbf;margin-bottom:6px;font-weight:700;letter-spacing:0.3px}
 .dc-value{font-size:26px;font-weight:900;line-height:1;letter-spacing:-1px}
-.dc-sub{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
+.dc-sub{font-size:11px;color:#8a9bbf;margin-top:5px;line-height:1.5}
 .dc-full{grid-column:1/-1}
 .color-green{color:var(--green)}
 .color-red{color:var(--red)}
@@ -129,7 +135,7 @@ button:active{opacity:.75}
 
 /* ── 그래프 ── */
 .chart-wrap{width:100%;min-height:240px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin-top:8px}
-.chart-note{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+.chart-note{font-size:11px;color:#7a8ba8;margin-top:6px;line-height:1.6}
 
 /* ── 이동경로 ── */
 .drift-table{width:100%;border-collapse:collapse;font-size:14px}
@@ -153,8 +159,8 @@ button:active{opacity:.75}
 .info-banner{background:#0a1628;border:1px solid #3b82f644;border-radius:var(--r-sm);padding:10px 14px;font-size:12px;color:#7cb9ff;line-height:1.6;margin-bottom:6px}
 
 /* ── 텍스트 ── */
-.muted{color:var(--muted);font-size:12px}
-.small{font-size:12px}
+.muted{color:#8a9bbf;font-size:12px}
+.small{font-size:12px;color:#8a9bbf}
 pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;font-size:11px;max-height:320px;overflow:auto;line-height:1.5}
 
 /* ── 신곡수중보 상태 ── */
@@ -373,7 +379,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260711-nodrift" defer></script>
+<script src="js/app.js?v=20260711-darkfix" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기

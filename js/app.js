@@ -1018,7 +1018,7 @@ function renderDepthCard(b, incidentState, currentState, db){
 }
 
 // ── 3초 판단 카드 업데이트 ────────────────────────────────────
-function renderDecisionCard(b, currentState, incidentState, results){
+function renderDecisionCard(b, currentState, incidentState, results, tideRows, searchDt){
   // 교량명 + 시각
   const sd=$('searchDate')?.value, st=$('searchTime')?.value;
   const sdFmt = sd ? sd.replace(/(\d{4})(\d{2})(\d{2})/,'$1.$2.$3') : '';
@@ -1036,16 +1036,16 @@ function renderDecisionCard(b, currentState, incidentState, results){
     if(dirSub) dirSub.textContent = dir;
   }
 
-  // 유속
+  // 유속 — 시속(km/h) 메인, (m/s) 보조
   const velEl=$('dc-velocity'), velSub=$('dc-velocity-sub');
   if(velEl){
     if(currentState.velocity!==null){
       const v=currentState.velocity, kmh=(v*3.6).toFixed(1);
       const lvl=currentState.velInfo?.label||'';
       const cls=lvl==='빠름'||lvl==='매우 빠름'?'color-red':lvl==='보통'?'color-yellow':'color-green';
-      velEl.textContent=`${v.toFixed(2)}`;
-      velEl.className='dc-value '+cls;
-      if(velSub) velSub.textContent=`m/s · ${kmh}km/h · ${lvl} · ${currentState.velSource||''}`;
+      velEl.innerHTML=`<span class="${cls}" style="font-size:26px;font-weight:900">${kmh}</span><span style="font-size:13px;color:var(--muted);font-weight:600"> km/h</span><span style="font-size:11px;color:var(--muted);margin-left:4px">(${v.toFixed(2)}m/s)</span>`;
+      velEl.className='dc-value';
+      if(velSub) velSub.textContent=`${lvl} · ${currentState.velSource||''}`;
     } else {
       velEl.textContent='—';
       velEl.className='dc-value color-muted';
@@ -1074,28 +1074,35 @@ function renderDecisionCard(b, currentState, incidentState, results){
     }
   }
 
-  // 조석 + 다음 전환
+  // 조석 + 물때
   const tEl=$('dc-tide'), tSub=$('dc-tide-sub');
   if(tEl){
     if(!b.tide){
-      tEl.textContent='제외'; tEl.className='dc-value color-muted';
+      tEl.innerHTML='<span style="font-size:20px">제외</span>';
+      tEl.className='dc-value color-muted';
       if(tSub) tSub.textContent='잠실수중보 상류 구간';
     } else if(currentState.tideActive===false){
-      tEl.textContent='차단'; tEl.className='dc-value color-muted';
-      if(tSub) tSub.textContent='신곡수중보 정상 하류 흐름';
+      // 물때는 조석 차단 여부와 무관하게 표시
+      const tnCur = tideNumber(searchDt||new Date(), tideRows);
+      const tnTxt = tnCur ? `${tnCur.n}물 · ${tnCur.name}` : '';
+      tEl.innerHTML=`<span style="font-size:20px;color:var(--muted)">차단</span>`;
+      tEl.className='dc-value';
+      if(tSub) tSub.innerHTML=`신곡수중보 정상 하류흐름<br>${tnTxt?`<strong style="color:var(--text)">${tnTxt}</strong>`:''}`;
     } else if(currentState.tide){
       const phase=currentState.tide.phase;
       const isMi=phase.includes('밀물');
-      tEl.textContent=isMi?'밀물':'썰물';
-      tEl.className='dc-value '+(isMi?'color-blue':'color-orange');
+      const tnCur = tideNumber(searchDt||new Date(), tideRows);
+      const tnTxt = tnCur ? `${tnCur.n}물 · ${tnCur.name}` : '';
+      tEl.innerHTML=`<span style="font-size:22px;font-weight:900;color:${isMi?'var(--blue)':'var(--orange)'}">${isMi?'밀물':'썰물'}</span>`;
+      tEl.className='dc-value';
       if(tSub){
         let nextTxt='';
         if(currentState.tide.nextTurn){
           const nt=currentState.tide.nextTurn;
           const bt=new Date(nt.time.getTime()+(b.offset||0)*60000);
-          nextTxt=` · 다음${nt.type}: ${String(bt.getHours()).padStart(2,'0')}:${String(bt.getMinutes()).padStart(2,'0')}`;
+          nextTxt=`다음전환 ${String(bt.getHours()).padStart(2,'0')}:${String(bt.getMinutes()).padStart(2,'0')}`;
         }
-        tSub.textContent=`${phase}${nextTxt}`;
+        tSub.innerHTML=`${nextTxt?nextTxt+'<br>':''}<strong style="color:var(--text)">${tnTxt}</strong>`;
       }
     } else {
       tEl.textContent='미확인'; tEl.className='dc-value color-muted';
@@ -1103,19 +1110,7 @@ function renderDecisionCard(b, currentState, incidentState, results){
     }
   }
 
-  // 이동경로 요약
-  const drEl=$('dc-drift');
-  if(drEl && results && results.length){
-    const r30=results.find(r=>r.minutes===30)||results[0];
-    const r60=results.find(r=>r.minutes===60);
-    const arrow=r30.direction.includes('하류')?'↓':'↑';
-    const src=incidentState.velSource||'';
-    drEl.textContent=`${arrow} ${r30.minutes}분 후 약 ${Math.abs(r30.distKm).toFixed(1)}km `
-      +(r60?`/ ${r60.minutes}분 후 약 ${Math.abs(r60.distKm).toFixed(1)}km `:'')
-      +(r30.nearbyBridges[0]?`(${r30.nearbyBridges[0].name} 인근)`:'');
-  } else if(drEl){
-    drEl.textContent='유속 데이터 부족 — 이동 추정 불가';
-  }
+  // 이동경로 표시 제거 (신뢰도 40% — 현장 혼란 우려로 삭제)
 }
 
 function renderSummary(b,incidentState,currentState,decision,tideRows){
@@ -1697,7 +1692,7 @@ async function runQuery(){
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링
-  // ★ 수심 DB 로드 후 수심 카드 렌더
+  // 수심 DB 로드 후 수심 카드 렌더
   loadNavChartDB().then(db=>{
     try{ renderDepthCard(b, incidentState, currentState, db); }catch(e){ log('[오류] renderDepthCard',e.message); }
   });
@@ -1705,11 +1700,10 @@ async function runQuery(){
   try{ renderSummary(b,incidentState,currentState,decision,tideRows); }catch(e){ log('[오류] renderSummary',e.message,e.stack?.split('\n')[1]); }
   try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }
   try{ renderDataFirstPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderDataFirstPanel',e.message); }
-  try{ renderDriftEstimate(b,incidentState); }catch(e){ log('[오류] renderDriftEstimate',e.message); }
-  // ★ 3초 판단 카드 — drift results 추출 후 업데이트
+  // renderDriftEstimate 제거 (신뢰도 40%)
+  // 3초 판단 카드 업데이트
   try{
-    const driftResults = estimateDrift(b.bridge,incidentState.velocity,incidentState.tideActive,incidentState.tide?.phase,incidentState.tide?.rateCmHr,[30,60,120,360]);
-    renderDecisionCard(b,currentState,incidentState,driftResults);
+    renderDecisionCard(b,currentState,incidentState,null,tideRows,search);
   }catch(e){ log('[오류] renderDecisionCard',e.message); }
   try{ renderDeltaPanel(incidentState,currentState); }catch(e){ log('[오류] renderDeltaPanel',e.message); }
   try{ renderReasonPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderReasonPanel',e.message); }

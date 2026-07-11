@@ -1,0 +1,1812 @@
+{
+  "_meta": {
+    "title": "한강 운항기준도(서울형 해도)",
+    "source": "서울특별시 미래한강본부",
+    "published": "2026-05-07",
+    "version": "초판",
+    "sheets": "8/8 전체",
+    "inputDate": "2026-07-10",
+    "note": "수색·구조 보조 목적 디지털화. 원본 대비 수치 오차 가능. 현장 확인 우선.",
+    "depthNote": "하상고(EL.m) 기준. 실제 수심 = HRFCO 수위(wl) - 하상고(EL.m). 수위에 따라 실제 수심 변동."
+  },
+  "legend": {
+    "lightBlue_stripe": "한강버스 가항수역",
+    "dark_stripe": "저수심 구역 (수심 2m 이하) — 잠수 불가, 수색선 접근 주의",
+    "dotted": "수상레저활동 주의구역",
+    "orange": "수상레저활동 위험구역",
+    "yellow": "수상레저활동 금지구역",
+    "blue_solid": "수상레저활동 집중구역",
+    "brown": "어업구역"
+  },
+  "speedLimitOnApproach": {
+    "200m": "10kts",
+    "100m": "5~6kts",
+    "docking": "2~3kts",
+    "10m": "1kts 미만"
+  },
+  "bridges": [
+    {
+      "sheet": "1/8",
+      "name": "가양대교",
+      "zone": "하류 조석",
+      "hrfcoCode": "1019630",
+      "mainSpan": {
+        "fromPier": 11,
+        "toPier": 12,
+        "span_m": 172.0
+      },
+      "speedLimit": "5kn",
+      "notes": "수상레저활동 주의구역 인근"
+    },
+    {
+      "sheet": "2/8",
+      "name": "월드컵대교",
+      "zone": "하류 조석",
+      "hrfcoCode": "1019630",
+      "mainSpan": {
+        "fromPier": 10,
+        "toPier": 11,
+        "span_m": 196.6
+      },
+      "speedLimit": "5kn"
+    },
+    {
+      "sheet": "2/8",
+      "name": "성산대교",
+      "zone": "하류 조석",
+      "hrfcoCode": "1019630",
+      "mainSpan": [
+        {
+          "fromPier": 6,
+          "toPier": 7,
+          "span_m": 105.3
+        },
+        {
+          "fromPier": 8,
+          "toPier": 9,
+          "span_m": 107.0
+        }
+      ],
+      "speedLimit": "5kn",
+      "notes": "경간장 332.2m 구간 포함"
+    },
+    {
+      "sheet": "3/8",
+      "name": "양화대교",
+      "zone": "중하류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 12,
+        "toPier": 15,
+        "span_m": 104.5
+      },
+      "notes": "잠두봉선착장 인근, 수상레저 주의구역"
+    },
+    {
+      "sheet": "3/8",
+      "name": "당산철교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": [
+        {
+          "fromPier": 14,
+          "toPier": 15,
+          "span_m": 76.3
+        },
+        {
+          "fromPier": 15,
+          "toPier": 16,
+          "span_m": 80.0
+        }
+      ]
+    },
+    {
+      "sheet": "3/8",
+      "name": "서강대교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 19,
+        "toPier": 21,
+        "span_m": 54.4
+      }
+    },
+    {
+      "sheet": "4/8",
+      "name": "마포대교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 18,
+        "toPier": 20,
+        "span_m": 55.0
+      }
+    },
+    {
+      "sheet": "4/8",
+      "name": "원효대교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 2,
+        "toPier": 4,
+        "span_m": 62.9
+      }
+    },
+    {
+      "sheet": "4/8",
+      "name": "한강철교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": [
+        {
+          "fromPier": 24,
+          "toPier": 25,
+          "span_m": 43.9
+        },
+        {
+          "fromPier": 25,
+          "toPier": 26,
+          "span_m": 56.9
+        }
+      ]
+    },
+    {
+      "sheet": "4/8",
+      "name": "한강대교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 2,
+        "toPier": 4,
+        "span_m": 53.3
+      }
+    },
+    {
+      "sheet": "5/8",
+      "name": "동작대교",
+      "zone": "중류",
+      "hrfcoCode": "1018683",
+      "mainSpan": {
+        "fromPier": 2,
+        "toPier": 3,
+        "span_m": 53.3
+      },
+      "depthSamples": {
+        "source": "달빛노을선착장 인근 삽입도",
+        "note": "EL.m 기준 (해발고도), 수위에 따라 실제 수심 달라짐",
+        "samples_el_m": [
+          -4.28,
+          -4.26,
+          -4.2,
+          -3.24,
+          -3.04,
+          -5.01,
+          -4.13,
+          -4.16,
+          -4.58,
+          -2.8,
+          -6.21,
+          -5.05,
+          -11.37,
+          -11.97,
+          -5.49,
+          -6.49,
+          -5.47,
+          -5.33
+        ]
+      },
+      "verticalClearance_m": 7.207,
+      "notes": "달빛노을교 수직여유고 7.207m"
+    },
+    {
+      "sheet": "5/8",
+      "name": "반포대교(잠수교)",
+      "zone": "중류",
+      "hrfcoCode": "1018681",
+      "mainSpan": {
+        "fromPier": 21,
+        "toPier": 24,
+        "span_m": 34.9
+      },
+      "notes": "잠수교 포함, 저수심 구역 주의"
+    },
+    {
+      "sheet": "6/8",
+      "name": "한남대교",
+      "zone": "중류",
+      "hrfcoCode": "1018680",
+      "mainSpan": {
+        "fromPier": 4,
+        "toPier": 18,
+        "span_m": 21.7
+      }
+    },
+    {
+      "sheet": "7/8",
+      "name": "동호대교",
+      "zone": "중류",
+      "hrfcoCode": "1018680",
+      "mainSpan": [
+        {
+          "fromPier": 11,
+          "toPier": 12,
+          "span_m": 66.0
+        },
+        {
+          "fromPier": 12,
+          "toPier": 13,
+          "span_m": 69.4
+        }
+      ]
+    },
+    {
+      "sheet": "7/8",
+      "name": "성수대교",
+      "zone": "중상류",
+      "hrfcoCode": "1018662",
+      "mainSpan": {
+        "fromPier": 10,
+        "toPier": 11,
+        "span_m": 113.5
+      }
+    },
+    {
+      "sheet": "7/8",
+      "name": "영동대교",
+      "zone": "중상류",
+      "hrfcoCode": "1018662",
+      "mainSpan": {
+        "fromPier": 10,
+        "toPier": 12,
+        "span_m": 39.5
+      }
+    },
+    {
+      "sheet": "8/8",
+      "name": "청담대교",
+      "zone": "중상류",
+      "hrfcoCode": "1018662",
+      "mainSpan": [
+        {
+          "fromPier": "38→방향30",
+          "span_m": 67.4
+        },
+        {
+          "fromPier": "41→42",
+          "span_m": 70.8
+        },
+        {
+          "fromPier": "42→43",
+          "span_m": 71.4
+        }
+      ]
+    },
+    {
+      "sheet": "8/8",
+      "name": "영동대교",
+      "zone": "중상류",
+      "hrfcoCode": "1018662",
+      "mainSpan": {
+        "fromPier": 10,
+        "toPier": 12,
+        "span_m": 39.5
+      }
+    }
+  ],
+  "bedLevels": {
+    "가양대교": {
+      "source": "운항기준도 1/8 (2026.05) — 직접 독해",
+      "readDate": "2026-07-10",
+      "note": "하상고 EL.m 기준. 실제수심 = wl(HRFCO) - 하상고",
+      "zones": [
+        {
+          "name": "상류 북단 (주항로 상류)",
+          "bedEl_samples": [
+            -5.99,
+            -6.54,
+            -6.21,
+            -6.43,
+            -4.99,
+            -5.78,
+            -6.44,
+            -6.32,
+            -6.2,
+            -6.26
+          ],
+          "bedEl_min": -6.5,
+          "bedEl_max": -3.0,
+          "bedEl_repr": -5.8,
+          "note": "북단 연안 쪽으로 얕아짐"
+        },
+        {
+          "name": "교각 P11~P12 항로",
+          "bedEl_samples": [
+            -4.75,
+            -4.43,
+            -4.88,
+            -5.16,
+            -4.8,
+            -4.62,
+            -4.33,
+            -5.17,
+            -4.79,
+            -4.52
+          ],
+          "bedEl_min": -5.2,
+          "bedEl_max": -4.3,
+          "bedEl_repr": -4.8,
+          "note": "주통항로 구간"
+        },
+        {
+          "name": "한강버스 가항수역",
+          "bedEl_samples": [
+            -5.48,
+            -4.75,
+            -4.84,
+            -4.76,
+            -5.22,
+            -5.4,
+            -4.99,
+            -4.58,
+            -4.85,
+            -5.16,
+            -5.69,
+            -5.35,
+            -4.41,
+            -4.53
+          ],
+          "bedEl_min": -5.7,
+          "bedEl_max": -4.4,
+          "bedEl_repr": -5.0,
+          "note": "파란 띠 가항수역 중심"
+        }
+      ],
+      "representative": {
+        "bedEl_main_channel": -5.0,
+        "bedEl_deepest": -6.5,
+        "bedEl_shallow_warn": -2.0,
+        "verticalClearance_m": 23.735
+      }
+    },
+    "월드컵대교": {
+      "source": "운항기준도 2/8 — 직접 독해 (2026-07-10)",
+      "piers": {
+        "P10": {
+          "location": "월드컵대교 상류 항로교각",
+          "bedEl_samples": [
+            -5.02,
+            -5.52,
+            -5.45,
+            -5.09,
+            -5.16,
+            -5.5,
+            -5.54,
+            -5.32,
+            -5.12,
+            -5.15
+          ],
+          "bedEl_min": -5.7,
+          "bedEl_max": -5.0,
+          "bedEl_repr": -5.3,
+          "note": "교각 주변 5m대 안정. 교각대(베이지) 진입 시 -3.3~-4.3m로 급변 주의"
+        },
+        "P11": {
+          "location": "월드컵대교 하류 항로교각",
+          "bedEl_samples": [
+            -6.1,
+            -6.18,
+            -6.85,
+            -7.1,
+            -6.92,
+            -7.07,
+            -7.55,
+            -7.67,
+            -7.42,
+            -7.2,
+            -7.29,
+            -7.32,
+            -7.13,
+            -7.72,
+            -8.05,
+            -8.17,
+            -8.24,
+            -9.07
+          ],
+          "bedEl_min": -9.1,
+          "bedEl_max": -6.1,
+          "bedEl_repr": -7.2,
+          "deepest": -9.07,
+          "note": "한강 최심 구간 중 하나. 최심 -9.07m EL 확인"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -6.5,
+        "bedEl_deepest": -9.1,
+        "bedEl_shallow_warn": -2.0,
+        "verticalClearance_m": 26.175
+      }
+    },
+    "성산대교": {
+      "source": "운항기준도 2/8 — 직접 독해 (2026-07-10)",
+      "piers": {
+        "P7": {
+          "location": "성산대교 상류 교각",
+          "bedEl_samples": [
+            -4.17,
+            -4.59,
+            -4.69,
+            -5.06,
+            -4.88,
+            -5.07,
+            -5.12,
+            -5.0
+          ],
+          "bedEl_min": -5.2,
+          "bedEl_max": -4.2,
+          "bedEl_repr": -4.8,
+          "note": "5kn 속도제한 구간"
+        },
+        "P8": {
+          "location": "성산대교 중간 교각",
+          "bedEl_samples": [
+            -5.78,
+            -6.67,
+            -6.06,
+            -6.18,
+            -6.12
+          ],
+          "bedEl_min": -6.7,
+          "bedEl_max": -5.8,
+          "bedEl_repr": -6.2,
+          "note": "5kn 속도제한 구간"
+        },
+        "P9": {
+          "location": "성산대교 하류 교각 (332.2m 경간)",
+          "bedEl_samples": [
+            -8.31,
+            -7.91,
+            -6.43,
+            -6.53,
+            -7.34,
+            -10.96,
+            -11.96,
+            -12.29
+          ],
+          "bedEl_min": -12.3,
+          "bedEl_max": -6.4,
+          "bedEl_repr": -8.5,
+          "deepest": -12.29,
+          "note": "⚠ 최심 -12.29m EL — 한강 전 구간 최심 구간 중 하나. 경간 332.2m"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -7.0,
+        "bedEl_deepest": -12.3,
+        "bedEl_shallow_warn": -2.0,
+        "verticalClearance_m": 22.393
+      }
+    },
+    "양화대교": {
+      "source": "운항기준도 3/8 — 직접 독해 (2026-07-10)",
+      "piers": {
+        "P12": {
+          "location": "양화대교 주항로교각",
+          "bedEl_samples": [
+            -8.86,
+            -9.49,
+            -11.13,
+            -10.65,
+            -11.59,
+            -11.94,
+            -12.63,
+            -12.28,
+            -12.36,
+            -13.25,
+            -13.1
+          ],
+          "bedEl_min": -13.3,
+          "bedEl_max": -8.9,
+          "bedEl_repr": -11.0,
+          "deepest": -13.25,
+          "note": "⚠ 최심 -13.25m EL — 한강 전 구간 최심급"
+        },
+        "P15": {
+          "location": "양화대교 하류교각",
+          "bedEl_samples": [
+            -9.23,
+            -9.56,
+            -9.81,
+            -9.46,
+            -8.77,
+            -8.94
+          ],
+          "bedEl_min": -9.8,
+          "bedEl_max": -8.8,
+          "bedEl_repr": -9.3,
+          "note": "9m대 안정"
+        },
+        "P16": {
+          "location": "양화대교 남단교각",
+          "bedEl_samples": [
+            -10.37,
+            -10.35,
+            -11.0,
+            -10.6,
+            -11.57,
+            -11.5,
+            -11.13
+          ],
+          "bedEl_min": -11.6,
+          "bedEl_max": -10.4,
+          "bedEl_repr": -10.9,
+          "note": "10~11m대 깊음"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -11.0,
+        "bedEl_deepest": -13.3,
+        "bedEl_shallow_warn": -2.0,
+        "verticalClearance_m": 16.499
+      }
+    },
+    "당산철교": {
+      "source": "운항기준도 3/8 — 직접 독해 IMG_0580+IMG_0581 (2026-07-10)",
+      "piers": {
+        "P14": {
+          "location": "당산철교 상류교각 (Φ90 매설관 인근)",
+          "bedEl_samples": [
+            -8.39,
+            -8.73,
+            -7.7,
+            -7.14,
+            -6.77,
+            -5.7,
+            -5.3,
+            -3.77
+          ],
+          "bedEl_min": -8.7,
+          "bedEl_max": -3.8,
+          "bedEl_repr": -6.5,
+          "note": "⚠ 하류로 갈수록 급감 (-8.7 → -3.8m), 매설관 주의"
+        },
+        "P15": {
+          "location": "당산철교 중간교각",
+          "bedEl_samples": [
+            -9.65,
+            -9.66,
+            -9.53,
+            -8.94,
+            -9.22,
+            -9.23,
+            -9.81,
+            -9.56,
+            -9.14,
+            -10.4,
+            -10.44,
+            -10.16,
+            -10.66,
+            -10.7,
+            -10.77
+          ],
+          "bedEl_min": -10.8,
+          "bedEl_max": -8.9,
+          "bedEl_repr": -9.8,
+          "deepest": -10.77,
+          "note": "상류측 -10.7m대, 전반적으로 깊고 안정"
+        },
+        "P16": {
+          "location": "당산철교 하류교각 (최심)",
+          "bedEl_samples": [
+            -11.29,
+            -11.24,
+            -11.57,
+            -11.58,
+            -11.44,
+            -12.09,
+            -12.15,
+            -12.14,
+            -12.59,
+            -12.68,
+            -13.43,
+            -13.76,
+            -13.15,
+            -12.32,
+            -12.95,
+            -11.5,
+            -11.97,
+            -12.0,
+            -12.17
+          ],
+          "bedEl_min": -13.8,
+          "bedEl_max": -11.2,
+          "bedEl_repr": -12.2,
+          "deepest": -13.76,
+          "note": "🔴 최심 -13.76m EL — 이 사진 기준 최심. 수중수색 시 감압 계획 필수"
+        },
+        "downstream": {
+          "location": "당산철교 하류 (얕아지는 구간)",
+          "bedEl_samples": [
+            -4.22,
+            -4.08,
+            -4.01,
+            -4.21,
+            -4.16,
+            -3.85,
+            -3.65,
+            -3.82,
+            -3.88,
+            -2.69,
+            -2.79,
+            -2.98
+          ],
+          "bedEl_min": -4.2,
+          "bedEl_max": -2.7,
+          "bedEl_repr": -3.5,
+          "note": "⚠ 하류 진입 시 급격히 2~4m대로 얕아짐"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -10.5,
+        "bedEl_deepest": -13.8,
+        "bedEl_shallow_warn": -2.0,
+        "verticalClearance_m": 24.127,
+        "mainSpan_m": 515.3
+      }
+    },
+    "서강대교": {
+      "source": "운항기준도 4/8 — 직접 독해 IMG_0592·IMG_0593 (2026-07-10)",
+      "verticalClearance_m": 17.775,
+      "note": "H=17.775(E.L,m) 확인",
+      "piers": {
+        "P18": {
+          "location": "서강대교 P18",
+          "bedEl_samples": [
+            -4.71,
+            -4.03,
+            -4.17,
+            -4.47,
+            -5.59,
+            -4.6,
+            -4.25,
+            -5.78
+          ],
+          "bedEl_min": -5.8,
+          "bedEl_max": -4.0,
+          "bedEl_repr": -4.7,
+          "note": "4~5m대 안정"
+        },
+        "P19": {
+          "location": "서강대교 P19 (주항로)",
+          "bedEl_samples": [
+            -5.6,
+            -4.44,
+            -5.23,
+            -5.41,
+            -4.9,
+            -4.8,
+            -5.6,
+            -5.8
+          ],
+          "bedEl_min": -5.8,
+          "bedEl_max": -4.4,
+          "bedEl_repr": -5.2,
+          "note": "주항로 5m대 안정"
+        },
+        "P20": {
+          "location": "서강대교 P20 (여의도 인근)",
+          "bedEl_samples": [
+            -5.44,
+            -5.18,
+            -5.41,
+            -5.82,
+            -5.41,
+            -5.13
+          ],
+          "bedEl_min": -5.8,
+          "bedEl_max": -5.1,
+          "bedEl_repr": -5.4,
+          "note": "5m대 안정"
+        },
+        "shallow_boundary": {
+          "location": "여의도 저수심 경계 (갈색 구역)",
+          "bedEl_samples": [
+            -2.12,
+            -2.94,
+            -3.18,
+            -3.97,
+            -1.27,
+            -0.7,
+            -0.56
+          ],
+          "bedEl_min": -4.0,
+          "bedEl_max": -0.6,
+          "bedEl_repr": -2.0,
+          "note": "🚫 저수심 급감 — 최저 -0.56m EL, 접근 금지"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -5.2,
+        "bedEl_deepest": -5.8,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "마포대교": {
+      "source": "운항기준도 4/8 — 직접 독해 IMG_0595 (2026-07-10)",
+      "verticalClearance_m": 17.235,
+      "piers": {
+        "P16": {
+          "location": "마포대교 P16 (Spd limit 5kn)",
+          "bedEl_samples": [
+            -5.01,
+            -5.61,
+            -5.44,
+            -5.23
+          ],
+          "bedEl_min": -5.6,
+          "bedEl_max": -5.0,
+          "bedEl_repr": -5.3,
+          "note": "5m대 안정, 5kn 제한"
+        },
+        "P17": {
+          "location": "마포대교 P17",
+          "bedEl_samples": [
+            -5.18,
+            -4.44,
+            -5.6,
+            -6.6,
+            -5.67
+          ],
+          "bedEl_min": -6.6,
+          "bedEl_max": -4.4,
+          "bedEl_repr": -5.5,
+          "deepest": -6.6,
+          "note": "5~6m대, 최심 -6.60m EL"
+        },
+        "P18": {
+          "location": "마포대교 P18 (Spd limit 8kn)",
+          "bedEl_samples": [
+            -5.6,
+            -5.44,
+            -4.41
+          ],
+          "bedEl_min": -5.6,
+          "bedEl_max": -4.4,
+          "bedEl_repr": -5.2,
+          "note": "8kn 제한"
+        },
+        "P20": {
+          "location": "마포대교 P20 (여의도 선착장 인근)",
+          "bedEl_samples": [
+            -4.63,
+            -4.51,
+            -3.09,
+            -5.1,
+            -5.11
+          ],
+          "bedEl_min": -5.1,
+          "bedEl_max": -3.1,
+          "bedEl_repr": -4.5,
+          "note": "여의도 선착장 인근, 하류로 갈수록 얕아짐"
+        },
+        "Yeouido_pier": {
+          "location": "여의도 선착장 전면",
+          "bedEl_samples": [
+            -3.09,
+            -1.81,
+            -1.11
+          ],
+          "bedEl_min": -3.1,
+          "bedEl_max": -1.1,
+          "bedEl_repr": -2.0,
+          "note": "⚠ 수상레저 금지구역, 최저 -1.11m EL"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -5.3,
+        "bedEl_deepest": -6.6,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "원효대교": {
+      "source": "운항기준도 4/8 — 직접 독해 IMG_0596·IMG_0597 (2026-07-10)",
+      "verticalClearance_m": 21.885,
+      "piers": {
+        "NW2": {
+          "location": "원효대교 NW2 (Φ90 매설관, 노들섬 인근)",
+          "bedEl_samples": [
+            -2.39,
+            -2.38,
+            -2.8
+          ],
+          "bedEl_min": -2.8,
+          "bedEl_max": -2.4,
+          "bedEl_repr": -2.5,
+          "note": "⚠ 노들섬 인근 저수심 — 수상레저 주의구역"
+        },
+        "NW3": {
+          "location": "원효대교 NW3 (경간 82.9m)",
+          "bedEl_samples": [
+            -3.27,
+            -3.6,
+            -3.88,
+            -3.89,
+            -3.43
+          ],
+          "bedEl_min": -3.9,
+          "bedEl_max": -3.3,
+          "bedEl_repr": -3.6,
+          "note": "3m대, 경간 82.9m"
+        },
+        "NW4": {
+          "location": "원효대교 NW4 (경간 82.9m)",
+          "bedEl_samples": [
+            -3.77,
+            -3.75,
+            -3.88,
+            -4.17,
+            -4.36
+          ],
+          "bedEl_min": -4.4,
+          "bedEl_max": -3.8,
+          "bedEl_repr": -4.0,
+          "note": "경간 82.9m, 수상레저 주의구역"
+        },
+        "main_channel": {
+          "location": "원효대교 주항로 가항수역 (경간 208.3m)",
+          "bedEl_samples": [
+            -4.05,
+            -4.57,
+            -4.84,
+            -4.83,
+            -5.51,
+            -5.39
+          ],
+          "bedEl_min": -5.5,
+          "bedEl_max": -4.1,
+          "bedEl_repr": -4.8,
+          "note": "주항로 4~5m대, 파라다이스 선착장 방향"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -4.8,
+        "bedEl_deepest": -5.5,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "한강철교": {
+      "source": "운항기준도 4/8 — 직접 독해 IMG_0598·IMG_0599 (2026-07-10)",
+      "verticalClearance_m": 15.826,
+      "note": "Φ90 매설관, 교각 간 교행 제한",
+      "piers": {
+        "P22": {
+          "location": "한강철교 P22 (상류)",
+          "bedEl_samples": [
+            -3.81,
+            -3.86,
+            -5.0,
+            -5.78,
+            -4.91,
+            -4.3,
+            -5.5
+          ],
+          "bedEl_min": -5.8,
+          "bedEl_max": -3.8,
+          "bedEl_repr": -4.7,
+          "note": "3~5m대, 상류 구간"
+        },
+        "P24": {
+          "location": "한강철교 P24 (중간)",
+          "bedEl_samples": [
+            -7.4,
+            -7.8,
+            -7.0,
+            -4.0,
+            -5.0
+          ],
+          "bedEl_min": -7.8,
+          "bedEl_max": -4.0,
+          "bedEl_repr": -6.5,
+          "note": "교각 베이지 구간 -0.48m 급감 주의"
+        },
+        "P26": {
+          "location": "한강철교 P26 (하류, 최심)",
+          "bedEl_samples": [
+            -7.01,
+            -7.07,
+            -9.9,
+            -10.01
+          ],
+          "bedEl_min": -10.0,
+          "bedEl_max": -7.0,
+          "bedEl_repr": -8.5,
+          "deepest": -10.01,
+          "note": "🔴 최심 -10.01m EL — 수중수색 시 감압 계획 필요"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -6.5,
+        "bedEl_deepest": -10.0,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "한강대교": {
+      "source": "운항기준도 5/8 — 직접 독해 IMG_0600 (2026-07-10)",
+      "verticalClearance_m": 17.207,
+      "note": "Φ90 매설관, 달빛노들선착장 인근",
+      "piers": {
+        "P1": {
+          "location": "한강대교 P1 (상류, 달빛노들선착장)",
+          "bedEl_samples": [
+            -3.24,
+            -4.05,
+            -4.3,
+            -5.64,
+            -8.43,
+            -9.96,
+            -9.5,
+            -12.36,
+            -12.26,
+            -12.36,
+            -11.3,
+            -11.59,
+            -11.37,
+            -11.73,
+            -12.77,
+            -13.67,
+            -13.85,
+            -15.58,
+            -13.37,
+            -12.81,
+            -15.15
+          ],
+          "bedEl_min": -15.6,
+          "bedEl_max": -3.2,
+          "bedEl_repr": -11.5,
+          "deepest": -15.58,
+          "note": "🔴 최심 -15.58m EL — 지금까지 전체 최심. 감압 계획 필수"
+        },
+        "P2": {
+          "location": "한강대교 P2 (중간)",
+          "bedEl_samples": [
+            -10.9,
+            -11.26,
+            -10.75,
+            -12.77,
+            -13.68,
+            -14.17,
+            -12.0,
+            -11.05,
+            -11.7,
+            -12.31,
+            -12.81,
+            -11.68,
+            -9.36,
+            -10.01,
+            -10.42,
+            -9.37,
+            -9.66,
+            -9.91
+          ],
+          "bedEl_min": -14.2,
+          "bedEl_max": -9.4,
+          "bedEl_repr": -11.5,
+          "deepest": -14.17,
+          "note": "10~14m대, 매우 깊음"
+        },
+        "P3": {
+          "location": "한강대교 P3",
+          "bedEl_samples": [
+            -11.22,
+            -11.62,
+            -12.13,
+            -12.18,
+            -12.04,
+            -10.44,
+            -11.64,
+            -11.39,
+            -10.2
+          ],
+          "bedEl_min": -12.2,
+          "bedEl_max": -10.2,
+          "bedEl_repr": -11.4,
+          "note": "10~12m대 안정적으로 깊음"
+        },
+        "P4": {
+          "location": "한강대교 P4 (하류, Φ90 매설관)",
+          "bedEl_samples": [
+            -3.84,
+            -5.0,
+            -9.72,
+            -10.13,
+            -10.38,
+            -4.49,
+            -3.09,
+            -2.78,
+            -3.81,
+            -7.6,
+            -5.4,
+            -10.67,
+            -9.82
+          ],
+          "bedEl_min": -10.7,
+          "bedEl_max": -2.8,
+          "bedEl_repr": -6.5,
+          "note": "⚠ 하류로 갈수록 급감 — 최저 -2.78m EL. 달빛노들선착장 방향 저수심"
+        },
+        "shallow_north": {
+          "location": "북단 저수심 경계",
+          "bedEl_samples": [
+            -1.91,
+            -4.28,
+            -4.26,
+            -2.03,
+            -2.88
+          ],
+          "bedEl_min": -4.3,
+          "bedEl_max": -1.9,
+          "bedEl_repr": -2.5,
+          "note": "🚫 최저 -1.91m EL — 수색선 진입 금지"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -11.5,
+        "bedEl_deepest": -15.6,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "동작대교": {
+      "source": "운항기준도 5/8 — 직접 독해 IMG_0603 (2026-07-10)",
+      "verticalClearance_m": 27.17,
+      "note": "119수난구조대(반포) 인근",
+      "piers": {
+        "upstream_left": {
+          "location": "동작대교 상류 좌측 (서래섬 방향)",
+          "bedEl_samples": [
+            -7.9,
+            -7.23,
+            -6.37,
+            -6.74,
+            -6.81,
+            -6.15,
+            -7.08,
+            -7.65,
+            -7.61,
+            -5.61,
+            -5.42,
+            -4.78,
+            -3.78,
+            -2.36
+          ],
+          "bedEl_min": -7.9,
+          "bedEl_max": -2.4,
+          "bedEl_repr": -6.2,
+          "deepest": -7.9,
+          "note": "상류 좌측 최심 -7.9m, 하류로 갈수록 급감"
+        },
+        "main_pier": {
+          "location": "동작대교 주교각 (중심)",
+          "bedEl_samples": [
+            -3.72,
+            -3.85,
+            -3.48,
+            -2.85,
+            -2.47,
+            -4.3,
+            -4.73,
+            -5.13,
+            -5.33,
+            -3.62,
+            -3.8,
+            -3.51,
+            -2.4
+          ],
+          "bedEl_min": -5.3,
+          "bedEl_max": -2.4,
+          "bedEl_repr": -3.8,
+          "note": "교각 중심 3~5m대, 교각대 구간 얕음"
+        },
+        "main_channel": {
+          "location": "동작대교 주항로 (한강버스 가항수역)",
+          "bedEl_samples": [
+            -4.64,
+            -5.0,
+            -4.49,
+            -5.3,
+            -5.97,
+            -6.46,
+            -6.11,
+            -6.5,
+            -6.53,
+            -6.74,
+            -7.07,
+            -7.1,
+            -6.82
+          ],
+          "bedEl_min": -7.1,
+          "bedEl_max": -4.5,
+          "bedEl_repr": -6.0,
+          "deepest": -7.1,
+          "note": "주항로 5~7m대, 세빛섬 방향"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -6.0,
+        "bedEl_deepest": -7.9,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "반포대교": {
+      "source": "운항기준도 6/8 — 직접 독해 IMG_0605·IMG_0606 (2026-07-10)",
+      "verticalClearance_m": 11.727,
+      "note": "Φ180 매설관, Spd limit 8kn, 경간 345.4m. 세빛섬(솔빛·채빛·가빛) 인근 수상레저 금지구역",
+      "piers": {
+        "P21": {
+          "location": "반포대교 P21 (상류 진입)",
+          "bedEl_samples": [
+            -1.8,
+            -1.79,
+            -1.96,
+            -2.6,
+            -2.88,
+            -3.25,
+            -2.99,
+            -3.04
+          ],
+          "bedEl_min": -3.3,
+          "bedEl_max": -1.8,
+          "bedEl_repr": -2.4,
+          "note": "⚠ 최저 -1.80m EL — 저수심 주의"
+        },
+        "P22": {
+          "location": "반포대교 P22",
+          "bedEl_samples": [
+            -4.02,
+            -3.76,
+            -3.46,
+            -4.2,
+            -4.11,
+            -3.35,
+            -4.36,
+            -3.61,
+            -4.35,
+            -4.11,
+            -4.46,
+            -3.5
+          ],
+          "bedEl_min": -4.5,
+          "bedEl_max": -3.3,
+          "bedEl_repr": -3.9,
+          "note": "3~4m대"
+        },
+        "P23": {
+          "location": "반포대교 P23",
+          "bedEl_samples": [
+            -3.91,
+            -3.74,
+            -4.56,
+            -4.77,
+            -4.96,
+            -4.5
+          ],
+          "bedEl_min": -5.0,
+          "bedEl_max": -3.7,
+          "bedEl_repr": -4.4,
+          "note": "4~5m대"
+        },
+        "P24": {
+          "location": "반포대교 P24 (하류)",
+          "bedEl_samples": [
+            -3.22,
+            -3.8,
+            -4.01,
+            -4.12,
+            -4.46,
+            -4.06,
+            -4.87,
+            -4.85,
+            -4.86,
+            -5.1
+          ],
+          "bedEl_min": -5.1,
+          "bedEl_max": -3.2,
+          "bedEl_repr": -4.3,
+          "note": "3~5m대, Φ180 매설관"
+        },
+        "main_channel": {
+          "location": "반포대교 주항로 (한강버스 가항수역)",
+          "bedEl_samples": [
+            -6.28,
+            -6.7,
+            -6.37,
+            -6.88,
+            -6.5,
+            -6.82,
+            -6.22,
+            -6.59,
+            -6.55,
+            -6.13,
+            -5.13,
+            -4.99,
+            -5.1,
+            -5.2,
+            -4.58,
+            -4.66,
+            -5.41,
+            -5.71,
+            -5.82
+          ],
+          "bedEl_min": -6.9,
+          "bedEl_max": -4.6,
+          "bedEl_repr": -5.8,
+          "deepest": -6.88,
+          "note": "주항로 5~7m대"
+        },
+        "south_shallow": {
+          "location": "남단 저수심 (세빛섬 인근)",
+          "bedEl_samples": [
+            -2.38,
+            -2.1,
+            -2.85,
+            -2.93,
+            -2.75
+          ],
+          "bedEl_min": -2.9,
+          "bedEl_max": -2.1,
+          "bedEl_repr": -2.5,
+          "note": "⚠ 수상레저 금지구역 인근 — 최저 -2.10m EL"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -5.8,
+        "bedEl_deepest": -6.9,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "잠수교": {
+      "source": "반포대교와 동일 구간 참조",
+      "note": "반포대교(잠수교) 동일 구간. 반포대교 데이터 참조.",
+      "representative": {
+        "bedEl_main_channel": -5.8,
+        "bedEl_deepest": -6.9,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "한남대교": {
+      "source": "운항기준도 6/8 — 직접 독해 (2026-07-10)",
+      "verticalClearance_m": 18.856,
+      "note": "Φ180 매설관, Spd limit 5kn, 경간 236.7m/84.7m. 교행 제한구역",
+      "piers": {
+        "upstream_deep": {
+          "location": "한남대교 상류 (P5L·P6 인근 깊은 구간)",
+          "bedEl_samples": [
+            -12.95,
+            -11.95,
+            -11.3,
+            -10.88,
+            -10.37,
+            -9.65,
+            -9.75,
+            -9.6,
+            -9.34,
+            -8.46,
+            -8.53,
+            -6.53,
+            -5.85,
+            -6.46,
+            -8.03,
+            -7.48,
+            -10.48,
+            -10.76
+          ],
+          "bedEl_min": -13.0,
+          "bedEl_max": -5.9,
+          "bedEl_repr": -9.5,
+          "deepest": -12.95,
+          "note": "🔴 상류 최심 -12.95m EL"
+        },
+        "EP13": {
+          "location": "한남대교 EP13 (Spd limit 5kn)",
+          "bedEl_samples": [
+            -3.99,
+            -3.39,
+            -3.47,
+            -4.49,
+            -5.35,
+            -5.29,
+            -5.52,
+            -3.87,
+            -3.7,
+            -3.94
+          ],
+          "bedEl_min": -5.5,
+          "bedEl_max": -3.4,
+          "bedEl_repr": -4.2,
+          "note": "5kn 제한"
+        },
+        "EP15": {
+          "location": "한남대교 EP15",
+          "bedEl_samples": [
+            -3.47,
+            -3.41,
+            -3.33,
+            -3.0
+          ],
+          "bedEl_min": -3.5,
+          "bedEl_max": -3.0,
+          "bedEl_repr": -3.3,
+          "note": "3m대 얕음"
+        },
+        "EP17": {
+          "location": "한남대교 EP17",
+          "bedEl_samples": [
+            -4.55,
+            -4.0,
+            -3.8
+          ],
+          "bedEl_min": -4.6,
+          "bedEl_max": -3.8,
+          "bedEl_repr": -4.1
+        },
+        "EP19": {
+          "location": "한남대교 EP19 (Φ180, Spd limit 5kn)",
+          "bedEl_samples": [
+            -3.11,
+            -3.24,
+            -3.49
+          ],
+          "bedEl_min": -3.5,
+          "bedEl_max": -3.1,
+          "bedEl_repr": -3.3,
+          "note": "3m대, Φ180 매설관"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -9.5,
+        "bedEl_deepest": -13.0,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "동호대교": {
+      "source": "운항기준도 7/8 — 직접 독해 IMG_0608·IMG_0609 (2026-07-10)",
+      "verticalClearance_m": 26.305,
+      "note": "Φ90 매설관, Spd limit 5kn/8kn, 교행 제한구역, 국수나루 선착장",
+      "piers": {
+        "P09": {
+          "location": "동호대교 P09 (상류)",
+          "bedEl_samples": [
+            -4.07,
+            -4.13,
+            -3.97,
+            -4.15,
+            -3.9,
+            -4.33,
+            -3.85
+          ],
+          "bedEl_min": -4.3,
+          "bedEl_max": -3.9,
+          "bedEl_repr": -4.1,
+          "note": "4m대 안정"
+        },
+        "P10": {
+          "location": "동호대교 P10",
+          "bedEl_samples": [
+            -4.33,
+            -4.37,
+            -4.15,
+            -4.7,
+            -4.3,
+            -4.23
+          ],
+          "bedEl_min": -4.7,
+          "bedEl_max": -4.2,
+          "bedEl_repr": -4.4,
+          "note": "4m대"
+        },
+        "P11": {
+          "location": "동호대교 P11 (Spd limit 8kn)",
+          "bedEl_samples": [
+            -3.79,
+            -4.05,
+            -3.61,
+            -3.44,
+            -4.08,
+            -5.17,
+            -5.54,
+            -5.73,
+            -5.6,
+            -5.22,
+            -5.85,
+            -5.33,
+            -5.11,
+            -4.87,
+            -4.97
+          ],
+          "bedEl_min": -5.9,
+          "bedEl_max": -3.4,
+          "bedEl_repr": -4.7,
+          "deepest": -5.85,
+          "note": "8kn 제한. 좌측 채널 -5.85m까지 깊어짐"
+        },
+        "P13": {
+          "location": "동호대교 P13 (Φ90, Spd limit 5kn)",
+          "bedEl_samples": [
+            -3.28,
+            -3.49,
+            -3.31,
+            -4.28,
+            -2.0,
+            -2.19,
+            -2.5,
+            -1.45,
+            -1.59
+          ],
+          "bedEl_min": -4.3,
+          "bedEl_max": -1.5,
+          "bedEl_repr": -2.9,
+          "note": "⚠ 하류 저수심 급감 -1.45m EL. 남단 갈색 구역 인접"
+        },
+        "main_channel": {
+          "location": "동호대교 주항로 가항수역",
+          "bedEl_samples": [
+            -4.51,
+            -4.68,
+            -4.75,
+            -4.55,
+            -4.6,
+            -4.58,
+            -4.37,
+            -4.17,
+            -4.58,
+            -4.47,
+            -4.52
+          ],
+          "bedEl_min": -4.8,
+          "bedEl_max": -4.2,
+          "bedEl_repr": -4.5,
+          "note": "4~5m대 안정"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -4.5,
+        "bedEl_deepest": -5.9,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "성수대교": {
+      "source": "운항기준도 7/8 — 직접 독해 IMG_0611 (2026-07-10)",
+      "verticalClearance_m": 24.555,
+      "note": "Φ180 매설관, Spd limit 13kn, 119수난구조대(뚝섬) 인근",
+      "piers": {
+        "MP10": {
+          "location": "성수대교 MP10",
+          "bedEl_samples": [
+            -4.88,
+            -5.57,
+            -5.09,
+            -5.66,
+            -5.13,
+            -4.76,
+            -4.12
+          ],
+          "bedEl_min": -5.7,
+          "bedEl_max": -4.1,
+          "bedEl_repr": -5.0,
+          "note": "5m대"
+        },
+        "MP11": {
+          "location": "성수대교 MP11 (하류)",
+          "bedEl_samples": [
+            -6.1,
+            -5.97,
+            -6.04,
+            -4.87,
+            -5.0,
+            -4.53,
+            -4.01,
+            -4.11,
+            -3.67,
+            -3.45,
+            -3.5
+          ],
+          "bedEl_min": -6.1,
+          "bedEl_max": -3.5,
+          "bedEl_repr": -4.8,
+          "deepest": -6.1,
+          "note": "하류로 갈수록 급감"
+        },
+        "main_channel": {
+          "location": "성수대교 주항로 가항수역",
+          "bedEl_samples": [
+            -5.97,
+            -6.04,
+            -6.25,
+            -6.01,
+            -5.95,
+            -5.99,
+            -5.41,
+            -5.87,
+            -4.05,
+            -4.87,
+            -4.53
+          ],
+          "bedEl_min": -6.3,
+          "bedEl_max": -4.1,
+          "bedEl_repr": -5.5,
+          "deepest": -6.25
+        },
+        "downstream_shallow": {
+          "location": "성수대교 하류 저수심",
+          "bedEl_samples": [
+            -2.59,
+            -2.19,
+            -0.81,
+            -1.04,
+            -1.75
+          ],
+          "bedEl_min": -2.6,
+          "bedEl_max": -0.8,
+          "bedEl_repr": -1.7,
+          "note": "🚫 최저 -0.81m EL — 수색선 접근 금지"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -5.5,
+        "bedEl_deepest": -6.3,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "영동대교": {
+      "source": "운항기준도 7/8 — 직접 독해 IMG_0612 (2026-07-10)",
+      "note": "Φ180 매설관, Spd limit 13kn, 교행 제한구역",
+      "piers": {
+        "north_shallow": {
+          "location": "영동대교 북단 저수심",
+          "bedEl_samples": [
+            -2.07,
+            -1.1,
+            -0.99,
+            -0.88,
+            -1.18,
+            -1.15,
+            -1.07,
+            -1.4,
+            -1.14,
+            -0.99
+          ],
+          "bedEl_min": -2.1,
+          "bedEl_max": -0.9,
+          "bedEl_repr": -1.3,
+          "note": "🚫 최저 -0.88m EL — 수색선 접근 금지"
+        },
+        "main_channel": {
+          "location": "영동대교 주항로",
+          "bedEl_samples": [
+            -3.73,
+            -3.88,
+            -4.98,
+            -4.87,
+            -4.82,
+            -4.9,
+            -5.02,
+            -5.51,
+            -5.49,
+            -5.59,
+            -4.75,
+            -4.97,
+            -5.04,
+            -5.16
+          ],
+          "bedEl_min": -5.6,
+          "bedEl_max": -3.7,
+          "bedEl_repr": -4.8,
+          "deepest": -5.59
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -4.8,
+        "bedEl_deepest": -5.6,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "청담대교": {
+      "source": "운항기준도 8/8 — 직접 독해 IMG_0613·IMG_0614 (2026-07-10)",
+      "verticalClearance_m": 24.765,
+      "note": "Φ90 매설관, Spd limit 5kn, 뚝섬선착장 인근, 선회장(반경 72m)",
+      "piers": {
+        "P38": {
+          "location": "청담대교 P38 (상류)",
+          "bedEl_samples": [
+            -2.44,
+            -2.83,
+            -2.76,
+            -3.03,
+            -1.98,
+            -1.96
+          ],
+          "bedEl_min": -3.0,
+          "bedEl_max": -2.0,
+          "bedEl_repr": -2.5,
+          "note": "⚠ 2m대 얕음"
+        },
+        "P39": {
+          "location": "청담대교 P39 (Spd limit 5kn)",
+          "bedEl_samples": [
+            -3.71,
+            -3.47,
+            -3.72,
+            -3.46,
+            -3.0
+          ],
+          "bedEl_min": -3.7,
+          "bedEl_max": -3.0,
+          "bedEl_repr": -3.5
+        },
+        "P40": {
+          "location": "청담대교 P40",
+          "bedEl_samples": [
+            -3.72,
+            -3.87,
+            -4.19,
+            -3.57,
+            -3.61,
+            -4.15
+          ],
+          "bedEl_min": -4.2,
+          "bedEl_max": -3.6,
+          "bedEl_repr": -3.9
+        },
+        "P41": {
+          "location": "청담대교 P41",
+          "bedEl_samples": [
+            -3.38,
+            -3.56,
+            -3.41,
+            -3.72,
+            -3.45,
+            -3.25,
+            -3.29
+          ],
+          "bedEl_min": -3.7,
+          "bedEl_max": -3.3,
+          "bedEl_repr": -3.4
+        },
+        "P42": {
+          "location": "청담대교 P42",
+          "bedEl_samples": [
+            -4.28,
+            -4.07,
+            -4.37,
+            -4.41,
+            -3.5,
+            -3.21
+          ],
+          "bedEl_min": -4.4,
+          "bedEl_max": -3.2,
+          "bedEl_repr": -4.0
+        },
+        "P43": {
+          "location": "청담대교 P43 (하류)",
+          "bedEl_samples": [
+            -4.34,
+            -4.64,
+            -4.05,
+            -3.83,
+            -3.65,
+            -3.99,
+            -4.07
+          ],
+          "bedEl_min": -4.6,
+          "bedEl_max": -3.7,
+          "bedEl_repr": -4.1
+        },
+        "main_channel": {
+          "location": "청담대교 주항로 가항수역",
+          "bedEl_samples": [
+            -4.92,
+            -4.97,
+            -4.96,
+            -4.57,
+            -4.77,
+            -4.75,
+            -4.37,
+            -4.78,
+            -4.72,
+            -4.22
+          ],
+          "bedEl_min": -5.0,
+          "bedEl_max": -4.2,
+          "bedEl_repr": -4.7,
+          "deepest": -4.97
+        },
+        "downstream": {
+          "location": "청담대교 P43 하류 (탄천 합류부 방향)",
+          "bedEl_samples": [
+            -3.97,
+            -4.28,
+            -4.66,
+            -4.19,
+            -4.55,
+            -4.57,
+            -4.62,
+            -4.37,
+            -4.78,
+            -4.5,
+            -4.47,
+            -5.07,
+            -5.15,
+            -5.13,
+            -5.4,
+            -5.07,
+            -3.86,
+            -3.55,
+            -3.01,
+            -3.07,
+            -2.88,
+            -2.86
+          ],
+          "bedEl_min": -5.4,
+          "bedEl_max": -2.9,
+          "bedEl_repr": -4.3,
+          "deepest": -5.4,
+          "note": "탄천 합류부로 갈수록 얕아짐. 최심 -5.40m EL"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -4.7,
+        "bedEl_deepest": -5.0,
+        "bedEl_shallow_warn": -2.0
+      }
+    },
+    "잠실대교": {
+      "source": "운항기준도 8/8 — 직접 독해 IMG_0615·IMG_0616 (2026-07-10)",
+      "note": "잠실수중보 상류 — 조석 영향 없음. Spd limit 5kn, 경간 173.1m/157m. 서울 잠실 도선장",
+      "tideExcluded": true,
+      "piers": {
+        "main": {
+          "location": "잠실대교 주교각",
+          "bedEl_samples": [
+            -2.71,
+            -2.69,
+            -2.83,
+            -2.79,
+            -2.6,
+            -2.68,
+            -2.79,
+            -3.16,
+            -2.92,
+            -2.85,
+            -2.91,
+            -2.82,
+            -2.75
+          ],
+          "bedEl_min": -3.2,
+          "bedEl_max": -2.6,
+          "bedEl_repr": -2.8,
+          "note": "⚠ 2~3m대 얕음 — 저수심 주의"
+        },
+        "turning_area": {
+          "location": "잠실대교 선회장(반경 72m) 인근",
+          "bedEl_samples": [
+            -2.34,
+            -2.48,
+            -2.5,
+            -2.39,
+            -2.44,
+            -2.08,
+            -2.5
+          ],
+          "bedEl_min": -2.5,
+          "bedEl_max": -2.1,
+          "bedEl_repr": -2.3,
+          "note": "⚠ 2m대 — 수심 매우 얕음"
+        }
+      },
+      "representative": {
+        "bedEl_main_channel": -2.8,
+        "bedEl_deepest": -3.2,
+        "bedEl_shallow_warn": -2.0
+      }
+    }
+  }
+}

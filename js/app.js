@@ -906,6 +906,117 @@ function renderPointCompare(b,incidentState,currentState){
 }
 
 // ── 요약 패널 ────────────────────────────────────────────────
+// ── 실시간 수심 카드 ──────────────────────────────────────────
+let NAV_CHART_DB = null;
+
+async function loadNavChartDB(){
+  if(NAV_CHART_DB) return NAV_CHART_DB;
+  try{
+    const r = await fetch('data/hangang_navigation_chart.json');
+    if(!r.ok) return null;
+    NAV_CHART_DB = await r.json();
+    return NAV_CHART_DB;
+  }catch(e){ return null; }
+}
+
+function getBedElForBridge(bridgeName, db){
+  if(!db || !db.bedLevels) return null;
+  const entry = db.bedLevels[bridgeName];
+  if(!entry || !entry.representative) return null;
+  return {
+    bedEl_main: entry.representative.bedEl_main_channel ?? null,
+    bedEl_deep: entry.representative.bedEl_deepest ?? null,
+    bedEl_warn: entry.representative.bedEl_shallow_warn ?? -2.0,
+    verticalClearance: entry.verticalClearance_m ?? null,
+    source: entry.source ?? '운항기준도 2026.05',
+    note: entry.note ?? '',
+  };
+}
+
+function calcDepth(wl, bedEl){
+  if(wl === null || wl === undefined || bedEl === null || bedEl === undefined) return null;
+  return Number((wl - bedEl).toFixed(2));
+}
+
+function depthLabel(depth){
+  if(depth === null) return null;
+  if(depth < 2.0) return {cls:'bad',   label:'🚫 잠수 불가', note:`수심 ${depth.toFixed(1)}m — 2m 이하 저수심`};
+  if(depth < 3.0) return {cls:'warn',  label:'⚠ 주의',      note:`수심 ${depth.toFixed(1)}m — 수중수색 주의`};
+  if(depth < 5.0) return {cls:'hold',  label:'보통',          note:`수심 ${depth.toFixed(1)}m`};
+  if(depth < 10.0)return {cls:'ok',    label:'양호',          note:`수심 ${depth.toFixed(1)}m`};
+  if(depth < 15.0)return {cls:'warn',  label:'⚠ 깊음',      note:`수심 ${depth.toFixed(1)}m — 감압 계획 필요`};
+  return              {cls:'bad',       label:'🔴 매우 깊음', note:`수심 ${depth.toFixed(1)}m — 감압 필수`};
+}
+
+function renderDepthCard(b, incidentState, currentState, db){
+  const el = $('depthCard'); if(!el) return;
+
+  const bedInfo = getBedElForBridge(b.bridge, db);
+  if(!bedInfo){
+    el.innerHTML = `<div style="color:var(--muted);font-size:13px">
+      "${b.bridge}" 수심 데이터 없음 — 운항기준도 DB 미등록 교량
+    </div>`;
+    return;
+  }
+
+  const wlInc = incidentState.water?.value ?? null;
+  const wlCur = currentState.water?.value ?? null;
+
+  const depInc_main = calcDepth(wlInc, bedInfo.bedEl_main);
+  const depCur_main = calcDepth(wlCur, bedInfo.bedEl_main);
+  const depInc_deep = calcDepth(wlInc, bedInfo.bedEl_deep);
+  const depCur_deep = calcDepth(wlCur, bedInfo.bedEl_deep);
+
+  const lblCur = depthLabel(depCur_main);
+  const lblDeep = depthLabel(depCur_deep);
+
+  // 수직여유고 (교각 하부 통과 가능 높이)
+  const vcTxt = bedInfo.verticalClearance
+    ? `교각 수직여유고 ${bedInfo.verticalClearance.toFixed(1)}m (EL 기준)`
+    : '';
+
+  // 감압 경고
+  const decompWarn = (depCur_deep && depCur_deep >= 10)
+    ? `<div style="background:#1a0505;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;color:#f87171">
+        🔴 <strong>감압 주의</strong> — 주항로 최심 수심 ${depCur_deep.toFixed(1)}m<br>
+        10m 이상 잠수 시 감압병 위험. 반드시 감압 계획 수립 후 입수하세요.
+      </div>` : '';
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 수심 (투신시점)</div>
+        <div style="font-size:22px;font-weight:900;color:${depInc_main?depInc_main<3?'var(--red)':depInc_main<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
+          ${depInc_main !== null ? depInc_main.toFixed(1)+'m' : '—'}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">수위 ${wlInc?.toFixed(2)??'?'}m - 하상고 ${bedInfo.bedEl_main??'?'}m</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 수심 (조회시점)</div>
+        <div style="font-size:22px;font-weight:900;color:${depCur_main?depCur_main<3?'var(--red)':depCur_main<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
+          ${depCur_main !== null ? depCur_main.toFixed(1)+'m' : '—'}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">
+          ${lblCur ? lblCur.label : ''} · ${vcTxt}
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px">
+      <div style="font-weight:700;margin-bottom:6px">교각 최심부</div>
+      <div style="display:flex;justify-content:space-between">
+        <span>투신시점: <strong>${depInc_deep !== null ? depInc_deep.toFixed(1)+'m' : '—'}</strong></span>
+        <span>조회시점: <strong style="color:${lblDeep?.cls==='bad'?'var(--red)':lblDeep?.cls==='warn'?'var(--yellow)':'var(--green)'}">${depCur_deep !== null ? depCur_deep.toFixed(1)+'m' : '—'}</strong></span>
+        <span>${lblDeep?.label ?? ''}</span>
+      </div>
+    </div>
+    ${decompWarn}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+      출처: ${bedInfo.source}<br>
+      ${bedInfo.note ? '※ '+bedInfo.note.slice(0,60) : ''}
+      <br>⚠ 수위 변동·하상 변화로 실제 수심 다를 수 있음 — 현장 확인 우선
+    </div>`;
+}
+
 // ── 3초 판단 카드 업데이트 ────────────────────────────────────
 function renderDecisionCard(b, currentState, incidentState, results){
   // 교량명 + 시각
@@ -1586,6 +1697,11 @@ async function runQuery(){
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링
+  // ★ 수심 DB 로드 후 수심 카드 렌더
+  loadNavChartDB().then(db=>{
+    try{ renderDepthCard(b, incidentState, currentState, db); }catch(e){ log('[오류] renderDepthCard',e.message); }
+  });
+
   try{ renderSummary(b,incidentState,currentState,decision,tideRows); }catch(e){ log('[오류] renderSummary',e.message,e.stack?.split('\n')[1]); }
   try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }
   try{ renderDataFirstPanel(b,incidentState,currentState,q); }catch(e){ log('[오류] renderDataFirstPanel',e.message); }

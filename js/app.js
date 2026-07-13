@@ -675,29 +675,69 @@ function saveTideLagLog(entries){
   try{ localStorage.setItem(TIDE_LAG_LOG_KEY, JSON.stringify(entries.slice(-TIDE_LAG_MAX_ENTRIES))); }catch(e){ log('[조석시차로그 저장실패]', e.message); }
 }
 
-// 조회 1회당 호출: 매칭된 극값 쌍을 로그에 누적 (인천시각+교량 기준 중복 제거)
-function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate){
-  const pairs=matchTideLagPairs(tideRows, singokRows);
+// 인천 조위 극값 ↔ 임의 교량 수위 극값 매칭 (교량 관측소 실측 수위 시계열 사용)
+// waterPts: 선택 교량 관측소의 실측 수위 포인트 배열 [{time,value}]
+function matchBridgeLagPairs(tideRows, waterPts){
+  const tidePts=rowsToPoints(tideRows, TIDE_KEYS).sort((a,b)=>a.time-b.time);
+  const bPts=[...waterPts].sort((a,b)=>a.time-b.time);
+  const tideExtrema=findAllExtrema(tidePts, 0.15);      // 인천 조위: 15cm 이상 진폭
+  const bridgeExtrema=findAllExtrema(bPts, 0.10);        // 교량 수위: 10cm 이상 진폭 (변동폭 작음)
+  const pairs=[];
+  const usedB=new Set(), usedT=new Set();
+  const cand=[];
+  tideExtrema.forEach((te,ti)=>{
+    bridgeExtrema.forEach((be,bi)=>{
+      const d=(be.time-te.time)/60000;
+      if(d<0 || d>TIDE_LAG_MAX_WINDOW_MIN) return;
+      if(be.type!==te.type) return;
+      cand.push({ti,bi,diffMin:d,te,be});
+    });
+  });
+  cand.sort((a,b)=>a.diffMin-b.diffMin);
+  for(const c of cand){
+    if(usedT.has(c.ti)||usedB.has(c.bi)) continue;
+    usedT.add(c.ti); usedB.add(c.bi);
+    pairs.push({
+      tideType:c.te.type==='high'?'만조':'간조',
+      incheonTime:c.te.time, incheonValue:c.te.value,
+      bridgeTime:c.be.time, bridgeValue:c.be.value,
+      lagMinutes:Math.round(c.diffMin)
+    });
+  }
+  pairs.sort((a,b)=>a.incheonTime-b.incheonTime);
+  return pairs;
+}
+
+// 조회 1회당 호출: 인천↔교량 실측 시차를 로그에 누적 (조석 구간 교량만)
+// waterPts 있으면 교량 실측 기준, 없으면 기존 신곡보 기준으로 폴백
+function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate, waterPts){
+  // 조석 영향 구간(tide:true)에서만 인천↔교량 시차 기록 (상류 구간은 조석 무의미)
+  const useBridge = b.tide===true && Array.isArray(waterPts) && waterPts.length>=3;
+  const pairs = useBridge
+    ? matchBridgeLagPairs(tideRows, waterPts)
+    : matchTideLagPairs(tideRows, singokRows).map(p=>({...p, bridgeTime:p.singokTime, bridgeValue:p.singokValue}));
   if(!pairs.length) return {added:0, pairs:[]};
   const damPts=rowsToPoints(damRows, DAM_KEYS);
   const tn=tideNumber(searchDate, tideRows);
+  const refLabel = useBridge ? b.bridge : '신곡보';
   const existing=loadTideLagLog();
-  const seen=new Set(existing.map(e=>`${e.bridge}_${e.tideType||''}_${Math.floor(new Date(e.incheonTime).getTime()/60000)}`));
+  const seen=new Set(existing.map(e=>`${e.bridge}_${e.refPoint||'신곡보'}_${e.tideType||''}_${Math.floor(new Date(e.incheonTime).getTime()/60000)}`));
   let added=0;
   for(const p of pairs){
-    const key=`${b.bridge}_${p.tideType||''}_${Math.floor(p.incheonTime.getTime()/60000)}`;
+    const key=`${b.bridge}_${refLabel}_${p.tideType||''}_${Math.floor(p.incheonTime.getTime()/60000)}`;
     if(seen.has(key)) continue;
     seen.add(key);
-    const winStart=p.incheonTime.getTime()-3600000, winEnd=p.singokTime.getTime()+3600000;
+    const winStart=p.incheonTime.getTime()-3600000, winEnd=p.bridgeTime.getTime()+3600000;
     const damWin=damPts.filter(d=>d.time.getTime()>=winStart && d.time.getTime()<=winEnd).map(d=>d.value);
     const damAvg=damWin.length?Number((damWin.reduce((a,v)=>a+v,0)/damWin.length).toFixed(1)):null;
     existing.push({
       bridge:b.bridge,
+      refPoint:refLabel,        // 시차 기준점: 교량명 또는 '신곡보'
       tideType:p.tideType,
       incheonTime:p.incheonTime.toISOString(),
       incheonValue:p.incheonValue,
-      singokTime:p.singokTime.toISOString(),
-      singokValue:p.singokValue,
+      bridgeTime:p.bridgeTime.toISOString(),
+      bridgeValue:p.bridgeValue,
       lagMinutes:p.lagMinutes,
       damAvg,
       tideNumberN:tn?.n??null,
@@ -720,11 +760,14 @@ function renderTideLagPanel(){
   const avg=lags.length?Math.round(lags.reduce((a,v)=>a+v,0)/lags.length):null;
   const min=lags.length?Math.min(...lags):null;
   const max=lags.length?Math.max(...lags):null;
-  const recent=[...logData].sort((a,b)=>new Date(b.incheonTime)-new Date(a.incheonTime)).slice(0,10);
+  const recent=[...logData].sort((a,b)=>new Date(b.incheonTime)-new Date(a.incheonTime)).slice(0,12);
   let html=`<p class="muted small">누적 ${logData.length}건 · 평균 시차 ${avg??'?'}분 (${min??'?'}~${max??'?'}분) · <b>참고용, 실시간 판정에는 미반영</b></p>`;
-  html+='<table class="cmp-table"><thead><tr><th>인천</th><th>유형</th><th>신곡보</th><th>시차</th><th>방류량</th><th>물때</th></tr></thead><tbody>';
+  html+='<table class="cmp-table"><thead><tr><th>인천</th><th>유형</th><th>기준점</th><th>도달</th><th>시차</th><th>방류량</th><th>물때</th></tr></thead><tbody>';
   for(const e of recent){
-    html+=`<tr><td>${hhmm(new Date(e.incheonTime))}</td><td>${e.tideType}</td><td>${hhmm(new Date(e.singokTime))}</td><td>${e.lagMinutes}분</td><td>${e.damAvg!=null?e.damAvg+'㎥/s':'-'}</td><td>${e.tideNumberName??'-'}</td></tr>`;
+    // 신규: bridgeTime/refPoint, 구버전 호환: singokTime
+    const refT = e.bridgeTime ?? e.singokTime;
+    const refName = e.refPoint ?? '신곡보';
+    html+=`<tr><td>${hhmm(new Date(e.incheonTime))}</td><td>${e.tideType}</td><td>${refName}</td><td>${refT?hhmm(new Date(refT)):'-'}</td><td>${e.lagMinutes}분</td><td>${e.damAvg!=null?e.damAvg+'㎥/s':'-'}</td><td>${e.tideNumberName??'-'}</td></tr>`;
   }
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -734,8 +777,14 @@ function renderTideLagPanel(){
 function exportTideLagLog(){
   const logData=loadTideLagLog();
   if(!logData.length){ alert('내보낼 로그가 없습니다.'); return; }
-  const headers=['bridge','tideType','incheonTime','incheonValue','singokTime','singokValue','lagMinutes','damAvg','tideNumberN','tideNumberName','tideNumberSource','loggedAt'];
-  const rows=logData.map(e=>headers.map(h=>e[h]??'').join(','));
+  const headers=['bridge','refPoint','tideType','incheonTime','incheonValue','bridgeTime','bridgeValue','lagMinutes','damAvg','tideNumberN','tideNumberName','tideNumberSource','loggedAt'];
+  const rows=logData.map(e=>headers.map(h=>{
+    // 구버전 호환: bridgeTime/bridgeValue 없으면 singok 필드로 대체
+    if(h==='bridgeTime') return e.bridgeTime??e.singokTime??'';
+    if(h==='bridgeValue') return e.bridgeValue??e.singokValue??'';
+    if(h==='refPoint') return e.refPoint??'신곡보';
+    return e[h]??'';
+  }).join(','));
   const csv=[headers.join(','), ...rows].join('\n');
   const blob=new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
@@ -1870,8 +1919,10 @@ async function runQuery(){
   try{ renderDataWarnings(b,incidentState,currentState,q,dataCapped,singokRows,tideRows); }catch(e){ log('[오류] renderDataWarnings',e.message); }
   try{ renderModelInfo(b); }catch(e){ log('[오류] renderModelInfo',e.message); }
   try{
-    const r=accumulateTideLag(b,tideRows,damRows,singokRows,search);
-    if(r.added) log('[조석시차로그]',`${r.added}건 신규 누적 (누적 ${loadTideLagLog().length}건)`);
+    const _wKeys=waterMetric?.key?[waterMetric.key]:WATER_KEYS;
+    const _wPts=rowsToPoints(waterRows,_wKeys);
+    const r=accumulateTideLag(b,tideRows,damRows,singokRows,search,_wPts);
+    if(r.added) log('[조석시차로그]',`${r.added}건 신규 누적 (기준:${b.tide?b.bridge:'신곡보'}, 누적 ${loadTideLagLog().length}건)`);
     renderTideLagPanel();
   }catch(e){ log('[오류] accumulateTideLag',e.message); }
 

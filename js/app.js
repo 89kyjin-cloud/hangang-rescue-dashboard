@@ -610,18 +610,26 @@ const TIDE_LAG_MAX_ENTRIES = 500;
 const TIDE_LAG_MAX_WINDOW_MIN = 360; // 인천 극값 후 6시간 이내 신곡보 극값만 매칭 인정
 
 // 시계열에서 완결된 극값(피크·저점)을 전부 스캔 (findNextTurn과 같은 원리, 전 구간)
-function findAllExtrema(items){
-  const out=[];
-  if(!Array.isArray(items) || items.length<3) return out;
+// minProminence: 직전 극값 대비 이 값(m) 이상 오르내린 극값만 인정 (짧은 구간·노이즈 오탐 억제)
+function findAllExtrema(items, minProminence=0.15){
+  const raw=[];
+  if(!Array.isArray(items) || items.length<3) return raw;
   let prevSign=0;
   for(let i=1;i<items.length-1;i++){
     const signBefore=Math.sign(items[i].value-items[i-1].value);
     const signAfter=Math.sign(items[i+1].value-items[i].value);
     if(signBefore!==0) prevSign=signBefore;
     if(prevSign!==0 && signAfter!==0 && signAfter!==prevSign){
-      out.push({type:prevSign>0?'high':'low', time:items[i].time, value:items[i].value});
+      raw.push({type:prevSign>0?'high':'low', time:items[i].time, value:items[i].value});
       prevSign=signAfter;
     }
+  }
+  // 진폭 필터: 직전 채택 극값과의 수위차가 minProminence 미만이면 노이즈로 간주해 제외
+  const out=[];
+  for(const e of raw){
+    if(!out.length){ out.push(e); continue; }
+    const last=out[out.length-1];
+    if(Math.abs(e.value-last.value)>=minProminence) out.push(e);
   }
   return out;
 }
@@ -670,7 +678,7 @@ function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate){
   const seen=new Set(existing.map(e=>`${e.bridge}_${e.incheonTime}`));
   let added=0;
   for(const p of pairs){
-    const key=`${b.bridge}_${p.incheonTime.getTime()}`;
+    const key=`${b.bridge}_${p.incheonTime.toISOString()}`;
     if(seen.has(key)) continue;
     seen.add(key);
     const winStart=p.incheonTime.getTime()-3600000, winEnd=p.singokTime.getTime()+3600000;

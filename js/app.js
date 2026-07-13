@@ -641,23 +641,30 @@ function matchTideLagPairs(tideRows, singokRows){
   const tideExtrema=findAllExtrema(tidePts);
   const singokExtrema=findAllExtrema(singokPts);
   const pairs=[];
-  for(const te of tideExtrema){
-    let best=null,bestDiff=Infinity;
-    for(const se of singokExtrema){
+  const usedSingok=new Set();   // 신곡보 극값 1회만 사용
+  const usedTide=new Set();     // 인천 극값 1회만 사용
+  // 가능한 모든 (인천, 신곡보) 후보쌍을 시차 오름차순으로 정렬 후, 서로 겹치지 않게 그리디 선택
+  const candidates=[];
+  tideExtrema.forEach((te,ti)=>{
+    singokExtrema.forEach((se,si)=>{
       const diffMin=(se.time-te.time)/60000;
-      if(diffMin<0 || diffMin>TIDE_LAG_MAX_WINDOW_MIN) continue;
-      if(se.type!==te.type) continue;
-      if(diffMin<bestDiff){bestDiff=diffMin;best=se;}
-    }
-    if(best){
-      pairs.push({
-        tideType: te.type==='high'?'만조':'간조',
-        incheonTime: te.time, incheonValue: te.value,
-        singokTime: best.time, singokValue: best.value,
-        lagMinutes: Math.round(bestDiff)
-      });
-    }
+      if(diffMin<0 || diffMin>TIDE_LAG_MAX_WINDOW_MIN) return;
+      if(se.type!==te.type) return;
+      candidates.push({ti,si,diffMin,te,se});
+    });
+  });
+  candidates.sort((a,b)=>a.diffMin-b.diffMin);
+  for(const c of candidates){
+    if(usedTide.has(c.ti) || usedSingok.has(c.si)) continue;
+    usedTide.add(c.ti); usedSingok.add(c.si);
+    pairs.push({
+      tideType: c.te.type==='high'?'만조':'간조',
+      incheonTime: c.te.time, incheonValue: c.te.value,
+      singokTime: c.se.time, singokValue: c.se.value,
+      lagMinutes: Math.round(c.diffMin)
+    });
   }
+  pairs.sort((a,b)=>a.incheonTime-b.incheonTime);
   return pairs;
 }
 
@@ -675,10 +682,10 @@ function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate){
   const damPts=rowsToPoints(damRows, DAM_KEYS);
   const tn=tideNumber(searchDate, tideRows);
   const existing=loadTideLagLog();
-  const seen=new Set(existing.map(e=>`${e.bridge}_${e.incheonTime}`));
+  const seen=new Set(existing.map(e=>`${e.bridge}_${e.tideType||''}_${Math.floor(new Date(e.incheonTime).getTime()/60000)}`));
   let added=0;
   for(const p of pairs){
-    const key=`${b.bridge}_${p.incheonTime.toISOString()}`;
+    const key=`${b.bridge}_${p.tideType||''}_${Math.floor(p.incheonTime.getTime()/60000)}`;
     if(seen.has(key)) continue;
     seen.add(key);
     const winStart=p.incheonTime.getTime()-3600000, winEnd=p.singokTime.getTime()+3600000;

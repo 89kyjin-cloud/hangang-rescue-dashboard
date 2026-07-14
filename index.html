@@ -373,7 +373,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
   <div class="card">
     <button class="toggle-btn" id="tideLagToggle" aria-expanded="false">▶ 조석 시차 로그 보기</button>
     <div id="tideLagSection" class="collapsible-section" style="display:none">
-      <p class="muted small">인천 조위 극값과 신곡수중보 swl 극값을 조회 시마다 자동 매칭해 누적합니다. 판정 로직에는 반영되지 않는 참고용 데이터입니다.</p>
+      <p class="muted small">인천 조위 극값과 각 교량 관측소의 실측 수위 극값을 조회 시마다 자동 매칭해 시차를 누적합니다. 같은 관측소를 공유하는 교량은 하나로 집계됩니다. 판정 로직에는 반영되지 않는 참고용 데이터입니다.</p>
       <div id="tideLagPanel" style="margin-top:8px"></div>
       <div class="btn-row">
         <button id="exportTideLagBtn" class="btn-secondary btn-sm">CSV로 내보내기</button>
@@ -392,7 +392,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260712-tidelag" defer></script>
+<script src="js/app.js?v=20260713-date" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기

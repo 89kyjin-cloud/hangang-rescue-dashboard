@@ -120,6 +120,98 @@ function calcVelocity(fw, wl, stationCode){
   return null;
 }
 
+// ── 정조(Slack Water) 판정 ───────────────────────────────────
+// 정조 = 조석 흐름이 방향을 바꾸는 순간 = 교량 수위가 극값(만조/간조)에
+//        도달해 변화율이 0에 가까워지는 시점. 이때 유속이 가장 약해
+//        수색 진입에 상대적으로 안전한 구간.
+// 원칙: 실측 수위 변화율 기반. 조석 구간(tide:true)에서만 의미 있음.
+const SLACK_RATE_THRESHOLD = 15;   // |변화율| < 15cm/h → 정조 부근으로 간주
+const SLACK_NEAR_MINUTES   = 40;   // 다음 극값까지 40분 이내 → 정조 임박
+
+// waterPts: 교량 실측 수위 포인트 [{time,value}] (시간 오름차순)
+// nowTime: 기준 시각 / rateCmHr: 현재 수위 변화율(cm/h)
+// 반환: {state, nextSlackTime, minutesToSlack, slackType} 또는 null
+function calcSlackWater(waterPts, nowTime, rateCmHr){
+  if(!Array.isArray(waterPts) || waterPts.length<3) return null;
+  const pts=[...waterPts].sort((a,b)=>a.time-b.time);
+  // 현재 시각 이후 첫 극값(봉우리/저점) 탐색 = 다음 정조
+  let nextExtreme=null;
+  for(let i=1;i<pts.length-1;i++){
+    if(pts[i].time <= nowTime) continue;
+    const sb=Math.sign(pts[i].value-pts[i-1].value);
+    const sa=Math.sign(pts[i+1].value-pts[i].value);
+    if(sb!==0 && sa!==0 && sa!==sb){
+      nextExtreme={type: sb>0?'고조(만조) 정조':'저조(간조) 정조', time:pts[i].time, value:pts[i].value};
+      break;
+    }
+  }
+  const absRate = rateCmHr!==null ? Math.abs(rateCmHr) : null;
+  // 현재 정조 부근인지 (변화율이 임계 이하)
+  const atSlackNow = absRate!==null && absRate < SLACK_RATE_THRESHOLD;
+  let minutesToSlack=null;
+  if(nextExtreme) minutesToSlack=Math.round((nextExtreme.time - nowTime)/60000);
+
+  let state;
+  if(atSlackNow) state='정조 부근 (유속 최소)';
+  else if(minutesToSlack!==null && minutesToSlack<=SLACK_NEAR_MINUTES) state='정조 임박';
+  else if(rateCmHr!==null && rateCmHr>0) state='창조(밀물) 진행 — 유속 증가/역류 성분';
+  else if(rateCmHr!==null && rateCmHr<0) state='낙조(썰물) 진행 — 하류 유속 강화';
+  else state='판단 자료 부족';
+
+  return {
+    state,
+    atSlackNow,
+    nextSlackTime: nextExtreme?nextExtreme.time:null,
+    nextSlackType: nextExtreme?nextExtreme.type:null,
+    minutesToSlack,
+    rateCmHr
+  };
+}
+
+// ── 조석 역류 반영 유속 (방향 신뢰 · 크기 참고) ─────────────────
+// 지금까지 유속은 항상 하류(양수)로만 계산됨. 밀물 역류 시 실제로는
+// 상류(음수) 흐름이 발생하므로, 신곡보 역류 판정 + 수위 변화율로 방향을 보정한다.
+// 원칙:
+//  - 방향(부호): 신곡보 owl-swl 역류 판정 + 교량 수위 상승/하강으로 결정 → 신뢰도 중~높음
+//  - 크기: HQ곡선 또는 수위변화율 경험식 → 신뢰도 낮음(참고용)
+// 반환: {signedVel, absVel, dir, dirLabel, note} 또는 null
+function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState){
+  if(hqVel===null || hqVel===undefined) return null;
+  const absHq=Math.abs(hqVel);
+
+  // 정조 부근이면 방향 무관하게 유속 최소로 간주
+  if(slackState && slackState.atSlackNow){
+    return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
+            note:'정조 부근 — 방향 전환 중, 곧 반대 흐름 강화 가능'};
+  }
+
+  const rate = rateCmHr;   // cm/h (+상승/−하강)
+  const strongReverse = tideActive===true;   // 신곡보 역류 강함
+  const weakReverse   = tideActive==='weak'; // 역류 약함
+
+  // 수위 급상승(밀물 유입) + 신곡보 역류 → 상류향 역류로 판정
+  const risingFast = rate!==null && rate > 10;
+  const fallingFast= rate!==null && rate < -10;
+
+  if((strongReverse || weakReverse) && risingFast){
+    // 역류 크기: 수위 변화율 경험식 (estimateDrift와 동일 계수)
+    const revMag = Math.abs(rate)/100 * 0.15 + (strongReverse?0.05:0.02);
+    const mag = Math.max(revMag, 0.05);
+    return {signedVel:-Number(mag.toFixed(2)), absVel:Number(mag.toFixed(2)), dir:'up',
+            dirLabel:'상류향 역류', note:'밀물 역류 — 방향 신뢰, 크기는 수위변화율 추정'};
+  }
+
+  if(fallingFast){
+    // 낙조: 하류 흐름 강화, HQ 크기 사용
+    return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
+            dirLabel:'하류향 (낙조)', note:'썰물 낙조 — 하류 흐름, 크기는 HQ곡선 참고'};
+  }
+
+  // 그 외: 기본 하류 흐름 (HQ 크기)
+  return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
+          dirLabel:'하류향', note:'하류 흐름 — 크기는 HQ곡선 참고'};
+}
+
 // 유속 단계 판정 (수색 참고용)
 function velocityLabel(vel){
   if(vel === null) return null;
@@ -892,12 +984,24 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
 
   const direction=directionLabel(b,wTrend,damImpact,tide,tideActive);
   const speed=velInfo ? velInfo.label : speedLabel(wTrend,damImpact,tide);
+
+  // ★ 정조(slack water) 판정 — 조석 구간에서만 (실측 수위 변화율 기반)
+  let slack=null;
+  let flowDir=null;
+  const rateCmHrForFlow = wTrend && wTrend.delta!==null ? Number((wTrend.delta*100).toFixed(1)) : null;
+  if(b.tide){
+    const wPts=rowsToPoints(waterRows, waterKeys);
+    slack=calcSlackWater(wPts, time, rateCmHrForFlow);
+    // ★ 조석 역류 반영 유속 (방향 신뢰·크기 참고)
+    flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack);
+  }
+
   const notes=[];
   if(wTrend) notes.push(`수위 1시간 ${wTrend.delta>0?'+':''}${wTrend.delta}m`); else notes.push(waterMetric?.blank?'통제소 수위 응답 공백':'수위 변화 계산불가');
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push(damMetric?.blank?'통제소 방류 응답 공백':'방류량 보정값 없음');
   notes.push(tideStatusNote);
   if(waterSource==='estimated') notes.push('⚠ 수위 실측값 없음 → 계산값(추정)으로 대체');
-  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ};
+  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ,slack,flowDir};
 }
 
 // ── 방향/속도 판정 ───────────────────────────────────────────
@@ -1083,7 +1187,43 @@ function renderDataFirstPanel(b=null,incidentState=null,currentState=null,q={}){
       <div class="data-grid-mini">
         <span>투신</span><span>${incidentState.velocity!==null?`<strong>${incidentState.velocity.toFixed(2)}m/s (${(incidentState.velocity*3.6).toFixed(1)}km/h)</strong> · ${incidentState.velInfo?.label||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
         <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s (${(currentState.velocity*3.6).toFixed(1)}km/h)</strong> · ${currentState.velInfo?.label||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
+        ${flowDirRow(currentState)}
         <span>출처</span><span><small>${incidentState.velSource||'fw·HQ 데이터 없음'} · 단면적 추정치 포함</small></span>
+      </div>
+    </div>${slackCardHtml(currentState)}`;
+}
+
+// 조석 역류 반영 방향 행 (조석 구간에서만)
+function flowDirRow(state){
+  const f=state.flowDir;
+  if(!f) return '';
+  const color = f.dir==='up' ? 'var(--flow-in)' : f.dir==='slack' ? '#078a4f' : 'var(--flow-out)';
+  const signed = f.dir==='slack' ? '≈0' : (f.signedVel>0?'+':'')+f.signedVel.toFixed(2)+'m/s';
+  return `<span>방향</span><span><strong style="color:${color}">${signed} · ${f.dirLabel}</strong><br><small>${f.note}</small></span>`;
+}
+
+// 정조(slack) 카드 HTML — 조석 구간에서만 표시
+function slackCardHtml(state){
+  const s=state.slack;
+  if(!s) return '';
+  const near = s.atSlackNow || (s.minutesToSlack!==null && s.minutesToSlack>=0 && s.minutesToSlack<=SLACK_NEAR_MINUTES);
+  const badgeCls = s.atSlackNow ? 'good' : near ? 'warn' : 'hold';
+  const badgeTxt = s.atSlackNow ? '정조 부근' : near ? '정조 임박' : '흐름 진행';
+  const rateTxt = s.rateCmHr!==null ? `${s.rateCmHr>0?'+':''}${s.rateCmHr}cm/h` : '변화율 자료 없음';
+  let nextTxt='다음 정조 미검출';
+  if(s.nextSlackTime){
+    const mins=s.minutesToSlack;
+    nextTxt = `${s.nextSlackType} @ ${hhmm(new Date(s.nextSlackTime))}` + (mins!==null&&mins>=0?` (약 ${mins}분 후)`:'');
+  }
+  const border = s.atSlackNow ? '#078a4f' : near ? '#b7791f' : '#bfdbfe';
+  return `
+    <div class="data-card" style="border-color:${border}">
+      <b>🛟 정조 판단 (유속 최소 시점)</b><span class="data-badge ${badgeCls}">${badgeTxt}</span>
+      <div class="data-grid-mini">
+        <span>상태</span><span><strong>${s.state}</strong></span>
+        <span>변화율</span><span>${rateTxt} <small>(실측 수위 기준)</small></span>
+        <span>다음</span><span>${nextTxt}</span>
+        <span>참고</span><span><small>정조 부근은 유속이 약해지나, 정조 직후 반대 방향 흐름이 급격히 강해질 수 있음. 현장 확인 우선.</small></span>
       </div>
     </div>`;
 }

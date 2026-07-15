@@ -700,19 +700,29 @@ function findNextTurn(items,idx){ if(idx<1||idx>=items.length-2)return null; let
 //       어떠한 영향도 주지 않는다 (판정 로직과 완전 분리)
 const TIDE_LAG_LOG_KEY = 'tideLagLog';
 const TIDE_LAG_MAX_ENTRIES = 500;
-const TIDE_LAG_MAX_WINDOW_MIN = 360; // 인천 극값 후 6시간 이내 신곡보 극값만 매칭 인정
+const TIDE_LAG_MAX_WINDOW_MIN = 360; // 인천 극값 후 6시간 이내 극값만 매칭 인정
+const TIDE_LAG_MIN_WINDOW_MIN = 60;  // 60분 미만 시차는 물리적으로 불가 → 오탐으로 제외
+const EXTREMA_EDGE_MARGIN_MIN = 30;  // 시계열 양 끝 30분 이내 극값은 잘린 봉우리일 수 있어 제외
 
-// 시계열에서 완결된 극값(피크·저점)을 전부 스캔 (findNextTurn과 같은 원리, 전 구간)
-// minProminence: 직전 극값 대비 이 값(m) 이상 오르내린 극값만 인정 (짧은 구간·노이즈 오탐 억제)
+// 시계열에서 완결된 극값(피크·저점)을 전부 스캔
+// minProminence: 직전 극값 대비 이 값(m) 이상 오르내린 극값만 인정 (노이즈 오탐 억제)
+// 추가: 시계열 양 끝(EXTREMA_EDGE_MARGIN_MIN) 이내 극값은 구간이 잘려 생긴 가짜일 수
+//       있으므로 제외 → 조회 구간 끝자락에서 시차 10분 같은 비물리적 값이 생기는 것 방지
 function findAllExtrema(items, minProminence=0.15){
   const raw=[];
   if(!Array.isArray(items) || items.length<3) return raw;
+  const tStart=items[0].time.getTime();
+  const tEnd=items[items.length-1].time.getTime();
+  const marginMs=EXTREMA_EDGE_MARGIN_MIN*60000;
   let prevSign=0;
   for(let i=1;i<items.length-1;i++){
     const signBefore=Math.sign(items[i].value-items[i-1].value);
     const signAfter=Math.sign(items[i+1].value-items[i].value);
     if(signBefore!==0) prevSign=signBefore;
     if(prevSign!==0 && signAfter!==0 && signAfter!==prevSign){
+      const t=items[i].time.getTime();
+      // 구간 가장자리 극값 제외 (잘린 봉우리 오탐 방지)
+      if(t-tStart < marginMs || tEnd-t < marginMs){ prevSign=signAfter; continue; }
       raw.push({type:prevSign>0?'high':'low', time:items[i].time, value:items[i].value});
       prevSign=signAfter;
     }
@@ -741,7 +751,7 @@ function matchTideLagPairs(tideRows, singokRows){
   tideExtrema.forEach((te,ti)=>{
     singokExtrema.forEach((se,si)=>{
       const diffMin=(se.time-te.time)/60000;
-      if(diffMin<0 || diffMin>TIDE_LAG_MAX_WINDOW_MIN) return;
+      if(diffMin<TIDE_LAG_MIN_WINDOW_MIN || diffMin>TIDE_LAG_MAX_WINDOW_MIN) return;
       if(se.type!==te.type) return;
       candidates.push({ti,si,diffMin,te,se});
     });
@@ -764,6 +774,15 @@ function matchTideLagPairs(tideRows, singokRows){
 function loadTideLagLog(){
   try{ const raw=localStorage.getItem(TIDE_LAG_LOG_KEY); return raw?JSON.parse(raw):[]; }catch(e){ return []; }
 }
+// 이미 저장된 비물리적 기록(시차 하한 미만) 정리 — 기존 오염 데이터 자동 제거
+function purgeInvalidTideLagLog(){
+  const all=loadTideLagLog();
+  if(!all.length) return 0;
+  const clean=all.filter(e=>typeof e.lagMinutes!=='number' || e.lagMinutes>=TIDE_LAG_MIN_WINDOW_MIN);
+  const removed=all.length-clean.length;
+  if(removed>0) saveTideLagLog(clean);
+  return removed;
+}
 function saveTideLagLog(entries){
   try{ localStorage.setItem(TIDE_LAG_LOG_KEY, JSON.stringify(entries.slice(-TIDE_LAG_MAX_ENTRIES))); }catch(e){ log('[조석시차로그 저장실패]', e.message); }
 }
@@ -781,7 +800,7 @@ function matchBridgeLagPairs(tideRows, waterPts){
   tideExtrema.forEach((te,ti)=>{
     bridgeExtrema.forEach((be,bi)=>{
       const d=(be.time-te.time)/60000;
-      if(d<0 || d>TIDE_LAG_MAX_WINDOW_MIN) return;
+      if(d<TIDE_LAG_MIN_WINDOW_MIN || d>TIDE_LAG_MAX_WINDOW_MIN) return;
       if(be.type!==te.type) return;
       cand.push({ti,bi,diffMin:d,te,be});
     });
@@ -847,17 +866,50 @@ function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate, waterPt
   return {added, pairs};
 }
 
-// 로그 요약 렌더 (최근 N개 + 평균·범위 통계)
+// ── 방류량 구간별 시차 통계 ──────────────────────────────────
+// 전체 평균은 저방류·고방류가 섞여 무의미하므로, 방류량 구간으로 나눠 본다.
+// 만조/간조는 방류에 반대로 반응하는 경향이 있어 유형별로 분리 표시.
+const DAM_BANDS = [
+  {label:'~500',      min:0,    max:500},
+  {label:'500~1000',  min:500,  max:1000},
+  {label:'1000~2000', min:1000, max:2000},
+  {label:'2000~',     min:2000, max:Infinity}
+];
+function avgOf(arr){ return arr.length?Math.round(arr.reduce((a,v)=>a+v,0)/arr.length):null; }
+
+function damBandStatsHtml(logData){
+  const usable=logData.filter(e=>typeof e.lagMinutes==='number' && e.damAvg!=null);
+  if(usable.length<2) return '<p class="muted small">방류량 구간별 통계는 데이터가 더 쌓이면 표시됩니다.</p>';
+  let rows='';
+  for(const band of DAM_BANDS){
+    const inBand=usable.filter(e=>e.damAvg>=band.min && e.damAvg<band.max);
+    if(!inBand.length) continue;
+    const hi=inBand.filter(e=>e.tideType==='만조').map(e=>e.lagMinutes);
+    const lo=inBand.filter(e=>e.tideType==='간조').map(e=>e.lagMinutes);
+    const hiAvg=avgOf(hi), loAvg=avgOf(lo);
+    rows+=`<tr><td><b>${band.label}</b></td><td>${inBand.length}건</td>`
+        + `<td>${hiAvg!==null?`${hiAvg}분 <small>(${hi.length})</small>`:'-'}</td>`
+        + `<td>${loAvg!==null?`${loAvg}분 <small>(${lo.length})</small>`:'-'}</td></tr>`;
+  }
+  if(!rows) return '';
+  return `<p class="muted small" style="margin-top:10px"><b>방류량 구간별 평균 시차</b> · 표본이 적으면 신뢰도 낮음</p>`
+       + `<table class="cmp-table"><thead><tr><th>방류량(㎥/s)</th><th>건수</th><th>만조 평균</th><th>간조 평균</th></tr></thead>`
+       + `<tbody>${rows}</tbody></table>`;
+}
+
+// 로그 요약 렌더 (구간별 통계 + 최근 N개)
 function renderTideLagPanel(){
   const el=$('tideLagPanel'); if(!el) return;
   const logData=loadTideLagLog();
   if(!logData.length){ el.innerHTML='<p class="muted">아직 누적된 시차 데이터가 없습니다. 조회를 반복하면 자동으로 쌓입니다.</p>'; return; }
   const lags=logData.map(e=>e.lagMinutes).filter(v=>typeof v==='number');
-  const avg=lags.length?Math.round(lags.reduce((a,v)=>a+v,0)/lags.length):null;
   const min=lags.length?Math.min(...lags):null;
   const max=lags.length?Math.max(...lags):null;
   const recent=[...logData].sort((a,b)=>new Date(b.incheonTime)-new Date(a.incheonTime)).slice(0,12);
-  let html=`<p class="muted small">누적 ${logData.length}건 · 평균 시차 ${avg??'?'}분 (${min??'?'}~${max??'?'}분) · <b>참고용, 실시간 판정에는 미반영</b></p>`;
+  let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min??'?'}~${max??'?'}분 · <b>참고용, 실시간 판정에는 미반영</b><br>`
+         + `<small>전체 평균은 저방류·고방류가 섞여 의미가 없으므로 아래 구간별로 확인하세요.</small></p>`;
+  html+=damBandStatsHtml(logData);
+  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b></p>';
   html+='<table class="cmp-table"><thead><tr><th>인천</th><th>유형</th><th>관측소</th><th>도달</th><th>시차</th><th>방류량</th><th>물때</th></tr></thead><tbody>';
   for(const e of recent){
     const refT = e.bridgeTime ?? e.singokTime;
@@ -1944,6 +1996,8 @@ function init(){
   bindToggle('combinedToggle','combinedSection','▶ 통합 참고 그래프 (고급 사용자용)','▼ 통합 참고 그래프 접기');
   bindToggle('logToggle','logSection','▶ 원자료 로그 보기','▼ 원자료 로그 숨기기');
   bindToggle('tideLagToggle','tideLagSection','▶ 조석 시차 로그 보기','▼ 조석 시차 로그 숨기기');
+  const purged=purgeInvalidTideLagLog();
+  if(purged) log('[조석시차로그]',`비물리적 기록 ${purged}건 정리 (시차 ${TIDE_LAG_MIN_WINDOW_MIN}분 미만)`);
   renderTideLagPanel();
   if($('exportTideLagBtn')) $('exportTideLagBtn').onclick=exportTideLagLog;
   if($('clearTideLagBtn')) $('clearTideLagBtn').onclick=clearTideLagLog;

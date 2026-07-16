@@ -175,7 +175,7 @@ function calcSlackWater(waterPts, nowTime, rateCmHr){
 //  - 방향(부호): 신곡보 owl-swl 역류 판정 + 교량 수위 상승/하강으로 결정 → 신뢰도 중~높음
 //  - 크기: HQ곡선 또는 수위변화율 경험식 → 신뢰도 낮음(참고용)
 // 반환: {signedVel, absVel, dir, dirLabel, note} 또는 null
-function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState){
+function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise){
   if(hqVel===null || hqVel===undefined) return null;
   const absHq=Math.abs(hqVel);
 
@@ -185,31 +185,30 @@ function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState){
             note:'정조 부근 — 방향 전환 중, 곧 반대 흐름 강화 가능'};
   }
 
-  const rate = rateCmHr;   // cm/h (+상승/−하강)
-  const strongReverse = tideActive===true;   // 신곡보 역류 강함
-  const weakReverse   = tideActive==='weak'; // 역류 약함
+  const rate = rateCmHr;
+  const damSurging = damRise!==null && damRise!==undefined && damRise >= 100; // 방류 급증(㎥/s/h)
+  // ★ 실측 우선: 수위가 뚜렷이 상승 중이면 유입(역류)으로 본다.
+  //   신곡보 판정(tideActive)은 보조 근거로만 사용 (인천 기준이라 상류엔 시차 존재)
+  const risingFast = rate!==null && rate >= FLOW_RATE_WEAK;
+  const fallingFast= rate!==null && rate <= -FLOW_RATE_WEAK;
 
-  // 수위 급상승(밀물 유입) + 신곡보 역류 → 상류향 역류로 판정
-  const risingFast = rate!==null && rate > 10;
-  const fallingFast= rate!==null && rate < -10;
-
-  if((strongReverse || weakReverse) && risingFast){
+  if(risingFast && !damSurging){
     // 역류 크기: 수위 변화율 경험식 (estimateDrift와 동일 계수)
-    const revMag = Math.abs(rate)/100 * 0.15 + (strongReverse?0.05:0.02);
-    const mag = Math.max(revMag, 0.05);
+    const gateBoost = tideActive===true?0.05 : tideActive==='weak'?0.02 : 0;
+    const mag = Math.max(Math.abs(rate)/100*0.15 + gateBoost, 0.05);
     return {signedVel:-Number(mag.toFixed(2)), absVel:Number(mag.toFixed(2)), dir:'up',
-            dirLabel:'상류향 역류', note:'밀물 역류 — 방향 신뢰, 크기는 수위변화율 추정'};
+            dirLabel:'상류향 역류', note:`실측 수위 +${rate}cm/h 상승 — 밀물 유입. 방향 신뢰, 크기는 추정`};
   }
-
+  if(risingFast && damSurging){
+    return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'mixed',
+            dirLabel:'혼합·불확실', note:`수위 상승(+${rate}cm/h) 중이나 방류 급증(+${Math.round(damRise)}㎥/s/h) 동반 — 역류 여부 불확실, 현장 확인 필수`};
+  }
   if(fallingFast){
-    // 낙조: 하류 흐름 강화, HQ 크기 사용
     return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
-            dirLabel:'하류향 (낙조)', note:'썰물 낙조 — 하류 흐름, 크기는 HQ곡선 참고'};
+            dirLabel:'하류향 (낙조)', note:`실측 수위 ${rate}cm/h 하강 — 하류 흐름, 크기는 HQ곡선 참고`};
   }
-
-  // 그 외: 기본 하류 흐름 (HQ 크기)
   return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
-          dirLabel:'하류향', note:'하류 흐름 — 크기는 HQ곡선 참고'};
+          dirLabel:'하류향', note:'뚜렷한 수위 변화 없음 — 하류 흐름 추정, 크기는 HQ곡선 참고'};
 }
 
 // 유속 단계 판정 (수색 참고용)
@@ -989,6 +988,8 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const wTrend=trend(waterRows,time,waterKeys,60);
   const damImpactTime=new Date(time.getTime()-(b.releaseLag||0)*60000);
   const damImpact=nearest(damRows,damImpactTime,damKeys,90);
+  // 방류 추세(1시간) — 수위 상승 원인이 밀물 유입인지 방류 증가인지 구분용
+  const damTrend=trend(damRows,damImpactTime,damKeys,60);
 
   // ── 조석: owl-swl 수위차 기반 실시간 판단 ──────────────────────
   const tideActive=bridgeTideActive(b, singokSwlAtTime, singokOwlAtTime);
@@ -1034,7 +1035,7 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const velQ      = velResult ? velResult.Q : null;
   const velInfo = velocityLabel(velocity);
 
-  const direction=directionLabel(b,wTrend,damImpact,tide,tideActive);
+  const direction=directionLabel(b,wTrend,damImpact,tide,tideActive,damTrend);
   const speed=velInfo ? velInfo.label : speedLabel(wTrend,damImpact,tide);
 
   // ★ 정조(slack water) 판정 — 조석 구간에서만 (실측 수위 변화율 기반)
@@ -1045,7 +1046,7 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
     const wPts=rowsToPoints(waterRows, waterKeys);
     slack=calcSlackWater(wPts, time, rateCmHrForFlow);
     // ★ 조석 역류 반영 유속 (방향 신뢰·크기 참고)
-    flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack);
+    flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack, damTrend?.delta ?? null);
   }
 
   const notes=[];
@@ -1053,18 +1054,61 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push(damMetric?.blank?'통제소 방류 응답 공백':'방류량 보정값 없음');
   notes.push(tideStatusNote);
   if(waterSource==='estimated') notes.push('⚠ 수위 실측값 없음 → 계산값(추정)으로 대체');
-  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ,slack,flowDir};
+  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,damTrend,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ,slack,flowDir};
 }
 
 // ── 방향/속도 판정 ───────────────────────────────────────────
-function directionLabel(b,wTrend,damImpact,tide,tideActive){
+// ── 물 방향 판정 (실측 우선) ─────────────────────────────────
+// 원칙: 인천 조석 위상은 '인천 기준'이며, 상류 교량엔 3~5시간 늦게 도달한다.
+//       따라서 인천 위상으로 교량 방향을 정하면 실제와 반대로 나올 수 있다.
+//       → 그 교량 관측소가 실제로 잰 수위 변화율(cm/h)을 1순위 근거로 삼는다.
+// 수치 기준 (cm/h, 1시간 실측 변화):
+//   |rate| < 4      → 정체·정조 부근
+//   4 ≤ |rate| < 10 → 약함
+//   10 ≤ |rate| < 30→ 보통
+//   |rate| ≥ 30     → 강함
+const FLOW_RATE_SLACK = 4;    // 이하: 정체
+const FLOW_RATE_WEAK  = 10;
+const FLOW_RATE_STRONG= 30;
+
+function flowStrengthLabel(absRate){
+  if(absRate>=FLOW_RATE_STRONG) return '강하게';
+  if(absRate>=FLOW_RATE_WEAK)   return '보통 세기로';
+  return '약하게';
+}
+
+function directionLabel(b,wTrend,damImpact,tide,tideActive,damTrend){
   const damHigh=damImpact?.value!=null&&damImpact.value>=1000;
+  // 비조석 구간: 기존 로직 유지 (조석 무의미)
   if(!b.tide) return damHigh?'방류 영향 하류방향 우세 가능':'조석 제외 · 자연 하류 흐름 가능';
+
+  // ★ 1순위: 그 관측소의 실측 수위 변화율
+  const rate = wTrend && wTrend.delta!=null ? Number((wTrend.delta*100).toFixed(1)) : null; // cm/h
+  const damRise = damTrend && damTrend.delta!=null ? damTrend.delta : null; // ㎥/s 1시간 변화
+  const damSurging = damRise!==null && damRise >= 100;  // 방류 급증 중
+
+  if(rate!==null){
+    const abs=Math.abs(rate);
+    if(abs < FLOW_RATE_SLACK){
+      return `정체·정조 부근 (실측 ${rate>0?'+':''}${rate}cm/h)`;
+    }
+    if(rate > 0){
+      // 수위 상승 = 유입. 단 방류 급증이면 원인이 방류일 수 있음
+      if(damSurging){
+        return `수위 ${flowStrengthLabel(abs)} 상승 (실측 +${rate}cm/h) · 방류 급증(+${Math.round(damRise)}㎥/s/h) 영향 — 역류 여부 불확실`;
+      }
+      return `⬆ 물이 ${flowStrengthLabel(abs)} 들어오는 중 (실측 +${rate}cm/h · 밀물 유입/역류)`;
+    }
+    // 수위 하강 = 유출
+    return `⬇ 물이 ${flowStrengthLabel(abs)} 나가는 중 (실측 ${rate}cm/h · 하류 흐름)`;
+  }
+
+  // 2순위(실측 없을 때만): 기존 조석 위상 기반 추정
   if(tideActive===null) return damHigh?'방류 영향 하류방향 가능 (신곡수중보 수위 미확인)':'신곡수중보 수위 미확인 · 조석 전파 여부 판단 불가';
   if(!tideActive) return damHigh?'방류 영향 하류방향 우세 가능 (조석 차단)':'조석 차단 (신곡수중보 낮음) · 자연 하류 흐름 가능';
   if(!tide) return damHigh?'방류 영향 하류방향 가능':'조석 전파 중 · 조위 자료 없음';
-  if(tide.phase.includes('밀물')) return damHigh?'밀물 유입 + 방류 하류방향 충돌 가능':'물이 들어오는 영향 가능';
-  if(tide.phase.includes('썰물')) return '물이 나가는 영향 가능';
+  if(tide.phase.includes('밀물')) return damHigh?'밀물 유입 + 방류 하류방향 충돌 가능 (추정·인천 기준)':'물이 들어오는 영향 가능 (추정·인천 기준)';
+  if(tide.phase.includes('썰물')) return '물이 나가는 영향 가능 (추정·인천 기준)';
   return damHigh?'정체권 + 방류 하류방향 가능':'정체·혼합 가능';
 }
 function speedLabel(wTrend,damImpact,tide){
@@ -1249,8 +1293,8 @@ function renderDataFirstPanel(b=null,incidentState=null,currentState=null,q={}){
 function flowDirRow(state){
   const f=state.flowDir;
   if(!f) return '';
-  const color = f.dir==='up' ? 'var(--flow-in)' : f.dir==='slack' ? '#078a4f' : 'var(--flow-out)';
-  const signed = f.dir==='slack' ? '≈0' : (f.signedVel>0?'+':'')+f.signedVel.toFixed(2)+'m/s';
+  const color = f.dir==='up' ? 'var(--flow-in)' : f.dir==='slack' ? '#078a4f' : f.dir==='mixed' ? '#b7791f' : 'var(--flow-out)';
+  const signed = f.dir==='slack' ? '≈0' : f.dir==='mixed' ? '?' : (f.signedVel>0?'+':'')+f.signedVel.toFixed(2)+'m/s';
   return `<span>방향</span><span><strong style="color:${color}">${signed} · ${f.dirLabel}</strong><br><small>${f.note}</small></span>`;
 }
 

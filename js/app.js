@@ -113,6 +113,7 @@ function reachSurfaceArea(distKm){
 const CONT_STATIONS = [
   {code:'1018662', name:'청담대교', distKm:2.5},
   {code:'1018680', name:'잠수교',   distKm:9.5},
+  {code:'1018681', name:'반포2교',  distKm:9.5},
   {code:'1018683', name:'한강대교', distKm:13},
   {code:'1019630', name:'행주대교', distKm:29},
 ];
@@ -288,8 +289,8 @@ function calcSlackWater(waterPts, nowTime, rateCmHr){
       break;
     }
   }
-  const absRate = rateCmHr!==null ? Math.abs(rateCmHr) : null;
-  // 현재 정조 부근인지 (변화율이 임계 이하)
+  const absRate = (rateCmHr!==null && rateCmHr!==undefined) ? Math.abs(rateCmHr) : null;
+  // ★ 변화율을 못 구했으면 정조라고 단정하지 않는다 (가짜 정조 방지)
   const atSlackNow = absRate!==null && absRate < SLACK_RATE_THRESHOLD;
   let minutesToSlack=null;
   if(nextExtreme) minutesToSlack=Math.round((nextExtreme.time - nowTime)/60000);
@@ -787,7 +788,33 @@ function sampleRow(row,keys){ const f=flatRow(row);const out={};const baseKeys=[
 
 // ── nearest / trend ──────────────────────────────────────────
 function nearest(rows,target,valueKeys,maxMin=MAX_NEAREST_MIN){ let best=null,bestDiff=Infinity; for(const row of rows){const t=parseObsTime(row);const v=val(row,valueKeys);if(!t||v===null)continue;const diff=Math.abs(t-target);if(diff<bestDiff){best={time:t,value:v,row,diffMin:Math.round(diff/60000)};bestDiff=diff;}} if(!best)return null; if(best.diffMin>maxMin)return{...best,stale:true}; return best; }
-function trend(rows,target,valueKeys,minutes=60){ const now=nearest(rows,target,valueKeys,MAX_NEAREST_MIN);const past=nearest(rows,new Date(target.getTime()-minutes*60000),valueKeys,MAX_NEAREST_MIN);if(!now||!past||now.stale||past.stale)return null;return{now,past,delta:Number((now.value-past.value).toFixed(2)),minutes}; }
+// 변화 추세 계산
+// ★ Phase 3.6.3 버그 수정: '가짜 정조(0cm/h)' 문제
+//   [증상] 조회시각이 최신 관측시각보다 뒤일 때(HRFCO 지연 등) '지금'과
+//          'N분 전' 조회가 둘 다 같은 최신 관측점으로 수렴 → 변화량 항상 0
+//          → 실제로는 물이 움직이는데 '정조·유속 0'으로 잘못 표시됨.
+//   [수정] ① 기준시각을 최신 관측시각으로 당겨서(clamp) 실제 최근 구간으로 계산
+//          ② 그래도 두 관측점 간격이 요청 구간의 절반 미만이면 산출 불가(null)
+//          ③ 변화율 정규화는 요청 구간이 아닌 '실제 간격'으로 계산
+function latestRowTime(rows,valueKeys){
+  let t=null;
+  for(const row of rows){ const rt=parseObsTime(row); if(!rt||val(row,valueKeys)===null) continue; if(!t||rt>t) t=rt; }
+  return t;
+}
+function trend(rows,target,valueKeys,minutes=60){
+  if(!rows?.length) return null;
+  // ① 조회시각이 최신 관측보다 뒤면 최신 관측시각 기준으로 계산
+  const latest=latestRowTime(rows,valueKeys);
+  const anchor=(latest && target>latest) ? latest : target;
+  const now=nearest(rows,anchor,valueKeys,MAX_NEAREST_MIN);
+  const past=nearest(rows,new Date(anchor.getTime()-minutes*60000),valueKeys,MAX_NEAREST_MIN);
+  if(!now||!past||now.stale||past.stale)return null;
+  const actualMin=(now.time-past.time)/60000;
+  // ② 같은 점(0분)이거나 간격이 너무 짧으면 변화율을 신뢰할 수 없음
+  if(actualMin < minutes*0.5) return null;
+  return{now,past,delta:Number((now.value-past.value).toFixed(2)),minutes:actualMin,requestedMin:minutes,
+         anchoredToLatest:anchor!==target};
+}
 function dataQualityForPoint(p){ if(!p)return '자료 없음'; return p.stale?`검증필요: 입력시각과 관측시각 ${p.diffMin}분 차이`:`정상: 입력시각과 관측시각 ${p.diffMin}분 차이`; }
 function observationGapShort(p){ if(!p)return '자료 없음'; return `${pretty(p.time)} · ${p.diffMin}분 차이${p.stale?' · 검증필요':''}`; }
 

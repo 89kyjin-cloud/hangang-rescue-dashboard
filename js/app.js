@@ -77,16 +77,159 @@ function calcQfromHQ(wl, stationCode){
   return (Number.isFinite(Q) && Q >= 0) ? Number(Q.toFixed(1)) : null;
 }
 
-// ── 관측소별 단면 정보 ────────────────────────────────────────
-// 출처: HRFCO 수문조사연보 문헌 기반 추정값 (하폭·하상고)
-// ※ 정확한 단면적은 HRFCO 협조 요청 필요
+// 거리순 정렬 목록 (구간 수면적 적분용) — BRIDGE_GEO가 아래에 정의되므로 지연 평가
+let _geoSorted=null;
+function geoSorted(){
+  if(!_geoSorted){
+    _geoSorted=Object.entries(BRIDGE_GEO)
+      .filter(([,g])=>g.distJamsilKm!=null && g.widthM!=null)
+      .map(([name,g])=>({name, distKm:g.distJamsilKm, widthM:g.widthM}))
+      .sort((a,b)=>a.distKm-b.distKm);
+  }
+  return _geoSorted;
+}
+
+// 잠실보 ~ 지정 거리(km)까지의 수면적(m²) — 사다리꼴 적분
+// 실측 강폭이 교량마다 다르므로 단순 평균 대신 거리에 따라 적분한다.
+function reachSurfaceArea(distKm){
+  if(!(distKm>0)) return 0;
+  const G=geoSorted();
+  let area=0;
+  for(let i=0;i<G.length-1;i++){
+    const a=G[i], b=G[i+1];
+    if(a.distKm>=distKm) break;
+    const segEnd=Math.min(b.distKm, distKm);
+    const segLen=(segEnd-a.distKm)*1000;              // m
+    if(segLen<=0) continue;
+    const span=(b.distKm-a.distKm)||1;
+    const wEnd=a.widthM+(b.widthM-a.widthM)*((segEnd-a.distKm)/span);
+    area += (a.widthM+wEnd)/2 * segLen;               // 사다리꼴
+  }
+  return area;
+}
+
+// ── 연속방정식용 관측소 위치 (잠실보 기준 거리) ───────────────
+// 각 관측소가 대표하는 지점의 거리 — 구간별 저류 계산에 사용
+const CONT_STATIONS = [
+  {code:'1018662', name:'청담대교', distKm:2.5},
+  {code:'1018680', name:'잠수교',   distKm:9.5},
+  {code:'1018683', name:'한강대교', distKm:13},
+  {code:'1019630', name:'행주대교', distKm:29},
+];
+
+// 구간별 저류 증가율 계산 (관측소 실측 변화율 사용)
+// stationRates: [{distKm, rateCmHr}] — 관측소별 실측 수위 변화율
+// 잠실보(0km, 조석 영향 없음 → 변화율 0으로 간주)부터 targetKm까지
+// 각 지점의 변화율을 거리 선형보간해 사다리꼴 적분한다.
+// → 조석 진폭이 상류로 갈수록 줄어드는 실제 감쇠를 반영 (균일 가정의 과대평가 해소)
+function reachStorageRate(targetKm, stationRates){
+  if(!(targetKm>0) || !stationRates?.length) return null;
+  // 잠실보 지점(0km)은 조석 감쇠 후이므로 변화율 0으로 두고 시작
+  const pts=[{distKm:0, rateCmHr:0}, ...stationRates.filter(s=>s.rateCmHr!=null)]
+    .sort((a,b)=>a.distKm-b.distKm);
+  if(pts.length<2) return null;
+  const rateAt=(km)=>{
+    if(km<=pts[0].distKm) return pts[0].rateCmHr;
+    if(km>=pts[pts.length-1].distKm) return pts[pts.length-1].rateCmHr;
+    for(let i=0;i<pts.length-1;i++){
+      if(km>=pts[i].distKm && km<=pts[i+1].distKm){
+        const f=(km-pts[i].distKm)/((pts[i+1].distKm-pts[i].distKm)||1);
+        return pts[i].rateCmHr+(pts[i+1].rateCmHr-pts[i].rateCmHr)*f;
+      }
+    }
+    return pts[pts.length-1].rateCmHr;
+  };
+  const widthAt=(km)=>{
+    const G=geoSorted();
+    if(km<=G[0].distKm) return G[0].widthM;
+    if(km>=G[G.length-1].distKm) return G[G.length-1].widthM;
+    for(let i=0;i<G.length-1;i++){
+      if(km>=G[i].distKm && km<=G[i+1].distKm){
+        const f=(km-G[i].distKm)/((G[i+1].distKm-G[i].distKm)||1);
+        return G[i].widthM+(G[i+1].widthM-G[i].widthM)*f;
+      }
+    }
+    return G[G.length-1].widthM;
+  };
+  // 0.5km 간격 수치적분: dV/dt = ∫ width(x) · dh/dt(x) dx
+  const step=0.5;
+  let dVdt=0, area=0;
+  for(let km=0; km<targetKm; km+=step){
+    const segEnd=Math.min(km+step, targetKm);
+    const segLen=(segEnd-km)*1000;
+    const wMid=widthAt((km+segEnd)/2);
+    const rMid=rateAt((km+segEnd)/2)/100/3600;  // m/s
+    dVdt += wMid*segLen*rMid;
+    area += wMid*segLen;
+  }
+  return {dVdt, surfArea:area};
+}
+
+// ── 연속방정식(저류법) 유속 ──────────────────────────────────
+// 원리: 질량보존. 잠실수중보(상류 경계, 유량=팔당 방류)부터 대상 교량까지를
+//       하나의 저류 구간으로 보면
+//         저류 증가율 dV/dt = (구간 수면적) × (수위 상승률)
+//         Q_교량 = Q_팔당 − dV/dt      ← 음수면 상류 방향(역류)
+//         유속   = Q_교량 ÷ 교량 단면적
+// 장점: HQ곡선(평상시 수위-유량 관계)과 달리 조석 역류 구간에서도 성립하고,
+//       임의 계수가 아닌 물리 법칙에 근거한다.
+// 한계: ① 구간 전체의 수위 상승률을 대상 교량 값으로 근사(조석 위상차가
+//          서울 구간에서 조석 주기의 약 5% 수준이라 허용 가능한 근사)
+//       ② 지천(중랑천·탄천·홍제천 등) 유입 미계측 — 강우 시 오차 증가
+//       ③ 하상고·형상계수는 여전히 추정값
+function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
+  const geo=BRIDGE_GEO[b.bridge];
+  const sec=STATION_SECTIONS[b.code];
+  if(!geo || !sec || wl==null || rateCmHr==null || damCms==null) return null;
+  if(geo.distJamsilKm==null || !geo.widthM) return null;
+  if(!(geo.distJamsilKm>0)) return null;   // 잠실대교=0km는 구간이 없어 계산 불가
+
+  let dVdt, surfArea, method, reliable;
+  const multi = stationRates?.length ? reachStorageRate(geo.distJamsilKm, stationRates) : null;
+  if(multi){
+    // ★ 관측소별 실측 변화율로 구간 적분 — 조석 진폭 감쇠 반영
+    dVdt=multi.dVdt; surfArea=multi.surfArea;
+    method='관측소 실측 구간적분'; reliable=true;
+  } else {
+    // 폴백: 구간 전체를 대상 교량 변화율로 근사 (구간이 길수록 과대평가)
+    surfArea=reachSurfaceArea(geo.distJamsilKm);
+    dVdt=surfArea*(rateCmHr/100/3600);
+    method='단일 관측소 근사'; reliable = geo.distJamsilKm<=15;
+  }
+  const Q = damCms - dVdt;
+  const depth = wl - sec.bedEl;
+  if(!(depth>0)) return null;
+  const area = geo.widthM * depth * sec.shape;
+  const vel = Q/area;
+  // 물리적 타당성 검사: 한강 조석 구간에서 |유속| 2m/s 초과는 비현실적
+  if(Math.abs(vel)>2.0) reliable=false;
+  return {
+    vel:Number(vel.toFixed(2)),
+    Q:Math.round(Q),
+    dVdt:Math.round(dVdt),
+    surfAreaKm2:Number((surfArea/1e6).toFixed(2)),
+    sectionArea:Math.round(area),
+    reachKm:geo.distJamsilKm,
+    method, reliable,
+    dir: vel<-0.03?'up' : vel>0.03?'down' : 'slack'
+  };
+}
+
+// width(하폭): ★ Phase 3.6.1 — 현장 실측값으로 교체
+//   [수정 이유] 기존 값은 "HRFCO 수문조사연보 문헌 기반 추정"이었으나 현장 실측 대비
+//   28~70% 과소평가되어 있었다(단면적이 작게 계산되어 유속이 과대평가됨).
+//   [현재 값] 현장 실측 강폭 기준.
+//     청담대교 790 / 잠수교 760(반포대교 하단) / 반포2교 760 / 행주대교 730
+//     한강대교 625 = 남단~노들섬 350 + 북단~노들섬 275 (노들섬이 하도를 분할)
+//   [미검증] 광진교(1018640)는 실측 미확보 — 잠실대교(860m) 인접 구간 참고 잠정값.
+// bedEl(하상고)·shape(형상계수)는 여전히 추정값 — 단면적 오차 요인으로 남아 있음.
 const STATION_SECTIONS = {
-  '1018640': {name:'광진교',   width:500, bedEl:-1.5, shape:0.65},
-  '1018662': {name:'청담대교', width:560, bedEl:-1.8, shape:0.65},
-  '1018680': {name:'잠수교',   width:530, bedEl:-1.5, shape:0.65},
-  '1018681': {name:'반포2교',  width:520, bedEl:-1.4, shape:0.65},
-  '1018683': {name:'한강대교', width:490, bedEl:-1.5, shape:0.65},
-  '1019630': {name:'행주대교', width:430, bedEl:-1.2, shape:0.65},
+  '1018640': {name:'광진교',   width:800, bedEl:-1.5, shape:0.65, widthSrc:'잠정(실측 미확보)'},
+  '1018662': {name:'청담대교', width:790, bedEl:-1.8, shape:0.65, widthSrc:'현장 실측'},
+  '1018680': {name:'잠수교',   width:760, bedEl:-1.5, shape:0.65, widthSrc:'현장 실측(반포대교 하단)'},
+  '1018681': {name:'반포2교',  width:760, bedEl:-1.4, shape:0.65, widthSrc:'현장 실측 준용(반포대교)'},
+  '1018683': {name:'한강대교', width:625, bedEl:-1.5, shape:0.65, widthSrc:'현장 실측(350+275, 노들섬 분할)'},
+  '1019630': {name:'행주대교', width:730, bedEl:-1.2, shape:0.65, widthSrc:'현장 실측'},
 };
 
 // ── 유속 계산 (우선순위) ─────────────────────────────────────
@@ -175,40 +318,57 @@ function calcSlackWater(waterPts, nowTime, rateCmHr){
 //  - 방향(부호): 신곡보 owl-swl 역류 판정 + 교량 수위 상승/하강으로 결정 → 신뢰도 중~높음
 //  - 크기: HQ곡선 또는 수위변화율 경험식 → 신뢰도 낮음(참고용)
 // 반환: {signedVel, absVel, dir, dirLabel, note} 또는 null
-function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise){
-  if(hqVel===null || hqVel===undefined) return null;
-  const absHq=Math.abs(hqVel);
+function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont){
+  const absHq = hqVel!=null ? Math.abs(hqVel) : null;
 
   // 정조 부근이면 방향 무관하게 유속 최소로 간주
   if(slackState && slackState.atSlackNow){
     return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
+            src:'실측 변화율≈0',
             note:'정조 부근 — 방향 전환 중, 곧 반대 흐름 강화 가능'};
   }
 
-  const rate = rateCmHr;
-  const damSurging = damRise!==null && damRise!==undefined && damRise >= 100; // 방류 급증(㎥/s/h)
-  // ★ 실측 우선: 수위가 뚜렷이 상승 중이면 유입(역류)으로 본다.
-  //   신곡보 판정(tideActive)은 보조 근거로만 사용 (인천 기준이라 상류엔 시차 존재)
-  const risingFast = rate!==null && rate >= FLOW_RATE_WEAK;
-  const fallingFast= rate!==null && rate <= -FLOW_RATE_WEAK;
+  const damSurging = damRise!=null && damRise >= 100; // 방류 급증(㎥/s/h)
 
+  // ★ 1순위: 연속방정식(질량보존) — 조석 역류 구간에서도 성립
+  if(cont){
+    const v=cont.vel, a=Math.abs(v);
+    const detail=`구간 ${cont.reachKm}km·수면적 ${cont.surfAreaKm2}km² · 저류 ${cont.dVdt>0?'+':''}${cont.dVdt}㎥/s · 통과유량 ${cont.Q}㎥/s`;
+    if(cont.dir==='up'){
+      return {signedVel:-a, absVel:a, dir:'up', dirLabel:'상류향 역류',
+              src:'연속방정식(저류법)',
+              note:`밀물 역류 — ${detail}${damSurging?' ⚠ 방류 급증 동반, 오차 증가':''}`};
+    }
+    if(cont.dir==='slack'){
+      return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
+              src:'연속방정식(저류법)', note:`통과유량 ≈0 — ${detail}`};
+    }
+    return {signedVel:a, absVel:a, dir:'down', dirLabel:'하류향',
+            src:'연속방정식(저류법)', note:`하류 흐름 — ${detail}`};
+  }
+
+  // 2순위(연속방정식 불가 시): 실측 변화율 방향 + 경험식 크기
+  if(hqVel==null) return null;
+  const rate = rateCmHr;
+  const risingFast = rate!=null && rate >= FLOW_RATE_WEAK;
+  const fallingFast= rate!=null && rate <= -FLOW_RATE_WEAK;
   if(risingFast && !damSurging){
-    // 역류 크기: 수위 변화율 경험식 (estimateDrift와 동일 계수)
     const gateBoost = tideActive===true?0.05 : tideActive==='weak'?0.02 : 0;
     const mag = Math.max(Math.abs(rate)/100*0.15 + gateBoost, 0.05);
     return {signedVel:-Number(mag.toFixed(2)), absVel:Number(mag.toFixed(2)), dir:'up',
-            dirLabel:'상류향 역류', note:`실측 수위 +${rate}cm/h 상승 — 밀물 유입. 방향 신뢰, 크기는 추정`};
+            dirLabel:'상류향 역류', src:'경험식(미검증)',
+            note:`실측 수위 +${rate}cm/h 상승 — 밀물 유입. 방향만 신뢰, 크기는 미검증 추정`};
   }
   if(risingFast && damSurging){
-    return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'mixed',
-            dirLabel:'혼합·불확실', note:`수위 상승(+${rate}cm/h) 중이나 방류 급증(+${Math.round(damRise)}㎥/s/h) 동반 — 역류 여부 불확실, 현장 확인 필수`};
+    return {signedVel:absHq, absVel:absHq, dir:'mixed', dirLabel:'혼합·불확실', src:'판단 보류',
+            note:`수위 상승(+${rate}cm/h) 중이나 방류 급증(+${Math.round(damRise)}㎥/s/h) 동반 — 현장 확인 필수`};
   }
   if(fallingFast){
-    return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
-            dirLabel:'하류향 (낙조)', note:`실측 수위 ${rate}cm/h 하강 — 하류 흐름, 크기는 HQ곡선 참고`};
+    return {signedVel:absHq, absVel:absHq, dir:'down', dirLabel:'하류향 (낙조)', src:'HQ곡선',
+            note:`실측 수위 ${rate}cm/h 하강 — 하류 흐름, 크기는 HQ곡선 참고`};
   }
-  return {signedVel:Number(absHq.toFixed(2)), absVel:Number(absHq.toFixed(2)), dir:'down',
-          dirLabel:'하류향', note:'뚜렷한 수위 변화 없음 — 하류 흐름 추정, 크기는 HQ곡선 참고'};
+  return {signedVel:absHq, absVel:absHq, dir:'down', dirLabel:'하류향', src:'HQ곡선',
+          note:'뚜렷한 수위 변화 없음 — 하류 흐름 추정'};
 }
 
 // 유속 단계 판정 (수색 참고용)
@@ -277,34 +437,41 @@ const LUNAR_CYCLE = 14.7653;
 // distFromSeaKm: 인천항 기준 하구 거리 (km) — 하류일수록 작음
 // distFromPaldangKm: 팔당댐 기준 하천 거리 (km)
 const BRIDGE_GEO = {
+  // lat/lng: 실측 GPS (Google Maps 검증)
+  // distFromSeaKm / distFromPaldangKm: 기존 문헌 추정값
+  // ★ distJamsilKm / widthM: 현장 실측값 (2026-07-16 추가)
+  //   distJamsilKm — 잠실수중보(≈잠실대교) 기준 하류 하천거리 (km)
+  //   widthM       — 강폭 (m). 하도가 섬으로 갈리면 합산.
+  //   비조석 구간(잠실보 상류)은 연속방정식 대상이 아니므로 미기입.
   '강동대교':    {lat:37.5584, lng:127.1777, distFromSeaKm:67.0, distFromPaldangKm:14.0},
   '구리암사대교':{lat:37.5677, lng:127.1493, distFromSeaKm:65.0, distFromPaldangKm:16.0},
-  '광진교':      {lat:37.5391, lng:127.1062, distFromSeaKm:60.5, distFromPaldangKm:22.0},
   '천호대교':    {lat:37.5437, lng:127.1232, distFromSeaKm:63.0, distFromPaldangKm:19.5},
+  '광진교':      {lat:37.5391, lng:127.1062, distFromSeaKm:60.5, distFromPaldangKm:22.0},
   '올림픽대교':  {lat:37.5227, lng:127.0829, distFromSeaKm:57.5, distFromPaldangKm:25.0},
   '잠실철교':    {lat:37.5145, lng:127.0756, distFromSeaKm:56.5, distFromPaldangKm:25.5},
-  '잠실대교':    {lat:37.5093, lng:127.0701, distFromSeaKm:55.5, distFromPaldangKm:26.5},
-  '청담대교':    {lat:37.5192, lng:127.0521, distFromSeaKm:53.5, distFromPaldangKm:28.5},
-  '영동대교':    {lat:37.5246, lng:127.0437, distFromSeaKm:52.5, distFromPaldangKm:29.5},
-  '성수대교':    {lat:37.5310, lng:127.0204, distFromSeaKm:50.0, distFromPaldangKm:32.0},
-  '동호대교':    {lat:37.5349, lng:127.0072, distFromSeaKm:48.5, distFromPaldangKm:33.5},
-  '한남대교':    {lat:37.5282, lng:126.9970, distFromSeaKm:47.0, distFromPaldangKm:35.0},
-  '잠수교':      {lat:37.5121, lng:126.9952, distFromSeaKm:45.5, distFromPaldangKm:36.5},
-  '반포대교':    {lat:37.5107, lng:126.9972, distFromSeaKm:45.0, distFromPaldangKm:37.0},
-  '동작대교':    {lat:37.5064, lng:126.9818, distFromSeaKm:43.0, distFromPaldangKm:39.0},
-  '한강철교':    {lat:37.5183, lng:126.9695, distFromSeaKm:42.0, distFromPaldangKm:40.0},
-  '한강대교':    {lat:37.5178, lng:126.9698, distFromSeaKm:41.5, distFromPaldangKm:40.5},
-  '원효대교':    {lat:37.5267, lng:126.9538, distFromSeaKm:40.0, distFromPaldangKm:42.0},
-  '마포대교':    {lat:37.5313, lng:126.9406, distFromSeaKm:38.5, distFromPaldangKm:43.5},
-  '서강대교':    {lat:37.5410, lng:126.9281, distFromSeaKm:37.5, distFromPaldangKm:44.5},
-  '당산철교':    {lat:37.5358, lng:126.9022, distFromSeaKm:35.0, distFromPaldangKm:47.0},
-  '양화대교':    {lat:37.5424, lng:126.8997, distFromSeaKm:34.5, distFromPaldangKm:47.5},
-  '성산대교':    {lat:37.5594, lng:126.8849, distFromSeaKm:33.5, distFromPaldangKm:48.5},
-  '월드컵대교':  {lat:37.5677, lng:126.8829, distFromSeaKm:33.0, distFromPaldangKm:49.0},
-  '가양대교':    {lat:37.5718, lng:126.8637, distFromSeaKm:31.5, distFromPaldangKm:50.5},
-  '마곡대교':    {lat:37.5740, lng:126.8450, distFromSeaKm:30.0, distFromPaldangKm:52.0},
-  '방화대교':    {lat:37.5795, lng:126.8234, distFromSeaKm:28.0, distFromPaldangKm:54.0},
-  '행주대교':    {lat:37.5908, lng:126.8068, distFromSeaKm:26.0, distFromPaldangKm:56.0},
+  '잠실대교':    {lat:37.5093, lng:127.0701, distFromSeaKm:55.5, distFromPaldangKm:26.5, distJamsilKm:0,    widthM:860},
+  '청담대교':    {lat:37.5192, lng:127.0521, distFromSeaKm:53.5, distFromPaldangKm:28.5, distJamsilKm:2.5,  widthM:790},
+  '영동대교':    {lat:37.5246, lng:127.0437, distFromSeaKm:52.5, distFromPaldangKm:29.5, distJamsilKm:3.2,  widthM:680},
+  '성수대교':    {lat:37.5310, lng:127.0204, distFromSeaKm:50.0, distFromPaldangKm:32.0, distJamsilKm:5.3,  widthM:650},
+  '동호대교':    {lat:37.5349, lng:127.0072, distFromSeaKm:48.5, distFromPaldangKm:33.5, distJamsilKm:6.4,  widthM:910},
+  '한남대교':    {lat:37.5282, lng:126.9970, distFromSeaKm:47.0, distFromPaldangKm:35.0, distJamsilKm:7.6,  widthM:620},
+  '잠수교':      {lat:37.5121, lng:126.9952, distFromSeaKm:45.5, distFromPaldangKm:36.5, distJamsilKm:9.5,  widthM:760},
+  '반포대교':    {lat:37.5107, lng:126.9972, distFromSeaKm:45.0, distFromPaldangKm:37.0, distJamsilKm:9.5,  widthM:760},
+  '동작대교':    {lat:37.5064, lng:126.9818, distFromSeaKm:43.0, distFromPaldangKm:39.0, distJamsilKm:11,   widthM:940},
+  // ★ 한강대교(13km)가 한강철교(14km)보다 상류 — 기존 코드는 역순이었음(경도로 검증)
+  '한강대교':    {lat:37.5178, lng:126.9698, distFromSeaKm:42.0, distFromPaldangKm:40.0, distJamsilKm:13,   widthM:625},
+  '한강철교':    {lat:37.5183, lng:126.9695, distFromSeaKm:41.5, distFromPaldangKm:40.5, distJamsilKm:14,   widthM:760},
+  '원효대교':    {lat:37.5267, lng:126.9538, distFromSeaKm:40.0, distFromPaldangKm:42.0, distJamsilKm:15,   widthM:1000},
+  '마포대교':    {lat:37.5313, lng:126.9406, distFromSeaKm:38.5, distFromPaldangKm:43.5, distJamsilKm:16,   widthM:1000},
+  '서강대교':    {lat:37.5410, lng:126.9281, distFromSeaKm:37.5, distFromPaldangKm:44.5, distJamsilKm:17,   widthM:850},
+  '당산철교':    {lat:37.5358, lng:126.9022, distFromSeaKm:35.0, distFromPaldangKm:47.0, distJamsilKm:18.5, widthM:830},
+  '양화대교':    {lat:37.5424, lng:126.8997, distFromSeaKm:34.5, distFromPaldangKm:47.5, distJamsilKm:19,   widthM:850},
+  '성산대교':    {lat:37.5594, lng:126.8849, distFromSeaKm:33.5, distFromPaldangKm:48.5, distJamsilKm:20.5, widthM:950},
+  '월드컵대교':  {lat:37.5677, lng:126.8829, distFromSeaKm:33.0, distFromPaldangKm:49.0, distJamsilKm:21,   widthM:1000},
+  '가양대교':    {lat:37.5718, lng:126.8637, distFromSeaKm:31.5, distFromPaldangKm:50.5, distJamsilKm:23.7, widthM:900},
+  '마곡대교':    {lat:37.5740, lng:126.8450, distFromSeaKm:30.0, distFromPaldangKm:52.0, distJamsilKm:26,   widthM:1000},
+  '방화대교':    {lat:37.5795, lng:126.8234, distFromSeaKm:28.0, distFromPaldangKm:54.0, distJamsilKm:27.5, widthM:1000},
+  '행주대교':    {lat:37.5908, lng:126.8068, distFromSeaKm:26.0, distFromPaldangKm:56.0, distJamsilKm:29,   widthM:730},
 };
 
 // ── 이동 경로 추정 ────────────────────────────────────────────
@@ -385,40 +552,55 @@ function estimateDrift(bridgeName, velocity, tideActive, tidePhase, tideRateCmHr
 // ── 교량 정의 ──────────────────────────────────────────────────
 // tide: 해당 교량이 조석 영향 구간인지 (잠실수중보 상류는 false)
 // tideRealtime: true → 신곡수중보 swl로 실시간 조석 전파 여부 판단
-// offset: 인천 기준 조석 지연 분 (신곡수중보 swl이 2.4m 이상일 때만 적용)
-//         ※ 물리 계산: 인천→교량 하구거리(km) / 조석파 전파속도 12m/s
-// releaseLag: 팔당→교량 방류 지연 분 (경험적 추정, 참고용)
+//
+// offset: 인천 기준 조석 지연 분 — ★ Phase 3.6.1 실측 기반 전면 수정
+//   [수정 이유] 기존 값(53~85분)은 "조석파 전파속도 12m/s" 가정으로 계산된 값이었으나,
+//   12m/s는 깊은 외해의 천해파 속도이며 한강 하구(얕고 좁으며 신곡수중보로 차단됨)에는
+//   적용할 수 없다. 조석 시차 로그 실측 결과 실제 전파속도는 약 2.2m/s 수준으로,
+//   기존 값은 실제의 약 1/4에 불과했다(예: 한강대교 실측 250~270분 vs 기존 65분).
+//   [현재 값] 2026-07-14~15 조석 시차 로그 실측치를 기준점으로 삼고, 관측소가 없는
+//   교량은 하류→상류 순서에 맞춰 보간. 저방류(약 280㎥/s) 조건 기준.
+//   실측 기준점: 행주대교 250 / 한강대교 270 / 잠수교 270 / 청담대교 270~290
+//   [한계] 표본이 적고(관측소당 4~5건) 모두 사리 기간이며, 방류량에 따라 크게 변한다
+//   (고방류 1700~1900㎥/s에서 20~60분 짧아짐). 여전히 잠정값이며 참고용이다.
+//
+// releaseLag: 팔당→교량 방류 지연 분 — ★ Phase 3.6.1 순서 오류 수정
+//   [수정 이유] 기존 값은 상류(강동대교 330분)가 하류(행주대교 260분)보다 큰,
+//   물리적으로 불가능한 역순이었다. 팔당댐 물은 강동대교를 먼저, 행주대교를 나중에
+//   지나므로 하류로 갈수록 지연이 커져야 한다. 하류로 갈수록 증가하도록 순서를 바로잡았다.
+//   [한계] 절대값은 여전히 미검증 경험 추정치이며, 방류량이 클수록 홍수파가 빨라져
+//   실제로는 유량에 따라 변한다(고정 상수로는 부정확). 방류 시차 로그로 실측 검증 필요.
 const BRIDGES = [
   // ─── 잠실수중보 상류 (조석 완전 제외) ───────────────────────
-  {bridge:'강동대교',    zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:330},
-  {bridge:'구리암사대교',zone:'수중보 상류',        station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:330},
-  {bridge:'천호대교',    zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:330},
-  {bridge:'광진교',      zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:330},
-  {bridge:'올림픽대교',  zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:330},
-  {bridge:'잠실철교',    zone:'잠실수중보 상류',    station:'서울시(청담대교)', code:'1018662', tide:false, tideRealtime:false, offset:null, releaseLag:330},
+  {bridge:'강동대교',    zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:260},
+  {bridge:'구리암사대교',zone:'수중보 상류',        station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:262},
+  {bridge:'천호대교',    zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:265},
+  {bridge:'광진교',      zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:266},
+  {bridge:'올림픽대교',  zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:268},
+  {bridge:'잠실철교',    zone:'잠실수중보 상류',    station:'서울시(청담대교)', code:'1018662', tide:false, tideRealtime:false, offset:null, releaseLag:270},
   // ─── 잠실수중보 하류 (신곡수중보 swl 실시간 판단) ─────────────
-  {bridge:'잠실대교',    zone:'수중보 하류(상)',    station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:85, releaseLag:330},
-  {bridge:'청담대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:85, releaseLag:330},
-  {bridge:'영동대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:85, releaseLag:330},
-  {bridge:'성수대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:80, releaseLag:325},
-  {bridge:'동호대교',    zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:75, releaseLag:315},
-  {bridge:'한남대교',    zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:75, releaseLag:315},
-  {bridge:'잠수교',      zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:70, releaseLag:310},
-  {bridge:'반포대교',    zone:'중류',              station:'서울시(반포2교)',  code:'1018681', tide:true, tideRealtime:true, offset:70, releaseLag:310},
-  {bridge:'동작대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:65, releaseLag:305},
-  {bridge:'한강철교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:65, releaseLag:305},
-  {bridge:'한강대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:65, releaseLag:300},
-  {bridge:'원효대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:62, releaseLag:300},
-  {bridge:'마포대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:60, releaseLag:295},
-  {bridge:'서강대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:58, releaseLag:290},
-  {bridge:'당산철교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:58, releaseLag:290},
-  {bridge:'양화대교',    zone:'중하류',            station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:55, releaseLag:285},
-  {bridge:'성산대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:58, releaseLag:270},
-  {bridge:'월드컵대교',  zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:56, releaseLag:268},
-  {bridge:'가양대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:54, releaseLag:265},
-  {bridge:'마곡대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:53, releaseLag:263},
-  {bridge:'방화대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:53, releaseLag:262},
-  {bridge:'행주대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:53, releaseLag:260},
+  {bridge:'잠실대교',    zone:'수중보 하류(상)',    station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:282, releaseLag:272},
+  {bridge:'청담대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:280, releaseLag:274},
+  {bridge:'영동대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:278, releaseLag:276},
+  {bridge:'성수대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:277, releaseLag:280},
+  {bridge:'동호대교',    zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:275, releaseLag:284},
+  {bridge:'한남대교',    zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:274, releaseLag:286},
+  {bridge:'잠수교',      zone:'중류',              station:'서울시(잠수교)',   code:'1018680', tide:true, tideRealtime:true, offset:272, releaseLag:290},
+  {bridge:'반포대교',    zone:'중류',              station:'서울시(반포2교)',  code:'1018681', tide:true, tideRealtime:true, offset:272, releaseLag:290},
+  {bridge:'동작대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:271, releaseLag:294},
+  {bridge:'한강철교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:270, releaseLag:296},
+  {bridge:'한강대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:270, releaseLag:300},
+  {bridge:'원효대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:268, releaseLag:302},
+  {bridge:'마포대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:266, releaseLag:305},
+  {bridge:'서강대교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:265, releaseLag:308},
+  {bridge:'당산철교',    zone:'중류',              station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:264, releaseLag:312},
+  {bridge:'양화대교',    zone:'중하류',            station:'서울시(한강대교)', code:'1018683', tide:true, tideRealtime:true, offset:262, releaseLag:314},
+  {bridge:'성산대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:259, releaseLag:316},
+  {bridge:'월드컵대교',  zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:257, releaseLag:318},
+  {bridge:'가양대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:255, releaseLag:322},
+  {bridge:'마곡대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:253, releaseLag:325},
+  {bridge:'방화대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:252, releaseLag:328},
+  {bridge:'행주대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:250, releaseLag:330},
 ];
 
 // ── 물때 계산 함수 ─────────────────────────────────────────────
@@ -980,12 +1162,17 @@ function estimateWaterLevel(waterRows,waterKeys,time,tide,damImpact,damRows,damK
 }
 
 // ── makePointState ────────────────────────────────────────────
-function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtTime,singokOwlAtTime){
+function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtTime,singokOwlAtTime,contStationRows){
   const waterKeys=waterMetric?.key?[waterMetric.key]:WATER_KEYS;
   const damKeys=damMetric?.key?[damMetric.key]:DAM_KEYS;
   let water=nearest(waterRows,time,waterKeys);
   const waterFlow=nearest(waterRows,time,[WATER_FLOW_FIXED_KEY,'FW','fw'],MAX_NEAREST_MIN);
   const wTrend=trend(waterRows,time,waterKeys,60);
+  // ★ 방향·정조 판정용 단기 변화율(20분)
+  // 1시간 평균은 구간 중심이 30분 전이라 정조·방향 전환을 30분 늦게 잡는다.
+  // (예: 급상승 후 정조에 들어가도 1시간 평균은 여전히 '상승 중'으로 표시)
+  // 따라서 방향·정조 판정에는 최근 20분 변화율을 쓴다. (60분값은 표시·추세용으로 유지)
+  const wTrendShort=trend(waterRows,time,waterKeys,20) || wTrend;
   const damImpactTime=new Date(time.getTime()-(b.releaseLag||0)*60000);
   const damImpact=nearest(damRows,damImpactTime,damKeys,90);
   // 방류 추세(1시간) — 수위 상승 원인이 밀물 유입인지 방류 증가인지 구분용
@@ -1035,18 +1222,35 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   const velQ      = velResult ? velResult.Q : null;
   const velInfo = velocityLabel(velocity);
 
-  const direction=directionLabel(b,wTrend,damImpact,tide,tideActive,damTrend);
+  const direction=directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrend);
   const speed=velInfo ? velInfo.label : speedLabel(wTrend,damImpact,tide);
 
   // ★ 정조(slack water) 판정 — 조석 구간에서만 (실측 수위 변화율 기반)
   let slack=null;
   let flowDir=null;
-  const rateCmHrForFlow = wTrend && wTrend.delta!==null ? Number((wTrend.delta*100).toFixed(1)) : null;
+  const rateCmHrForFlow = rateCmHrOf(wTrendShort);
+  // ★ 연속방정식(저류법) 유속 — 조석 구간에서 물리 기반 계산
+  let cont=null;
+  if(b.tide){
+    // 관측소별 실측 변화율 산출 (20분 창) — 구간 저류 적분용
+    let stationRates=null;
+    if(contStationRows){
+      stationRates=CONT_STATIONS.map(st=>{
+        const rows=contStationRows[st.code];
+        if(!rows?.length) return null;
+        const t=trend(rows,time,WATER_KEYS,20);
+        const r=rateCmHrOf(t);
+        return r==null?null:{distKm:st.distKm, rateCmHr:r};
+      }).filter(Boolean);
+      if(!stationRates.length) stationRates=null;
+    }
+    cont=calcContinuityVelocity(b, water?.value ?? null, rateCmHrForFlow, damImpact?.value ?? null, stationRates);
+  }
   if(b.tide){
     const wPts=rowsToPoints(waterRows, waterKeys);
     slack=calcSlackWater(wPts, time, rateCmHrForFlow);
-    // ★ 조석 역류 반영 유속 (방향 신뢰·크기 참고)
-    flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack, damTrend?.delta ?? null);
+    // ★ 조석 역류 반영 유속 (연속방정식 우선, 없으면 경험식)
+    flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack, damTrend?.delta ?? null, cont);
   }
 
   const notes=[];
@@ -1054,10 +1258,46 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   if(damImpact) notes.push(`팔당 ${b.releaseLag}분 보정 ${damImpact.value.toFixed(1)}㎥/s`); else notes.push(damMetric?.blank?'통제소 방류 응답 공백':'방류량 보정값 없음');
   notes.push(tideStatusNote);
   if(waterSource==='estimated') notes.push('⚠ 수위 실측값 없음 → 계산값(추정)으로 대체');
-  return{label,time,water,waterFlow,wTrend,damImpact,damImpactTime,damTrend,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ,slack,flowDir};
+  return{label,time,water,waterFlow,wTrend,wTrendShort,damImpact,damImpactTime,damTrend,tide,tideActive,tideStatusNote,direction,speed,notes,waterSource,velocity,velInfo,velSource,velQ,slack,flowDir,cont};
 }
 
 // ── 방향/속도 판정 ───────────────────────────────────────────
+// trend 객체 → cm/h 환산 (구간 길이 무관하게 시간당 비율로 정규화)
+function rateCmHrOf(t){
+  if(!t || t.delta==null || !t.minutes) return null;
+  return Number((t.delta*100*(60/t.minutes)).toFixed(1));
+}
+
+// ── 표시용 실효 유속 ─────────────────────────────────────────
+// HQ곡선은 "수위가 높다 = 유량이 많다"를 전제로 한 평상시 유량 공식이다.
+// 조석 역류 시에는 바닷물이 밀려들어와 수위가 높아진 것이므로 강물 유량이
+// 많은 게 아니다 → HQ곡선이 유량·유속을 크게 과대평가한다(예: 4m/s 이상).
+// 따라서 역류가 실측된 경우 HQ 유속을 무효 처리하고 역류 추정치를 쓴다.
+function effectiveVelocity(state){
+  const f=state.flowDir;
+  const hq=state.velocity;
+  if(!f) return {value:hq, label:state.velInfo?.label??'', source:state.velSource??'', dir:'down', invalid:false};
+
+  const byCont = f.src && f.src.includes('연속방정식');
+  if(f.dir==='slack'){
+    return {value:0, label:'정조(유속 최소)', source:f.src||'실측 변화율 ≈0', dir:'slack', invalid:false,
+            note:f.note||'정조 부근 — 곧 반대 방향 흐름 강화 가능'};
+  }
+  if(f.dir==='up'){
+    return {value:f.absVel, signed:f.signedVel, label:'상류향 역류',
+            source:f.src||'추정', dir:'up', invalid:!byCont,
+            note:`${f.note||''}${hq!=null?` · HQ곡선 원값 ${hq.toFixed(2)}m/s는 조석 역류 구간에서 무효라 제외`:''}`};
+  }
+  if(f.dir==='mixed'){
+    return {value:hq, label:'불확실', source:f.src||'', dir:'mixed', invalid:true, note:f.note};
+  }
+  // 하류: 연속방정식이 있으면 그 값을 우선
+  if(byCont){
+    return {value:f.absVel, label:velocityLabel(f.absVel)?.label??'', source:f.src, dir:'down', invalid:false, note:f.note};
+  }
+  return {value:hq, label:state.velInfo?.label??'', source:state.velSource??'', dir:'down', invalid:false};
+}
+
 // ── 물 방향 판정 (실측 우선) ─────────────────────────────────
 // 원칙: 인천 조석 위상은 '인천 기준'이며, 상류 교량엔 3~5시간 늦게 도달한다.
 //       따라서 인천 위상으로 교량 방향을 정하면 실제와 반대로 나올 수 있다.
@@ -1077,29 +1317,37 @@ function flowStrengthLabel(absRate){
   return '약하게';
 }
 
-function directionLabel(b,wTrend,damImpact,tide,tideActive,damTrend){
+function directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrendLong){
   const damHigh=damImpact?.value!=null&&damImpact.value>=1000;
   // 비조석 구간: 기존 로직 유지 (조석 무의미)
   if(!b.tide) return damHigh?'방류 영향 하류방향 우세 가능':'조석 제외 · 자연 하류 흐름 가능';
 
-  // ★ 1순위: 그 관측소의 실측 수위 변화율
-  const rate = wTrend && wTrend.delta!=null ? Number((wTrend.delta*100).toFixed(1)) : null; // cm/h
-  const damRise = damTrend && damTrend.delta!=null ? damTrend.delta : null; // ㎥/s 1시간 변화
-  const damSurging = damRise!==null && damRise >= 100;  // 방류 급증 중
+  // ★ 1순위: 그 관측소의 실측 단기 변화율 (20분 기준, 시간당으로 정규화)
+  const rate = rateCmHrOf(wTrendShort); // cm/h
+  const rateLong = rateCmHrOf(wTrendLong);
+  const damRise = damTrend && damTrend.delta!=null ? damTrend.delta : null;
+  const damSurging = damRise!==null && damRise >= 100;
 
   if(rate!==null){
     const abs=Math.abs(rate);
     if(abs < FLOW_RATE_SLACK){
       return `정체·정조 부근 (실측 ${rate>0?'+':''}${rate}cm/h)`;
     }
+    // ★ 감속 감지: 뒤돌아보는 평균은 정조 순간에도 양수가 나오므로,
+    //   단기 변화율이 장기 대비 절반 이하로 줄었으면 '정조 임박'으로 본다.
+    const decelerating = rateLong!==null && Math.abs(rateLong)>=FLOW_RATE_WEAK
+                       && Math.sign(rate)===Math.sign(rateLong)
+                       && abs < Math.abs(rateLong)*0.5;
+    if(decelerating){
+      const dirTxt = rate>0?'상승':'하강';
+      return `⏸ 정조 임박 — ${dirTxt} 둔화 중 (최근 20분 ${rate>0?'+':''}${rate}cm/h vs 1시간 ${rateLong>0?'+':''}${rateLong}cm/h) · 곧 방향 전환`;
+    }
     if(rate > 0){
-      // 수위 상승 = 유입. 단 방류 급증이면 원인이 방류일 수 있음
       if(damSurging){
         return `수위 ${flowStrengthLabel(abs)} 상승 (실측 +${rate}cm/h) · 방류 급증(+${Math.round(damRise)}㎥/s/h) 영향 — 역류 여부 불확실`;
       }
       return `⬆ 물이 ${flowStrengthLabel(abs)} 들어오는 중 (실측 +${rate}cm/h · 밀물 유입/역류)`;
     }
-    // 수위 하강 = 유출
     return `⬇ 물이 ${flowStrengthLabel(abs)} 나가는 중 (실측 ${rate}cm/h · 하류 흐름)`;
   }
 
@@ -1120,6 +1368,16 @@ function speedLabel(wTrend,damImpact,tide){
 function flowDecisionFromState(state){ return{direction:state.direction,parts:state.notes,speed:state.speed}; }
 
 // ── 포맷 함수 ────────────────────────────────────────────────
+function fmtEffVel(state){
+  const ev=effectiveVelocity(state);
+  if(ev.value===null||ev.value===undefined) return '<span style="color:#b7791f">유속 계산 불가</span>';
+  const sign = ev.dir==='up'?'−':'';
+  const main = `<strong>${sign}${ev.value.toFixed(2)}m/s</strong> (${(ev.value*3.6).toFixed(1)}km/h) · ${ev.label||''}`;
+  const src  = `<br><small style="color:#667085">${ev.source||''}</small>`;
+  const note = ev.note?`<br><small style="color:#b7791f">${ev.note}</small>`:'';
+  return main+src+note;
+}
+
 function fmtWaterPoint(p){
   if(!p) return '자료 없음';
   if(p.isEstimate){
@@ -1335,14 +1593,7 @@ function renderPointCompare(b,incidentState,currentState){
     ${row('신곡수중보 조석 판단',incidentState.tideStatusNote,currentState.tideStatusNote)}
     ${row('조석 영향',fmtTidePoint(b,incidentState.tide,incidentState.tideActive),fmtTidePoint(b,currentState.tide,currentState.tideActive))}
     ${row('물 방향',incidentState.direction,currentState.direction)}
-    ${row('참고 유속',
-      incidentState.velocity!==null
-        ? `<strong>${incidentState.velocity.toFixed(2)}m/s</strong> (${(incidentState.velocity*3.6).toFixed(1)}km/h) · ${incidentState.velInfo?.label||''}<br><small style="color:#667085">${incidentState.velSource||''} · Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s</small>`
-        : '<span style="color:#b7791f">유속 계산 불가</span>',
-      currentState.velocity!==null
-        ? `<strong>${currentState.velocity.toFixed(2)}m/s</strong> (${(currentState.velocity*3.6).toFixed(1)}km/h) · ${currentState.velInfo?.label||''}<br><small style="color:#667085">${currentState.velSource||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s</small>`
-        : '<span style="color:#b7791f">유속 계산 불가</span>'
-    )}
+    ${row('참고 유속', fmtEffVel(incidentState), fmtEffVel(currentState))}
     ${row('물살 판단',incidentState.speed,currentState.speed)}
     <p class="muted">물 방향·물살은 유속 실측값이 아니라 수위변화·방류량·인천 조석·신곡수중보 실측 수위를 조합한 참고판정입니다.</p>`;
   const el=$('pointCompare'); if(el) el.innerHTML=html;
@@ -1476,23 +1727,31 @@ function renderDecisionCard(b, currentState, incidentState, results, tideRows, s
   const dirEl=$('dc-direction'), dirSub=$('dc-direction-sub');
   if(dirEl){
     const dir = currentState.direction||'—';
-    const hasDown = dir.includes('하류')||dir.includes('나가')||dir.includes('썰물');
-    const hasUp   = dir.includes('밀물')||dir.includes('들어오')||dir.includes('역류');
-    dirEl.textContent = hasDown?'↓ 하류':hasUp?'↑ 상류':'— 혼합';
-    dirEl.className   = 'dc-value '+(hasDown?'color-orange':hasUp?'color-blue':'color-muted');
+    const isSlack = dir.includes('정조')||dir.includes('정체');
+    const hasDown = !isSlack && (dir.includes('하류')||dir.includes('나가')||dir.includes('썰물'));
+    const hasUp   = !isSlack && (dir.includes('밀물')||dir.includes('들어오')||dir.includes('역류'));
+    dirEl.textContent = isSlack?'⏸ 정조':hasDown?'↓ 하류':hasUp?'↑ 상류':'— 혼합';
+    dirEl.className   = 'dc-value '+(isSlack?'color-green':hasDown?'color-orange':hasUp?'color-blue':'color-muted');
     if(dirSub) dirSub.textContent = dir;
   }
 
-  // 유속 — 시속(km/h) 메인, (m/s) 보조
+  // 유속 — 시속(km/h) 메인, (m/s) 보조 · 조석 역류 시 HQ곡선 무효 처리
   const velEl=$('dc-velocity'), velSub=$('dc-velocity-sub');
   if(velEl){
-    if(currentState.velocity!==null){
-      const v=currentState.velocity, kmh=(v*3.6).toFixed(1);
-      const lvl=currentState.velInfo?.label||'';
-      const cls=lvl==='빠름'||lvl==='매우 빠름'?'color-red':lvl==='보통'?'color-yellow':'color-green';
-      velEl.innerHTML=`<span class="${cls}" style="font-size:26px;font-weight:900">${kmh}</span><span style="font-size:13px;color:var(--muted);font-weight:600"> km/h</span><span style="font-size:11px;color:var(--muted);margin-left:4px">(${v.toFixed(2)}m/s)</span>`;
+    const ev=effectiveVelocity(currentState);
+    if(ev.value!==null && ev.value!==undefined){
+      const v=ev.value, kmh=(v*3.6).toFixed(1);
+      const lvl=ev.label||'';
+      let cls;
+      if(ev.dir==='up') cls='color-blue';
+      else if(ev.dir==='slack') cls='color-green';
+      else if(ev.dir==='mixed') cls='color-yellow';
+      else cls=(lvl==='빠름'||lvl==='매우 빠름')?'color-red':lvl==='보통'?'color-yellow':'color-green';
+      const arrow = ev.dir==='up'?'↑ ':ev.dir==='slack'?'':'↓ ';
+      const signTxt = ev.dir==='up'?`(−${v.toFixed(2)}m/s 상류)`:`(${v.toFixed(2)}m/s)`;
+      velEl.innerHTML=`<span class="${cls}" style="font-size:26px;font-weight:900">${arrow}${kmh}</span><span style="font-size:13px;color:var(--muted);font-weight:600"> km/h</span><span style="font-size:11px;color:var(--muted);margin-left:4px">${signTxt}</span>`;
       velEl.className='dc-value';
-      if(velSub) velSub.textContent=`${lvl} · ${currentState.velSource||''}`;
+      if(velSub) velSub.innerHTML=`${lvl} · ${ev.source||''}${ev.invalid?'<br><small style="color:#b7791f">⚠ 추정치 — 방향만 신뢰</small>':''}`;
     } else {
       velEl.textContent='—';
       velEl.className='dc-value color-muted';
@@ -1615,7 +1874,7 @@ function renderModelInfo(b){
     <div class="kv" style="background:${b.tide?'#f5f0ff':'#f5f5f5'};border-radius:6px;padding:8px 10px;margin:4px 0">
       <b>🌊 조석 출처</b>
       <span><strong>${b.tide?`인천 (${TIDE_STATION}) + ${b.offset}분 보정 · 신곡수중보 swl 실시간 판단`:'잠실수중보 상류: 조석 제외'}</strong><br>
-      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, 계산 추정값)을 더한 보정값. 교량 직접 조석 측정값 아님.<br>조석 영향 판단: 신곡수중보 owl-swl 수위차 기준 (>0 강한영향 / >-0.3 약한영향 / 이하 영향미미)`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
+      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, <b>조석 시차 로그 실측 기반 잠정값</b>)을 더한 보정값. 교량 직접 조석 측정값 아님.<br>⚠ 표본이 적고 저방류·사리 조건 기준 — 방류량이 크면 20~60분 짧아질 수 있음.<br>조석 영향 판단: 신곡수중보 owl-swl 수위차 기준 (>0 강한영향 / >-0.3 약한영향 / 이하 영향미미)`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
     </div>`;
 }
 
@@ -2045,7 +2304,7 @@ function init(){
   renderTideLagPanel();
   if($('exportTideLagBtn')) $('exportTideLagBtn').onclick=exportTideLagLog;
   if($('clearTideLagBtn')) $('clearTideLagBtn').onclick=clearTideLagLog;
-  log('[초기화]',`교량 ${BRIDGES.length}개`,`Phase 3.6.0 TideLagLog · 신곡수중보 실측 기반 조석 판단 + 시차 자동 누적`);
+  log('[초기화]',`교량 ${BRIDGES.length}개`,`Phase 3.6.2 · 연속방정식 유속 + 실측 지형·시차 보정`);
   renderDataFirstPanel();
 }
 function bindInputs(){
@@ -2120,6 +2379,18 @@ async function runQuery(){
   try{ damRows=await getDamSeries(key,start,end); }catch(e){ q.dam='실패';log('[방류 실패]',e.message); }
   // ④ fallback
   try{ const p=await applyHrfcoFallbacks(key,b,waterRows,damRows);waterRows=p.waterRows;damRows=p.damRows; }catch(e){ log('[fallback 오류]',e.message); }
+  // ④-2 ★ 연속방정식용 타 관측소 수위 (조석 구간만)
+  //    구간별 실측 변화율을 써야 조석 진폭 감쇠가 반영됨
+  let contStationRows={};
+  if(b.tide){
+    for(const st of CONT_STATIONS){
+      if(st.code===b.code){ contStationRows[st.code]=waterRows; continue; }
+      try{ contStationRows[st.code]=await getWaterSeries(key,st.code,start,end); }
+      catch(e){ log('[연속방정식 관측소 실패]',st.name,e.message); }
+    }
+    const got=Object.values(contStationRows).filter(r=>r?.length).length;
+    log('[연속방정식]',`관측소 ${got}/${CONT_STATIONS.length}곳 수위 확보`);
+  }
   // ⑤ 조석 조회 (조석 구간만)
   if(b.tide){
     try{ tideRows=await getTideRowsRange(tideKey||'',start,end);q.tide='정상'; }
@@ -2140,8 +2411,8 @@ async function runQuery(){
   const singokOwlAtIncident = nearest(singokRows,incident, SINGOK_OWL_KEYS, 60)?.value??null;
 
   // 포인트 상태 계산
-  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtIncident,singokOwlAtIncident);
-  const currentState =makePointState('조회시점',b,search,  waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtSearch,  singokOwlAtSearch);
+  const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtIncident,singokOwlAtIncident,contStationRows);
+  const currentState =makePointState('조회시점',b,search,  waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtSearch,  singokOwlAtSearch,contStationRows);
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링

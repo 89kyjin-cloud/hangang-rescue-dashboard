@@ -198,8 +198,12 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
     method='단일 관측소 근사'; reliable = geo.distJamsilKm<=15;
   }
   const Q = damCms - dVdt;
-  const depth = wl - sec.bedEl;
+  // ★ 수심: 해도 실측(방류 200㎥/s 기준 최소 수심) 우선. 없으면 추정 하상고 폴백.
+  //   최소 수심을 쓰면 단면적이 작게 나와 유속이 크게 산출됨 → 안전 측 보수적.
+  const cd = chartDepthFor(b.bridge);
+  const depth = cd?.main ?? (wl!=null && sec.bedEl!=null ? wl - sec.bedEl : null);
   if(!(depth>0)) return null;
+  const depthSrc = cd?.main ? '해도 실측(방류200 기준)' : '추정 하상고';
   const area = geo.widthM * depth * sec.shape;
   const vel = Q/area;
   // 물리적 타당성 검사: 한강 조석 구간에서 |유속| 2m/s 초과는 비현실적
@@ -211,6 +215,7 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
     surfAreaKm2:Number((surfArea/1e6).toFixed(2)),
     sectionArea:Math.round(area),
     reachKm:geo.distJamsilKm,
+    depth, depthSrc,
     method, reliable,
     dir: vel<-0.03?'up' : vel>0.03?'down' : 'slack'
   };
@@ -237,10 +242,12 @@ const STATION_SECTIONS = {
 // 1순위: fw 실측유량 ÷ 단면적
 // 2순위: HQ 곡선(공식) ÷ 단면적  ← 신규 추가
 // 3순위: 방류량 기반 추정 ÷ 단면적
-function calcVelocity(fw, wl, stationCode){
+function calcVelocity(fw, wl, stationCode, bridgeName){
   const sec = STATION_SECTIONS[stationCode];
   if(!sec || wl === null) return null;
-  const depth = wl - sec.bedEl;
+  // ★ 해도 실측 수심(방류 200㎥/s 기준) 우선 — 기존 `wl − 하상고`는 전제가 틀렸음
+  const cd = bridgeName ? chartDepthFor(bridgeName) : null;
+  const depth = cd?.main ?? (wl - sec.bedEl);
   if(depth <= 0.1) return null;
   const area = sec.width * depth * sec.shape;
 
@@ -1243,20 +1250,17 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   // ★ 유속 계산 (1순위: fw실측, 2순위: HQ곡선, 3순위: 방류량 추정)
   const fwVal = waterFlow ? waterFlow.value : null;
   const wlVal = water ? water.value : null;
-  const velResult = calcVelocity(fwVal, wlVal, b.code); // {vel, source, Q} or null
+  const velResult = calcVelocity(fwVal, wlVal, b.code, b.bridge); // {vel, source, Q} or null
   const velocity = velResult ? velResult.vel : null;
   const velSource = velResult ? velResult.source : null;
   const velQ      = velResult ? velResult.Q : null;
   const velInfo = velocityLabel(velocity);
 
-  const direction=directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrend);
-  const speed=velInfo ? velInfo.label : speedLabel(wTrend,damImpact,tide);
-
-  // ★ 정조(slack water) 판정 — 조석 구간에서만 (실측 수위 변화율 기반)
+  // ★ 정조·역류·유속 판정 (조석 구간) — 방향 판정보다 먼저 계산해
+  //   '물 방향'과 '참고 유속'이 같은 근거(연속방정식)를 쓰도록 통일
   let slack=null;
   let flowDir=null;
   const rateCmHrForFlow = rateCmHrOf(wTrendShort);
-  // ★ 연속방정식(저류법) 유속 — 조석 구간에서 물리 기반 계산
   let cont=null;
   if(b.tide){
     // 관측소별 실측 변화율 산출 (20분 창) — 구간 저류 적분용
@@ -1272,13 +1276,13 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
       if(!stationRates.length) stationRates=null;
     }
     cont=calcContinuityVelocity(b, water?.value ?? null, rateCmHrForFlow, damImpact?.value ?? null, stationRates);
-  }
-  if(b.tide){
     const wPts=rowsToPoints(waterRows, waterKeys);
     slack=calcSlackWater(wPts, time, rateCmHrForFlow);
-    // ★ 조석 역류 반영 유속 (연속방정식 우선, 없으면 경험식)
     flowDir=applyReverseFlow(velocity, tideActive, rateCmHrForFlow, slack, damTrend?.delta ?? null, cont);
   }
+
+  const direction=directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrend,flowDir);
+  const speed=velInfo ? velInfo.label : speedLabel(wTrend,damImpact,tide);
 
   const notes=[];
   if(wTrend) notes.push(`수위 1시간 ${wTrend.delta>0?'+':''}${wTrend.delta}m`); else notes.push(waterMetric?.blank?'통제소 수위 응답 공백':'수위 변화 계산불가');
@@ -1344,38 +1348,48 @@ function flowStrengthLabel(absRate){
   return '약하게';
 }
 
-function directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrendLong){
+function directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrendLong,flowDir){
   const damHigh=damImpact?.value!=null&&damImpact.value>=1000;
   // 비조석 구간: 기존 로직 유지 (조석 무의미)
   if(!b.tide) return damHigh?'방류 영향 하류방향 우세 가능':'조석 제외 · 자연 하류 흐름 가능';
 
-  // ★ 1순위: 그 관측소의 실측 단기 변화율 (20분 기준, 시간당으로 정규화)
   const rate = rateCmHrOf(wTrendShort); // cm/h
   const rateLong = rateCmHrOf(wTrendLong);
   const damRise = damTrend && damTrend.delta!=null ? damTrend.delta : null;
   const damSurging = damRise!==null && damRise >= 100;
 
+  // 감속 여부(정조 임박)는 '방향'이 아니라 '수식어'로만 쓴다.
+  // 물이 느려지는 중이어도 아직 흐르고 있으면 방향은 그대로다.
+  const decelerating = rate!=null && rateLong!=null
+                     && Math.abs(rateLong)>=FLOW_RATE_WEAK
+                     && Math.sign(rate)===Math.sign(rateLong)
+                     && Math.abs(rate) < Math.abs(rateLong)*0.5;
+  const turnSoon = decelerating ? ' · ⏳ 전환 임박(둔화 중)' : '';
+  const rateTxt = rate!=null ? `실측 ${rate>0?'+':''}${rate}cm/h` : '변화율 자료 없음';
+
+  // ★ 1순위: 연속방정식(질량보존) 결과를 방향의 단일 근거로 사용
+  //   ('참고 유속' 카드와 반드시 같은 결론이 나오도록 통일)
+  if(flowDir && flowDir.src && flowDir.src.includes('연속방정식')){
+    if(flowDir.dir==='up')
+      return `⬆ 물이 들어오는 중 · 상류향 역류 ${flowDir.absVel.toFixed(2)}m/s (${rateTxt})${turnSoon}`;
+    if(flowDir.dir==='down')
+      return `⬇ 물이 나가는 중 · 하류향 ${flowDir.absVel.toFixed(2)}m/s (${rateTxt})${turnSoon}`;
+    if(flowDir.dir==='slack')
+      return `⏸ 정조 — 통과유량 ≈0 (${rateTxt})`;
+    if(flowDir.dir==='mixed')
+      return `혼합·불확실 — 수위 상승과 방류 급증 동반 (${rateTxt}) · 현장 확인 필수`;
+  }
+
+  // 2순위: 실측 변화율 부호
   if(rate!==null){
     const abs=Math.abs(rate);
-    if(abs < FLOW_RATE_SLACK){
-      return `정체·정조 부근 (실측 ${rate>0?'+':''}${rate}cm/h)`;
-    }
-    // ★ 감속 감지: 뒤돌아보는 평균은 정조 순간에도 양수가 나오므로,
-    //   단기 변화율이 장기 대비 절반 이하로 줄었으면 '정조 임박'으로 본다.
-    const decelerating = rateLong!==null && Math.abs(rateLong)>=FLOW_RATE_WEAK
-                       && Math.sign(rate)===Math.sign(rateLong)
-                       && abs < Math.abs(rateLong)*0.5;
-    if(decelerating){
-      const dirTxt = rate>0?'상승':'하강';
-      return `⏸ 정조 임박 — ${dirTxt} 둔화 중 (최근 20분 ${rate>0?'+':''}${rate}cm/h vs 1시간 ${rateLong>0?'+':''}${rateLong}cm/h) · 곧 방향 전환`;
-    }
+    if(abs < FLOW_RATE_SLACK) return `⏸ 정체·정조 부근 (${rateTxt})`;
     if(rate > 0){
-      if(damSurging){
-        return `수위 ${flowStrengthLabel(abs)} 상승 (실측 +${rate}cm/h) · 방류 급증(+${Math.round(damRise)}㎥/s/h) 영향 — 역류 여부 불확실`;
-      }
-      return `⬆ 물이 ${flowStrengthLabel(abs)} 들어오는 중 (실측 +${rate}cm/h · 밀물 유입/역류)`;
+      if(damSurging)
+        return `수위 ${flowStrengthLabel(abs)} 상승 (${rateTxt}) · 방류 급증(+${Math.round(damRise)}㎥/s/h) — 역류 여부 불확실`;
+      return `⬆ 물이 ${flowStrengthLabel(abs)} 들어오는 중 (${rateTxt} · 밀물 유입/역류)${turnSoon}`;
     }
-    return `⬇ 물이 ${flowStrengthLabel(abs)} 나가는 중 (실측 ${rate}cm/h · 하류 흐름)`;
+    return `⬇ 물이 ${flowStrengthLabel(abs)} 나가는 중 (${rateTxt} · 하류 흐름)${turnSoon}`;
   }
 
   // 2순위(실측 없을 때만): 기존 조석 위상 기반 추정
@@ -1654,9 +1668,29 @@ function getBedElForBridge(bridgeName, db){
   };
 }
 
-function calcDepth(wl, bedEl){
-  if(wl === null || wl === undefined || bedEl === null || bedEl === undefined) return null;
-  return Number((wl - bedEl).toFixed(2));
+// ★ Phase 3.6.4 중대 수정: 해도값의 의미 정정
+//   [기존 오류] 해도 숫자를 '하상고(EL.m)'로 보고 `수심 = 실시간 수위 − 하상고`로 계산했다.
+//     이 전제는 운항기준도를 디지털화할 때 넣은 '해석'이었을 뿐, 원본 근거가 없었다.
+//   [원본 NOTES] "도면에 표시된 **수심**은 팔당댐 방류량 200㎥/s를 기준으로 산출된 값이므로,
+//     실제 운항시에는 방류량 및 조석 변화에 따라 가항 수심이 달라질 수 있음" (시트 5~7/8 공통)
+//   → 해도 숫자는 '하상고'가 아니라 **방류량 200㎥/s 조건의 실제 수심**이다. (음수는 표기 관행)
+//   [정정] 수심 = |해도값|. 실시간 수위를 빼지 않는다.
+//   [운영 방침] 방류·조석이 늘면 실제 수심은 이보다 깊어지므로, 해도값을 **최소 수심**으로 쓴다.
+//     수색 안전상 얕게 잡는 쪽이 보수적이며, 별도 보정은 하지 않는다(보정 기준선 미확보).
+const CHART_DEPTH_BASE_DAM = 200; // ㎥/s — 해도 수심의 기준 방류량
+function chartDepth(v){
+  if(v===null || v===undefined) return null;
+  return Number(Math.abs(v).toFixed(2));
+}
+// 교량명 → 해도 기준 수심(방류 200㎥/s) {main, deepest} · 동기 조회 (NAV_CHART_DB 사용)
+function chartDepthFor(bridgeName){
+  const info = getBedElForBridge(bridgeName, NAV_CHART_DB);
+  if(!info) return null;
+  return {
+    main:    chartDepth(info.bedEl_main),
+    deepest: chartDepth(info.bedEl_deep),
+    warn:    chartDepth(info.bedEl_warn),
+  };
 }
 
 function depthLabel(depth){
@@ -1680,13 +1714,11 @@ function renderDepthCard(b, incidentState, currentState, db){
     return;
   }
 
-  const wlInc = incidentState.water?.value ?? null;
-  const wlCur = currentState.water?.value ?? null;
-
-  const depInc_main = calcDepth(wlInc, bedInfo.bedEl_main);
-  const depCur_main = calcDepth(wlCur, bedInfo.bedEl_main);
-  const depInc_deep = calcDepth(wlInc, bedInfo.bedEl_deep);
-  const depCur_deep = calcDepth(wlCur, bedInfo.bedEl_deep);
+  // ★ 해도값 = 방류 200㎥/s 기준 실제 수심 → 그대로 사용(최소 수심). 수위를 빼지 않는다.
+  const depMain = chartDepth(bedInfo.bedEl_main);
+  const depDeep = chartDepth(bedInfo.bedEl_deep);
+  const depInc_main = depMain, depCur_main = depMain;
+  const depInc_deep = depDeep, depCur_deep = depDeep;
 
   const lblCur = depthLabel(depCur_main);
   const lblDeep = depthLabel(depCur_deep);
@@ -1703,38 +1735,41 @@ function renderDepthCard(b, incidentState, currentState, db){
         10m 이상 잠수 시 감압병 위험. 반드시 감압 계획 수립 후 입수하세요.
       </div>` : '';
 
+  const damCur = currentState.damImpact?.value ?? null;
+  const damNote = damCur!=null
+    ? (damCur > CHART_DEPTH_BASE_DAM*1.5
+        ? `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM})보다 많아 <b>실제 수심은 아래 값보다 깊음</b>`
+        : `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM}㎥/s)과 유사`)
+    : '';
+
   el.innerHTML = `
+    <div style="background:#0d1a26;border:1px solid #1e5a8a;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+      📏 <b>방류량 ${CHART_DEPTH_BASE_DAM}㎥/s 기준 최소 수심</b> (운항기준도 원본 기준)<br>
+      방류·조석이 늘면 실제 수심은 이보다 <b>깊어집니다</b>. 얕게 잡은 보수적 값이며 실시간 보정은 하지 않습니다.
+      ${damNote?'<br>'+damNote:''}
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 수심 (투신시점)</div>
-        <div style="font-size:22px;font-weight:900;color:${depInc_main?depInc_main<3?'var(--red)':depInc_main<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
-          ${depInc_main !== null ? depInc_main.toFixed(1)+'m' : '—'}
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 최소 수심</div>
+        <div style="font-size:22px;font-weight:900;color:${depMain?depMain<3?'var(--red)':depMain<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
+          ${depMain !== null ? depMain.toFixed(1)+'m' : '—'}
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">수위 ${wlInc?.toFixed(2)??'?'}m - 하상고 ${bedInfo.bedEl_main??'?'}m</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">${lblCur ? lblCur.label : ''}</div>
       </div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 수심 (조회시점)</div>
-        <div style="font-size:22px;font-weight:900;color:${depCur_main?depCur_main<3?'var(--red)':depCur_main<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
-          ${depCur_main !== null ? depCur_main.toFixed(1)+'m' : '—'}
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">교각 최심부</div>
+        <div style="font-size:22px;font-weight:900;color:${lblDeep?.cls==='bad'?'var(--red)':lblDeep?.cls==='warn'?'var(--yellow)':'var(--green)'}">
+          ${depDeep !== null ? depDeep.toFixed(1)+'m' : '—'}
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">
-          ${lblCur ? lblCur.label : ''} · ${vcTxt}
-        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">${lblDeep?.label ?? ''}</div>
       </div>
     </div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13px">
-      <div style="font-weight:700;margin-bottom:6px">교각 최심부</div>
-      <div style="display:flex;justify-content:space-between">
-        <span>투신시점: <strong>${depInc_deep !== null ? depInc_deep.toFixed(1)+'m' : '—'}</strong></span>
-        <span>조회시점: <strong style="color:${lblDeep?.cls==='bad'?'var(--red)':lblDeep?.cls==='warn'?'var(--yellow)':'var(--green)'}">${depCur_deep !== null ? depCur_deep.toFixed(1)+'m' : '—'}</strong></span>
-        <span>${lblDeep?.label ?? ''}</span>
-      </div>
-    </div>
+    ${vcTxt?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px">${vcTxt}</div>`:''}
     ${decompWarn}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
       출처: ${bedInfo.source}<br>
       ${bedInfo.note ? '※ '+bedInfo.note.slice(0,60) : ''}
-      <br>⚠ 수위 변동·하상 변화로 실제 수심 다를 수 있음 — 현장 확인 우선
+      <br>⚠ 하상 변화·국부 세굴로 실제와 다를 수 있음 — 현장 확인 우선
     </div>`;
 }
 
@@ -1754,11 +1789,19 @@ function renderDecisionCard(b, currentState, incidentState, results, tideRows, s
   const dirEl=$('dc-direction'), dirSub=$('dc-direction-sub');
   if(dirEl){
     const dir = currentState.direction||'—';
-    const isSlack = dir.includes('정조')||dir.includes('정체');
-    const hasDown = !isSlack && (dir.includes('하류')||dir.includes('나가')||dir.includes('썰물'));
-    const hasUp   = !isSlack && (dir.includes('밀물')||dir.includes('들어오')||dir.includes('역류'));
-    dirEl.textContent = isSlack?'⏸ 정조':hasDown?'↓ 하류':hasUp?'↑ 상류':'— 혼합';
-    dirEl.className   = 'dc-value '+(isSlack?'color-green':hasDown?'color-orange':hasUp?'color-blue':'color-muted');
+    const f = currentState.flowDir;
+    // ★ 방향은 flowDir(연속방정식)을 단일 근거로 사용 — 문자열 매칭 금지
+    //   ('정조 임박'을 '정조'로 오인 표시하던 문제 방지: 임박은 아직 흐르는 중)
+    let kind;
+    if(f) kind = f.dir;                                   // up/down/slack/mixed
+    else if(dir.includes('정조 부근')||dir.includes('정체')) kind='slack';
+    else if(dir.includes('나가')||dir.includes('하류')) kind='down';
+    else if(dir.includes('들어오')||dir.includes('역류')||dir.includes('밀물')) kind='up';
+    else kind='mixed';
+    const turnSoon = dir.includes('전환 임박');
+    const label = kind==='slack'?'⏸ 정조' : kind==='down'?'↓ 하류' : kind==='up'?'↑ 상류' : '— 혼합';
+    dirEl.textContent = label + (turnSoon&&kind!=='slack'?' (전환 임박)':'');
+    dirEl.className   = 'dc-value '+(kind==='slack'?'color-green':kind==='down'?'color-orange':kind==='up'?'color-blue':'color-muted');
     if(dirSub) dirSub.textContent = dir;
   }
 
@@ -2331,7 +2374,7 @@ function init(){
   renderTideLagPanel();
   if($('exportTideLagBtn')) $('exportTideLagBtn').onclick=exportTideLagLog;
   if($('clearTideLagBtn')) $('clearTideLagBtn').onclick=clearTideLagLog;
-  log('[초기화]',`교량 ${BRIDGES.length}개`,`Phase 3.6.2 · 연속방정식 유속 + 실측 지형·시차 보정`);
+  log('[초기화]',`교량 ${BRIDGES.length}개`,`Phase 3.6.4 · 해도 수심 기준 정정 + 연속방정식 유속`);
   renderDataFirstPanel();
 }
 function bindInputs(){
@@ -2437,16 +2480,16 @@ async function runQuery(){
   const singokSwlAtIncident = nearest(singokRows,incident, SINGOK_KEYS,     60)?.value??null;
   const singokOwlAtIncident = nearest(singokRows,incident, SINGOK_OWL_KEYS, 60)?.value??null;
 
+  // ★ 운항기준도 수심 DB를 상태 계산 전에 로드 — 유속 단면적에 해도 실측 수심을 쓰기 위함
+  try{ await loadNavChartDB(); }catch(e){ log('[운항기준도 로드 실패]', e.message); }
+
   // 포인트 상태 계산
   const incidentState=makePointState('투신시점',b,incident,waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtIncident,singokOwlAtIncident,contStationRows);
   const currentState =makePointState('조회시점',b,search,  waterRows,damRows,tideRows,waterMetric,damMetric,singokSwlAtSearch,  singokOwlAtSearch,contStationRows);
   const decision=flowDecisionFromState(currentState);
 
   // 렌더링
-  // 수심 DB 로드 후 수심 카드 렌더
-  loadNavChartDB().then(db=>{
-    try{ renderDepthCard(b, incidentState, currentState, db); }catch(e){ log('[오류] renderDepthCard',e.message); }
-  });
+  try{ renderDepthCard(b, incidentState, currentState, NAV_CHART_DB); }catch(e){ log('[오류] renderDepthCard',e.message); }
 
   try{ renderSummary(b,incidentState,currentState,decision,tideRows); }catch(e){ log('[오류] renderSummary',e.message,e.stack?.split('\n')[1]); }
   try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }

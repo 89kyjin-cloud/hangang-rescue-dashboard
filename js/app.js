@@ -276,7 +276,11 @@ function calcVelocity(fw, wl, stationCode, bridgeName){
 //        도달해 변화율이 0에 가까워지는 시점. 이때 유속이 가장 약해
 //        수색 진입에 상대적으로 안전한 구간.
 // 원칙: 실측 수위 변화율 기반. 조석 구간(tide:true)에서만 의미 있음.
-const SLACK_RATE_THRESHOLD = 15;   // |변화율| < 15cm/h → 정조 부근으로 간주
+const SLACK_RATE_THRESHOLD = 4;    // ★ 2026-07-21 수정: 15→4cm/h. directionLabel의 실측
+                                    // 캘리브레이션 기준(FLOW_RATE_SLACK=4)과 불일치했던 값.
+                                    // 15cm/h(20분 창 기준 약 5cm 변화)는 한강에서 급조기가
+                                    // 아니면 거의 항상 밑도는 수준이라, 대부분의 조회가
+                                    // 실제 흐름과 무관하게 무조건 '정조'로 나오는 원인이었음.
 const SLACK_NEAR_MINUTES   = 40;   // 다음 극값까지 40분 이내 → 정조 임박
 
 // waterPts: 교량 실측 수위 포인트 [{time,value}] (시간 오름차순)

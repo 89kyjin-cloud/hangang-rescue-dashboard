@@ -418,8 +418,13 @@ const SINGOK_BO_CODE = '2022510';         // 신곡수중보 (확인됨 2026-07-
 // owl > swl: 하류(바다쪽)가 높다 → 역류 발생 → 조석 영향 있음
 // owl < swl: 상류가 높다 → 정상 하류 흐름 → 조석 영향 미미
 const SINGOK_REVERSE_THRESHOLD = 0.0;    // owl - swl > 0: 역류 발생 (강한 영향)
-const SINGOK_WEAK_THRESHOLD    = -0.3;   // owl - swl > -0.3: 역류 가능성 (약한 영향)
-// owl - swl <= -0.3: 정상 하류 흐름 (영향 미미)
+const SINGOK_WEAK_THRESHOLD    = -0.5;   // ★ 2026-07-21 보수적 조정: -0.3→-0.5.
+                                          // 기존 -0.3m는 근거·검증 기록이 없던 임의값이었음.
+                                          // 범위를 넓혀(더 많은 경우를 '약한 영향'으로 분류)
+                                          // '차단(영향 미미)' 확정 조건을 더 엄격하게 만듦 —
+                                          // 안전 우선(과소평가보다 과대평가가 낫다는 원칙).
+                                          // owl - swl > -0.5: 역류 가능성 (약한 영향)
+// owl - swl <= -0.5: 정상 하류 흐름 (영향 미미)
 const TIDE_STATION = 'DT_0001';           // 인천 조위관측소
 const MAX_NEAREST_MIN = 40;
 
@@ -703,8 +708,8 @@ function tideNumber(date, tideRows){
 // ── 신곡수중보 조석 영향 판단 (owl-swl 수위차 기반) ────────────────
 // owl(하류) - swl(상류) 수위차로 역류 강도를 판단
 // 수위차 > 0    : 하류가 높음 → 역류 발생 중 → 조석 강한 영향
-// 수위차 > -0.3 : 역류 가능성 → 조석 약한 영향
-// 수위차 ≤ -0.3 : 정상 하류 흐름 → 조석 영향 미미
+// 수위차 > -0.5 : 역류 가능성 → 조석 약한 영향
+// 수위차 ≤ -0.5 : 정상 하류 흐름 → 조석 영향 미미
 function singokTideLevel(swl, owl){
   if(swl===null || owl===null) return null; // 데이터 없음
   const diff = owl - swl; // 양수 = 역류, 음수 = 정상흐름
@@ -1567,7 +1572,7 @@ function renderSingokStatus(){
     <strong style="font-size:13px">${lbl.icon} ${lbl.text}</strong>
     <div class="muted" style="font-size:12px;margin-top:4px">
       ${diffTxt}<br>
-      관측시각: ${s.time?pretty(s.time):'불명'} · 기준: owl-swl > 0 역류강, > -0.3 역류가능, 이하 정상흐름
+      관측시각: ${s.time?pretty(s.time):'불명'} · 기준: owl-swl > 0 역류강, > -0.5 역류가능, 이하 정상흐름
     </div>
   </div>`;
 }
@@ -1588,6 +1593,7 @@ function renderDataFirstPanel(b=null,incidentState=null,currentState=null,q={}){
         <span>조회</span><span>${currentState.velocity!==null?`<strong>${currentState.velocity.toFixed(2)}m/s (${(currentState.velocity*3.6).toFixed(1)}km/h)</strong> · ${currentState.velInfo?.label||''} · Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s`:'자료 없음'}</span>
         ${flowDirRow(currentState)}
         <span>출처</span><span><small>${incidentState.velSource||'fw·HQ 데이터 없음'} · 단면적 추정치 포함</small></span>
+        <span>⚠ 주의</span><span><small style="color:#e05252;font-weight:700">미검증 추정치 — 강폭·수심·형상계수 근사가 곱해진 값. 방향은 참고할 수 있으나 숫자(m/s, km/h)는 판단 근거로 쓰지 말 것.</small></span>
       </div>
     </div>${slackCardHtml(currentState)}`;
 }
@@ -1640,7 +1646,8 @@ function renderPointCompare(b,incidentState,currentState){
     ${row('물 방향',incidentState.direction,currentState.direction)}
     ${row('참고 유속', fmtEffVel(incidentState), fmtEffVel(currentState))}
     ${row('물살 판단',incidentState.speed,currentState.speed)}
-    <p class="muted">물 방향·물살은 유속 실측값이 아니라 수위변화·방류량·인천 조석·신곡수중보 실측 수위를 조합한 참고판정입니다.</p>`;
+    <p class="muted">물 방향·물살은 유속 실측값이 아니라 수위변화·방류량·인천 조석·신곡수중보 실측 수위를 조합한 참고판정입니다.</p>
+    <p style="color:#e05252;font-weight:700;font-size:12px">⚠ 참고 유속(m/s, km/h) 숫자는 미검증 추정치입니다. 교량에 유속계가 없어 강폭·수심·형상계수 근사로 역산한 값이며, 방향(상류/하류/정조)만 참고하고 크기는 현장 판단에 쓰지 마세요.</p>`;
   const el=$('pointCompare'); if(el) el.innerHTML=html;
 }
 
@@ -1669,7 +1676,40 @@ function getBedElForBridge(bridgeName, db){
     verticalClearance: entry.verticalClearance_m ?? null,
     source: entry.source ?? '운항기준도 2026.05',
     note: entry.note ?? '',
+    piers: entry.piers ?? null,   // ★ 2026-07-21: 구간별(교각별) 상세 수심 — 기존엔 로드만 하고 미사용
   };
+}
+
+// ★ 2026-07-21 신규: 교각/구간별 수심 상세 렌더링
+// piers 객체의 각 zone: {bedEl_max(얕은쪽), bedEl_min(깊은쪽, 없으면 deepest), bedEl_repr, location, note}
+// bedEl_max가 0에 더 가까움(덜 음수) = 그 구간에서 가장 얕은 지점 = 안전상 가장 중요한 값
+function renderPierZones(piers){
+  if(!piers || !Object.keys(piers).length) return '';
+  const zones = Object.entries(piers).map(([key,z])=>{
+    const shallow = z.bedEl_max!=null ? chartDepth(z.bedEl_max) : null;
+    const deepV   = z.bedEl_min!=null ? chartDepth(z.bedEl_min) : (z.deepest!=null ? chartDepth(z.deepest) : null);
+    return {key, shallow, deep:deepV, location:z.location||key, note:z.note||''};
+  }).filter(z=>z.shallow!==null || z.deep!==null)
+    .sort((a,b)=>(a.shallow??a.deep??99)-(b.shallow??b.deep??99)); // 얕은 구간(위험) 먼저
+
+  if(!zones.length) return '';
+  const rows = zones.map(z=>{
+    const danger = z.note.includes('🚫') || z.note.includes('진입 금지');
+    const warn   = !danger && (z.note.includes('⚠') || z.note.includes('🔴') || (z.shallow!==null && z.shallow<3));
+    const color  = danger ? 'var(--red)' : warn ? 'var(--yellow)' : 'var(--muted)';
+    const rangeTxt = (z.shallow!==null && z.deep!==null && Math.abs(z.shallow-z.deep)>0.05)
+      ? `${z.shallow.toFixed(1)}~${z.deep.toFixed(1)}m` : `${(z.shallow??z.deep).toFixed(1)}m`;
+    return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="flex:1;font-size:12px">${z.location}${danger?' 🚫':warn?' ⚠':''}</span>
+      <span style="font-weight:700;color:${color};white-space:nowrap">${rangeTxt}</span>
+    </div>${z.note?`<div style="font-size:11px;color:${color};margin:-2px 0 4px">${z.note}</div>`:''}`;
+  }).join('');
+
+  return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px">
+    <div style="font-size:12px;font-weight:700;margin-bottom:4px">📍 구간별(교각별) 상세 수심 — 가장 얕은 구간 우선 표시</div>
+    ${rows}
+    <div style="font-size:10px;color:var(--muted);margin-top:4px">해도 원본 실측 샘플 기반. 대표값(주항로/최심)은 이 구간들의 대표치일 뿐 — 특정 교각·저수심 경계 근처 수색 시 이 표를 우선 확인.</div>
+  </div>`;
 }
 
 // ★ Phase 3.6.4 중대 수정: 해도값의 의미 정정
@@ -1770,6 +1810,7 @@ function renderDepthCard(b, incidentState, currentState, db){
     </div>
     ${vcTxt?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px">${vcTxt}</div>`:''}
     ${decompWarn}
+    ${renderPierZones(bedInfo.piers)}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
       출처: ${bedInfo.source}<br>
       ${bedInfo.note ? '※ '+bedInfo.note.slice(0,60) : ''}
@@ -1825,7 +1866,7 @@ function renderDecisionCard(b, currentState, incidentState, results, tideRows, s
       const signTxt = ev.dir==='up'?`(−${v.toFixed(2)}m/s 상류)`:`(${v.toFixed(2)}m/s)`;
       velEl.innerHTML=`<span class="${cls}" style="font-size:26px;font-weight:900">${arrow}${kmh}</span><span style="font-size:13px;color:var(--muted);font-weight:600"> km/h</span><span style="font-size:11px;color:var(--muted);margin-left:4px">${signTxt}</span>`;
       velEl.className='dc-value';
-      if(velSub) velSub.innerHTML=`${lvl} · ${ev.source||''}${ev.invalid?'<br><small style="color:#b7791f">⚠ 추정치 — 방향만 신뢰</small>':''}`;
+      if(velSub) velSub.innerHTML=`${lvl} · ${ev.source||''}<br><small style="color:#e05252;font-weight:700">⚠ 미검증 추정치 — 숫자는 참고용, ${ev.invalid?'방향도 불확실':'방향만 신뢰'}</small>`;
     } else {
       velEl.textContent='—';
       velEl.className='dc-value color-muted';
@@ -1914,7 +1955,7 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
         ? `<strong style="font-size:22px">${incidentState.velocity.toFixed(2)} m/s</strong> · 시속 ${(incidentState.velocity*3.6).toFixed(1)}km · ${incidentState.velInfo?.label||''}`
         : '<span style="color:#b7791f">유속 계산 불가</span>'
       }<br>
-      ${incidentState.velocity!==null?`<small class="muted">출처: ${incidentState.velSource} · 유량 Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small>`:''}
+      ${incidentState.velocity!==null?`<small class="muted">출처: ${incidentState.velSource} · 유량 Q=${incidentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small><br><small style="color:#e05252;font-weight:700">⚠ 미검증 추정치 — 숫자는 참고용, 방향만 신뢰</small>`:''}
       </span>
     </div>
     <div class="kv" style="background:#f0f7ff;border-radius:6px;padding:8px 10px">
@@ -1923,7 +1964,7 @@ function renderSummary(b,incidentState,currentState,decision,tideRows){
         ? `<strong style="font-size:22px">${currentState.velocity.toFixed(2)} m/s</strong> · 시속 ${(currentState.velocity*3.6).toFixed(1)}km · ${currentState.velInfo?.label||''}`
         : '<span style="color:#b7791f">유속 계산 불가</span>'
       }<br>
-      ${currentState.velocity!==null?`<small class="muted">출처: ${currentState.velSource} · 유량 Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small>`:''}
+      ${currentState.velocity!==null?`<small class="muted">출처: ${currentState.velSource} · 유량 Q=${currentState.velQ?.toFixed(0)||'?'}㎥/s · 단면적 추정 포함</small><br><small style="color:#e05252;font-weight:700">⚠ 미검증 추정치 — 숫자는 참고용, 방향만 신뢰</small>`:''}
       </span>
     </div>
     <div class="kv"><b>현재 조석</b><span>${fmtTidePoint(b,currentState.tide,currentState.tideActive)}</span></div>
@@ -1948,7 +1989,7 @@ function renderModelInfo(b){
     <div class="kv" style="background:${b.tide?'#f5f0ff':'#f5f5f5'};border-radius:6px;padding:8px 10px;margin:4px 0">
       <b>🌊 조석 출처</b>
       <span><strong>${b.tide?`인천 (${TIDE_STATION}) + ${b.offset}분 보정 · 신곡수중보 swl 실시간 판단`:'잠실수중보 상류: 조석 제외'}</strong><br>
-      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, <b>조석 시차 로그 실측 기반 잠정값</b>)을 더한 보정값. 교량 직접 조석 측정값 아님.<br>⚠ 표본이 적고 저방류·사리 조건 기준 — 방류량이 크면 20~60분 짧아질 수 있음.<br>조석 영향 판단: 신곡수중보 owl-swl 수위차 기준 (>0 강한영향 / >-0.3 약한영향 / 이하 영향미미)`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
+      <small class="muted">${b.tide?`인천 조위관측소 예보값에 인천→교량 전파 지연(${b.offset}분, <b>조석 시차 로그 실측 기반 잠정값</b>)을 더한 보정값. 교량 직접 조석 측정값 아님.<br>⚠ 표본이 적고 저방류·사리 조건 기준 — 방류량이 크면 20~60분 짧아질 수 있음.<br>조석 영향 판단: 신곡수중보 owl-swl 수위차 기준 (>0 강한영향 / >-0.5 약한영향 / 이하 영향미미, 2026-07-21 보수적 조정)`:'HRFCO 수위와 팔당 방류량만 사용합니다.'}</small></span>
     </div>`;
 }
 
@@ -2443,7 +2484,7 @@ async function runQuery(){
     log('[신곡수중보]',
       `조회 swl=${singokAtSearch?.value?.toFixed(2)??'?'}m owl=${singokOwlSearch?.value?.toFixed(2)??'?'}m`,
       `사고 swl=${singokAtIncident?.value?.toFixed(2)??'?'}m owl=${singokOwlIncident?.value?.toFixed(2)??'?'}m`,
-      `판단기준: owl-swl > 0 → 역류(강), > -0.3 → 역류가능(약), 이하 → 정상흐름`);
+      `판단기준: owl-swl > 0 → 역류(강), > -0.5 → 역류가능(약), 이하 → 정상흐름`);
   }catch(e){ singokTideState={status:'unknown',swl:null,time:null,checkedAt:new Date()}; q.singok='조회 실패'; log('[신곡수중보 실패]',e.message); }
   renderSingokStatus();
 

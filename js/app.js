@@ -200,10 +200,10 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
   const Q = damCms - dVdt;
   // ★ 수심: 해도 실측(방류 200㎥/s 기준 최소 수심) 우선. 없으면 추정 하상고 폴백.
   //   최소 수심을 쓰면 단면적이 작게 나와 유속이 크게 산출됨 → 안전 측 보수적.
-  const cd = chartDepthFor(b.bridge);
+  const cd = chartDepthFor(b.bridge, b.code, wl);
   const depth = cd?.main ?? (wl!=null && sec.bedEl!=null ? wl - sec.bedEl : null);
   if(!(depth>0)) return null;
-  const depthSrc = cd?.main ? '해도 실측(방류200 기준)' : '추정 하상고';
+  const depthSrc = cd?.main ? (cd.corrected?`해도 실시간보정(Δh=${cd.deltaH>=0?'+':''}${cd.deltaH}m,${cd.reliability})`:'해도 실측(방류200 기준, 정적)') : '추정 하상고';
   const area = geo.widthM * depth * sec.shape;
   const vel = Q/area;
   // 물리적 타당성 검사: 한강 조석 구간에서 |유속| 2m/s 초과는 비현실적
@@ -246,7 +246,7 @@ function calcVelocity(fw, wl, stationCode, bridgeName){
   const sec = STATION_SECTIONS[stationCode];
   if(!sec || wl === null) return null;
   // ★ 해도 실측 수심(방류 200㎥/s 기준) 우선 — 기존 `wl − 하상고`는 전제가 틀렸음
-  const cd = bridgeName ? chartDepthFor(bridgeName) : null;
+  const cd = bridgeName ? chartDepthFor(bridgeName, stationCode, wl) : null;
   const depth = cd?.main ?? (wl - sec.bedEl);
   if(depth <= 0.1) return null;
   const area = sec.width * depth * sec.shape;
@@ -333,15 +333,15 @@ function calcSlackWater(waterPts, nowTime, rateCmHr){
 function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont){
   const absHq = hqVel!=null ? Math.abs(hqVel) : null;
 
-  // 정조 부근이면 방향 무관하게 유속 최소로 간주
-  if(slackState && slackState.atSlackNow){
-    return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
-            src:'실측 변화율≈0',
-            note:'정조 부근 — 방향 전환 중, 곧 반대 흐름 강화 가능'};
-  }
-
   const damSurging = damRise!=null && damRise >= 100; // 방류 급증(㎥/s/h)
 
+  // ★ 2026-07-24 수정: "수위 변화율≈0 → 정조" 사전판정을 최상위에서 제거함.
+  //   이 가정은 저유량·조석지배 상황에서만 유효함 — 고유량(홍수) 상황에서는
+  //   유입=유출 균형(steady state)이라 수위는 안 변해도 실제 유속은 매우 클 수 있음
+  //   (HQ곡선 기울기가 고유량 구간에서 평평해지기 때문). 실측 사례: 방류
+  //   3,358㎥/s(기준 200의 17배)에서 수위변화 -4cm/h로 "정조" 오판정 발생.
+  //   연속방정식(cont)은 유량(Q) 자체로 정조를 판정하므로(Math.abs(Q/area)<0.03m/s)
+  //   방류량 크기와 무관하게 정확함 — 그래서 cont가 있으면 항상 cont를 우선한다.
   // ★ 1순위: 연속방정식(질량보존) — 조석 역류 구간에서도 성립
   if(cont){
     const v=cont.vel, a=Math.abs(v);
@@ -359,7 +359,13 @@ function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont
             src:'연속방정식(저류법)', note:`하류 흐름 — ${detail}`};
   }
 
-  // 2순위(연속방정식 불가 시): 실측 변화율 방향 + 경험식 크기
+  // 2순위(연속방정식 불가 시): 수위 변화율 기반 정조 판정 + 실측 변화율 방향 + 경험식 크기
+  //   ⚠ 이 경로는 저유량·조석지배 상황을 전제로 한 근사이며, 고유량 상황에선 부정확할 수 있음
+  if(slackState && slackState.atSlackNow){
+    return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
+            src:'실측 변화율≈0(연속방정식 불가, 저유량 가정)',
+            note:'정조 부근 — 방향 전환 중, 곧 반대 흐름 강화 가능. ⚠ 고유량 상황이면 부정확할 수 있음'};
+  }
   if(hqVel==null) return null;
   const rate = rateCmHr;
   const risingFast = rate!=null && rate >= FLOW_RATE_WEAK;
@@ -441,6 +447,7 @@ const SINGOK_OWL_KEYS = ['owl','OWL']; // 신곡수중보 하류수위
 // ── 신곡수중보 조석 전파 상태 (전역) ──────────────────────────
 // {status:'active'|'blocked'|'unknown', swl:number|null, time:Date|null, checkedAt:Date}
 let singokTideState = { status:'unknown', swl:null, time:null, checkedAt:null };
+let LAST_QUERY_CTX = null; // ★ 2026-07-21: 물때표(예측) 기능용 — 마지막 조회의 b/currentState/키 저장
 
 // ── 물때 계산 ──────────────────────────────────────────────────
 // 1순위: KHOA 조석 데이터(tideRows)의 고/저조 진폭으로 실측 기반 계산
@@ -914,6 +921,96 @@ function tideAt(rows,target,offsetMin=0){
   return{best,prev,diffMin:Math.round(bestDiff/60000),delta,rateCmHr,phase,count:items.length,shifted,nextTurn};
 }
 function findNextTurn(items,idx){ if(idx<1||idx>=items.length-2)return null; let prevSign=Math.sign(items[idx].value-items[idx-1].value); for(let i=idx+1;i<items.length-1;i++){const sign=Math.sign(items[i+1].value-items[i].value);if(prevSign!==0&&sign!==0&&sign!==prevSign){const type=prevSign>0?'만조':'간조';return{type,time:items[i].time,value:items[i].value};}if(sign!==0)prevSign=sign;} return null; }
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-07-21 신규: 물때표 (교량별 방류·조석 예측 타임테이블)
+// ══════════════════════════════════════════════════════════════
+// [신뢰도가 항목별로 다름 — 반드시 라벨링해서 표시]
+// - 조석 시각(고조/저조): KHOA 예보 + 검증된 offset 사용 → 신뢰도 비교적 높음
+// - 방향·유속: 팔당댐 방류량이 "지금 값 그대로 유지"된다는 가정 위에서만 계산됨.
+//   방류량 예보 API 자체가 없어 미래 방류량은 원천적으로 알 수 없음 → 방류량이
+//   실제로 바뀌는 순간 이 값은 바로 틀려짐. 반드시 "참고용" 라벨과 함께 표시.
+// - 실측 단기 변화율(20분 cm/h) 대신 조석 예보곡선의 기울기(tideAt().rateCmHr)를
+//   대리 신호로 사용 — 실시간 판정(정조 임계값 4cm/h 등)과 동일 기준 재사용.
+function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
+  if(!b || !b.tide) return null; // 조석 제외 구간(잠실보 상류)은 물때표 의미 없음
+  if(!futureTideRows || !futureTideRows.length) return null;
+  const damCms = currentState?.damImpact?.value ?? null;
+  const wlNow  = currentState?.water?.value ?? null;
+  const now = new Date();
+  const n = Math.max(1, Math.floor(hours*60/stepMin));
+  const rows=[];
+  for(let i=0;i<=n;i++){
+    const t = new Date(now.getTime() + i*stepMin*60000);
+    const ta = tideAt(futureTideRows, t, b.offset||0);
+    const rateCmHr = ta?.rateCmHr ?? null;
+    let cont=null, flowDir=null;
+    if(rateCmHr!=null && damCms!=null && wlNow!=null){
+      cont = calcContinuityVelocity(b, wlNow, rateCmHr, damCms, null); // 관측소 실측 없이 단일근사만(미래라 당연)
+      const slackState = { atSlackNow: Math.abs(rateCmHr) < SLACK_RATE_THRESHOLD };
+      flowDir = applyReverseFlow(null, true, rateCmHr, slackState, null, cont);
+    }
+    rows.push({ t, phase: ta?.phase ?? '?', tideVal: ta?.best?.value ?? null, rateCmHr, flowDir });
+  }
+  return rows;
+}
+
+function renderTideTableRows(rows, offsetMin){
+  if(!rows || !rows.length) return '<p class="muted small">데이터 없음</p>';
+  const trs = rows.map(r=>{
+    const timeTxt = hhmm(r.t);
+    const tideTxt = r.tideVal!=null ? `${r.phase} (${r.tideVal.toFixed(0)}cm)` : '조회 실패';
+    let dirTxt='—', dirColor='var(--muted)';
+    if(r.flowDir){
+      if(r.flowDir.dir==='slack'){ dirTxt='⏸ 정조'; dirColor='#0ea56b'; }
+      else if(r.flowDir.dir==='up'){ dirTxt=`↑상류 ${r.flowDir.absVel.toFixed(2)}m/s`; dirColor='#3b82f6'; }
+      else if(r.flowDir.dir==='down'){ dirTxt=`↓하류 ${r.flowDir.absVel.toFixed(2)}m/s`; dirColor='#f59e0b'; }
+      else { dirTxt='혼합/불확실'; dirColor='#b7791f'; }
+    }
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:5px 6px;font-size:12px;white-space:nowrap">${timeTxt}</td>
+      <td style="padding:5px 6px;font-size:12px">${tideTxt}</td>
+      <td style="padding:5px 6px;font-size:12px;font-weight:700;color:${dirColor}">${dirTxt}</td>
+    </tr>`;
+  }).join('');
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">시각(교량 도달추정)</th>
+      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">조석(인천+${offsetMin}분, 신뢰도 높음)</th>
+      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">방향·유속(추정, 참고용)</th>
+    </tr></thead>
+    <tbody>${trs}</tbody>
+  </table>`;
+}
+
+async function renderTideTable(){
+  const el=$('tideTablePanel'); if(!el) return;
+  if(!LAST_QUERY_CTX){ el.innerHTML='<p class="muted small">먼저 위에서 환경 조회를 1회 실행한 뒤 열어주세요 (교량·방류량 정보 필요).</p>'; return; }
+  const {b, currentState, tideKey} = LAST_QUERY_CTX;
+  if(!b.tide){ el.innerHTML='<p class="muted small">이 교량은 잠실수중보 상류(조석 제외 구간)라 물때표가 의미 없습니다.</p>'; return; }
+  if(!tideKey){ el.innerHTML='<p class="muted small">조석 API 키가 필요합니다 (위 API 키 설정에서 입력).</p>'; return; }
+  el.innerHTML='<p class="muted small">예측 조회 중...</p>';
+  try{
+    const now=new Date();
+    const future=new Date(now.getTime()+13*3600000);
+    const futureTideRows = await getTideRowsRange(tideKey, now, future);
+    const rows = buildTideTable(b, currentState, futureTideRows, 12, 60);
+    if(!rows){ el.innerHTML='<p class="muted small">예측 데이터를 만들 수 없습니다 (조석 조회 실패 또는 조회 이력 없음).</p>'; return; }
+    const damCms = currentState?.damImpact?.value ?? null;
+    el.innerHTML = `
+      <div style="background:#1a1405;border:1px solid #b7791f;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+        ⚠ <b>가정 기반 예측입니다</b> — 팔당댐 방류량을 지금 값(${damCms!=null?Math.round(damCms)+'㎥/s':'조회 안됨'})으로
+        고정한 채, 인천 조석 예보(KHOA)에 이 교량 offset(${b.offset||0}분)만 더해 추정한 표입니다.<br>
+        <b>조석 시각(고조·저조)</b>은 신뢰도가 비교적 높지만, <b>방향·유속</b>은 방류량이 실제로 바뀌면
+        바로 틀려지는 참고용 수치입니다 — 절대 단독 판단 근거로 쓰지 마세요.
+      </div>
+      ${renderTideTableRows(rows, b.offset||0)}
+    `;
+  }catch(e){
+    el.innerHTML = `<p class="muted small">예측 조회 실패: ${e.message}</p>`;
+    log('[물때표 오류]', e.message);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════
 // ★ Phase 3.6.0: 조석 시차 로그 (인천 ↔ 신곡보 극값 자동 매칭·누적)
@@ -1453,7 +1550,7 @@ function fmtTidePoint(b,t,tideActive){
   const offset=b.offset||0;
   const bridgeBestTime=t.best?.time?new Date(t.best.time.getTime()+offset*60000):null;
   let turn='';
-  if(t.nextTurn){const bridgeTurn=new Date(t.nextTurn.time.getTime()+offset*60000);turn=` · 다음 ${t.nextTurn.type}: 인천 ${hhmm(t.nextTurn.time)} / 교량보정 ${hhmm(bridgeTurn)} (${t.nextTurn.value.toFixed(1)}cm)`;}
+  if(t.nextTurn){const bridgeTurn=new Date(t.nextTurn.time.getTime()+offset*60000);turn=` · 다음 ${t.nextTurn.type} 교량 도달추정 ${hhmm(bridgeTurn)} (인천 실제 ${hhmm(t.nextTurn.time)}, ${t.nextTurn.value.toFixed(1)}cm)`;}
   const rate=t.rateCmHr!==null?` · 변화율 ${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h`:'';
   const baseTxt=bridgeBestTime?`인천 관측 ${pretty(t.best.time)} + ${offset}분 보정 = 교량기준 ${pretty(bridgeBestTime)}`:`인천기준 ${t.shifted?pretty(t.shifted):''}`;
   return `${t.phase} · 인천 조위 ${t.best.value.toFixed(1)}cm · ${baseTxt}${rate}${turn}`;
@@ -1726,16 +1823,62 @@ function chartDepth(v){
   if(v===null || v===undefined) return null;
   return Number(Math.abs(v).toFixed(2));
 }
-// 교량명 → 해도 기준 수심(방류 200㎥/s) {main, deepest} · 동기 조회 (NAV_CHART_DB 사용)
-function chartDepthFor(bridgeName){
+
+// ★ 2026-07-21 신규: 방류 200㎥/s 기준수위 역산(HQ곡선) → 실시간 수심 보정
+// ─────────────────────────────────────────────────────────────
+// [전제 확인, 영진님 확인 2026-07-21] 해도 수심표는 표고(EL)가 아니라 '수면~바닥' 거리이므로,
+//   절대 기준면이 같은지 몰라도 상관없다. 필요한 건 "200㎥/s일 때 수위(h_200)"와
+//   "지금 실측 수위(wl_now)"의 차이(Δh = wl_now − h_200)뿐 — 같은 관측소·같은 시간축 비교라 유효.
+//   실시간 수심 = 해도 수심(200㎥/s 기준) + Δh
+// [적용 범위 제한] HQ곡선이 200㎥/s 부근을 실제로 다루는 관측소만 신뢰 가능:
+//   - 행주대교(1019630): h≈1.59m일 때 Q≈200㎥/s, 곡선 유효범위(1.03~10.20m) 안 → 'valid'
+//   - 청담대교(1018662, 잠수교·반포2교 준용): 최저 보정범위가 h=0.99m→Q≈243㎥/s라
+//     200㎥/s는 그 바로 아래(h≈0.90m, 소폭 외삽) → 'marginal'
+//   - 광진교(1018640)·한강대교(1018683): 최저 캘리브레이션 수위에서 이미 Q≈2,000~6,000㎥/s대라
+//     200㎥/s는 곡선이 전혀 다루지 않는 구간 → 보정 불가('none'), 기존 정적값(200기준+안내문) 유지
+const DEPTH_CORR_STATIONS = { '1019630':'valid', '1018662':'marginal', '1018680':'marginal', '1018681':'marginal' };
+
+// HQ곡선 수치 역산 (이진탐색) — Q(h)는 구간별로 단조증가라고 가정
+function invertHQ(stationCode, targetQ){
+  const curve = HQ_CURVES[stationCode];
+  if(!curve) return null;
+  const segs = curve.segments;
+  const qAt = (h) => { for(const seg of segs){ if(h>=seg.min && h<=seg.max) return seg.formula(h); } return segs[segs.length-1].formula(h); };
+  const hMin = segs[0].min, hMax = segs[segs.length-1].max;
+  let lo = hMin - 2.0, hi = hMax + 1.0; // 소폭 외삽만 허용 (청담대교 케이스 커버)
+  const qLo = qAt(lo), qHi = qAt(hi);
+  if(!(Number.isFinite(qLo) && Number.isFinite(qHi)) || targetQ < qLo || targetQ > qHi) return null;
+  for(let i=0;i<60;i++){ const mid=(lo+hi)/2; if(qAt(mid) < targetQ) lo=mid; else hi=mid; }
+  const h=(lo+hi)/2;
+  return { h:Number(h.toFixed(3)), inRange: h>=hMin && h<=hMax };
+}
+let _h200Cache = {};
+function getH200(stationCode){
+  if(!(stationCode in DEPTH_CORR_STATIONS)) return null;
+  if(_h200Cache[stationCode]!==undefined) return _h200Cache[stationCode];
+  const r = invertHQ(stationCode, CHART_DEPTH_BASE_DAM);
+  return _h200Cache[stationCode] = r;
+}
+
+// 교량명 → 해도 기준 수심(방류 200㎥/s) {main, deepest} · stationCode+wl 주면 가능한 경우 실시간 보정
+// 보정 불가/미제공 시 기존과 동일하게 200㎥/s 기준 정적값(최소 수심) 반환
+function chartDepthFor(bridgeName, stationCode, wl){
   const info = getBedElForBridge(bridgeName, NAV_CHART_DB);
   if(!info) return null;
+  const base = { main: chartDepth(info.bedEl_main), deepest: chartDepth(info.bedEl_deep), warn: chartDepth(info.bedEl_warn) };
+  if(stationCode==null || wl==null) return {...base, corrected:false};
+  const h200 = getH200(stationCode);
+  if(!h200) return {...base, corrected:false}; // 이 관측소는 보정 불가(광진교·한강대교 등)
+  const deltaH = Number((wl - h200.h).toFixed(2));
+  const corrMain = base.main!=null ? Number(Math.max(0.1, base.main+deltaH).toFixed(2)) : null;
+  const corrDeep = base.deepest!=null ? Number(Math.max(0.1, base.deepest+deltaH).toFixed(2)) : null;
   return {
-    main:    chartDepth(info.bedEl_main),
-    deepest: chartDepth(info.bedEl_deep),
-    warn:    chartDepth(info.bedEl_warn),
+    main:corrMain, deepest:corrDeep, warn:base.warn, corrected:true,
+    baseMain:base.main, baseDeep:base.deepest, deltaH,
+    reliability: DEPTH_CORR_STATIONS[stationCode], h200:h200.h, h200InRange:h200.inRange,
   };
 }
+
 
 function depthLabel(depth){
   if(depth === null) return null;
@@ -1750,51 +1893,65 @@ function depthLabel(depth){
 function renderDepthCard(b, incidentState, currentState, db){
   const el = $('depthCard'); if(!el) return;
 
-  const bedInfo = getBedElForBridge(b.bridge, db);
-  if(!bedInfo){
+  const wlNow = currentState.water?.value ?? null;
+  const cd = chartDepthFor(b.bridge, b.code, wlNow);
+  if(!cd){
     el.innerHTML = `<div style="color:var(--muted);font-size:13px">
       "${b.bridge}" 수심 데이터 없음 — 운항기준도 DB 미등록 교량
     </div>`;
     return;
   }
+  const bedInfo = getBedElForBridge(b.bridge, db); // note·source·piers 표시용
 
-  // ★ 해도값 = 방류 200㎥/s 기준 실제 수심 → 그대로 사용(최소 수심). 수위를 빼지 않는다.
-  const depMain = chartDepth(bedInfo.bedEl_main);
-  const depDeep = chartDepth(bedInfo.bedEl_deep);
-  const depInc_main = depMain, depCur_main = depMain;
-  const depInc_deep = depDeep, depCur_deep = depDeep;
+  // ★ 2026-07-21: 관측소 HQ곡선이 200㎥/s를 다루는 경우(cd.corrected) 실시간 보정값,
+  //   아니면 기존과 동일하게 200㎥/s 기준 정적 최소수심.
+  const depMain = cd.main;
+  const depDeep = cd.deepest;
 
-  const lblCur = depthLabel(depCur_main);
-  const lblDeep = depthLabel(depCur_deep);
+  const lblCur = depthLabel(depMain);
+  const lblDeep = depthLabel(depDeep);
 
   // 수직여유고 (교각 하부 통과 가능 높이)
-  const vcTxt = bedInfo.verticalClearance
+  const vcTxt = bedInfo?.verticalClearance
     ? `교각 수직여유고 ${bedInfo.verticalClearance.toFixed(1)}m (EL 기준)`
     : '';
 
   // 감압 경고
-  const decompWarn = (depCur_deep && depCur_deep >= 10)
+  const decompWarn = (depDeep && depDeep >= 10)
     ? `<div style="background:#1a0505;border:1px solid #ef4444;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;color:#f87171">
-        🔴 <strong>감압 주의</strong> — 주항로 최심 수심 ${depCur_deep.toFixed(1)}m<br>
+        🔴 <strong>감압 주의</strong> — 주항로 최심 수심 ${depDeep.toFixed(1)}m<br>
         10m 이상 잠수 시 감압병 위험. 반드시 감압 계획 수립 후 입수하세요.
       </div>` : '';
 
   const damCur = currentState.damImpact?.value ?? null;
-  const damNote = damCur!=null
-    ? (damCur > CHART_DEPTH_BASE_DAM*1.5
-        ? `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM})보다 많아 <b>실제 수심은 아래 값보다 깊음</b>`
-        : `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM}㎥/s)과 유사`)
-    : '';
+
+  let banner;
+  if(cd.corrected){
+    const relTxt = cd.reliability==='valid' ? '신뢰도 높음 — HQ곡선 유효범위 안' : '참고용 — HQ곡선 소폭 외삽 포함';
+    banner = `<div style="background:#0a1f14;border:1px solid #1e8a4a;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+      📏 <b>실시간 보정 수심</b> (HQ곡선 역산, ${relTxt})<br>
+      200㎥/s 기준값(${cd.baseMain!=null?cd.baseMain.toFixed(1):'?'}m)에 지금 수위와 200㎥/s 기준수위(${cd.h200}m)의
+      차이(Δh=${cd.deltaH>=0?'+':''}${cd.deltaH}m)를 더한 값입니다.
+      ${cd.reliability==='marginal'?'<br>⚠ 이 관측소는 HQ곡선 유효범위를 살짝 벗어나 소폭 외삽 포함 — 절대값은 참고만.':''}
+    </div>`;
+  } else {
+    const damNote = damCur!=null
+      ? (damCur > CHART_DEPTH_BASE_DAM*1.5
+          ? `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM})보다 많아 <b>실제 수심은 아래 값보다 깊음</b>`
+          : `현재 방류 ${Math.round(damCur)}㎥/s — 기준(${CHART_DEPTH_BASE_DAM}㎥/s)과 유사`)
+      : '';
+    banner = `<div style="background:#0d1a26;border:1px solid #1e5a8a;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+      📏 <b>방류량 ${CHART_DEPTH_BASE_DAM}㎥/s 기준 최소 수심</b> (운항기준도 원본 기준)<br>
+      이 관측소는 HQ곡선이 저유량 구간을 다루지 않아 실시간 보정이 불가합니다. 방류·조석이 늘면 실제 수심은 이보다 <b>깊어집니다</b> — 얕게 잡은 보수적 값입니다.
+      ${damNote?'<br>'+damNote:''}
+    </div>`;
+  }
 
   el.innerHTML = `
-    <div style="background:#0d1a26;border:1px solid #1e5a8a;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
-      📏 <b>방류량 ${CHART_DEPTH_BASE_DAM}㎥/s 기준 최소 수심</b> (운항기준도 원본 기준)<br>
-      방류·조석이 늘면 실제 수심은 이보다 <b>깊어집니다</b>. 얕게 잡은 보수적 값이며 실시간 보정은 하지 않습니다.
-      ${damNote?'<br>'+damNote:''}
-    </div>
+    ${banner}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 최소 수심</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">주항로 ${cd.corrected?'실시간':'최소'} 수심</div>
         <div style="font-size:22px;font-weight:900;color:${depMain?depMain<3?'var(--red)':depMain<10?'var(--green)':'var(--yellow)':'var(--muted)'}">
           ${depMain !== null ? depMain.toFixed(1)+'m' : '—'}
         </div>
@@ -1810,10 +1967,10 @@ function renderDepthCard(b, incidentState, currentState, db){
     </div>
     ${vcTxt?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px">${vcTxt}</div>`:''}
     ${decompWarn}
-    ${renderPierZones(bedInfo.piers)}
+    ${renderPierZones(bedInfo?.piers)}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
-      출처: ${bedInfo.source}<br>
-      ${bedInfo.note ? '※ '+bedInfo.note.slice(0,60) : ''}
+      출처: ${bedInfo?.source||'운항기준도'}<br>
+      ${bedInfo?.note ? '※ '+bedInfo.note.slice(0,60) : ''}
       <br>⚠ 하상 변화·국부 세굴로 실제와 다를 수 있음 — 현장 확인 우선
     </div>`;
 }
@@ -2586,17 +2743,17 @@ async function runQuery(){
     const el=$('tideNextTurn');if(!el)return;
     if(!currentState.tide||currentState.tideActive!==true){el.innerHTML='';return;}
     const t=currentState.tide,offset=b.offset||0;
-    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) + ${offset}분 보정 · 신곡수중보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
-    if(t.nextTurn){const bt=new Date(t.nextTurn.time.getTime()+offset*60000);html+=`<div class="tide-turn-item"><b>다음 ${t.nextTurn.type}</b><span>${hhmm(bt)}</span><div class="tide-ref-note">교량 보정(+${offset}분) · 인천 ${hhmm(t.nextTurn.time)}</div></div>`;}
-    if(t.rateCmHr!==null)html+=`<div class="tide-turn-item"><b>변화율</b><span>${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h</span><div class="tide-ref-note">인천 기준</div></div>`;
+    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) 실측값 + ${offset}분 도달지연 보정 · 신곡수중보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
+    if(t.nextTurn){const bt=new Date(t.nextTurn.time.getTime()+offset*60000);html+=`<div class="tide-turn-item"><b>다음 ${t.nextTurn.type} · 교량 도달추정</b><span>${hhmm(bt)}</span><div class="tide-ref-note">⚠ 이 시각은 실측이 아니라 예측입니다 — 인천에서 실제 ${t.nextTurn.type}가 일어난 시각(${hhmm(t.nextTurn.time)})에 교량별 도달지연(+${offset}분, 표본 적음)을 더한 값</div></div>`;}
+    if(t.rateCmHr!==null)html+=`<div class="tide-turn-item"><b>변화율</b><span>${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h</span><div class="tide-ref-note">인천 실측 기준(교량 도달지연 미반영)</div></div>`;
     el.innerHTML=html;
   })();
 
   const tideRangeStart=new Date(incident.getTime()-30*60000);
   const tideRangeEnd=new Date(effectiveSearch.getTime()+30*60000);
   if(tideRows.length){
-    drawLine('tideChart',tidePts,'value',`인천 조위(cm) · ${TIDE_STATION} · ${hhmm(tideRangeStart)} ~ ${hhmm(tideRangeEnd)}`,markers,{start:tideRangeStart,end:tideRangeEnd});
-    $('tideChartNote').textContent=(currentState.tide?`인천 조석값에 교량별 지연시간(${b.offset||0}분)을 더해 교량 기준으로 보정했습니다.`:'조석 매칭 실패')+(dataCapped?` ⚠ 데이터 ${Math.round((search-end)/60000)}분 지연`:' (그래프 범위: 투신 30분전 ~ 조회 30분후)');
+    drawLine('tideChart',tidePts,'value',`인천 조위(cm) · ${TIDE_STATION} · 인천 원시 시각(교량 미보정) · ${hhmm(tideRangeStart)} ~ ${hhmm(tideRangeEnd)}`,markers,{start:tideRangeStart,end:tideRangeEnd});
+    $('tideChartNote').textContent=(currentState.tide?`이 그래프는 인천 원시 관측 시각입니다(교량 보정 미적용). 이 교량 도달추정 시각은 위 "다음 만조/간조" 카드를 참고하세요(+${b.offset||0}분).`:'조석 매칭 실패')+(dataCapped?` ⚠ 데이터 ${Math.round((search-end)/60000)}분 지연`:' (그래프 범위: 투신 30분전 ~ 조회 30분후)');
   } else {
     drawLine('tideChart',[],'value','조석',[]);
     $('tideChartNote').textContent=b.tide?'조석 API 미조회':'조석 적용 제외 구간';
@@ -2608,6 +2765,7 @@ async function runQuery(){
   $('inputStatus').textContent=`조회 완료${dataCapped?` · ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:''} · 신곡수중보 swl=${singokTideState.swl?.toFixed(2)??'조회실패'}m`;
   // ★ 화면 회전 시 재렌더를 위해 마지막 조회 파라미터 저장
   window._lastRunQuery = runQuery;
+  LAST_QUERY_CTX = {b, currentState, key, tideKey, search};
 }
 
 document.addEventListener('DOMContentLoaded', init);

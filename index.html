@@ -192,7 +192,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 <header class="topbar">
   <div>
     <div class="topbar-title">🌊 한강 수색환경</div>
-    <div class="topbar-sub">Phase 3.6.8 · HQ곡선 역산 실시간 수심보정(2/6 관측소)</div>
+    <div class="topbar-sub">Phase 3.7.1 · 고유량 정조 오판정 긴급수정</div>
   </div>
   <span class="badge-warn">검증 우선</span>
 </header>
@@ -382,6 +382,15 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     </div>
   </div>
 
+  <!-- 물때표 (접기) -->
+  <div class="card">
+    <button class="toggle-btn" id="tideTableToggle" aria-expanded="false">▶ 물때표 (12시간 예측, 참고용)</button>
+    <div id="tideTableSection" class="collapsible-section" style="display:none">
+      <div id="tideTablePanel" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+
   <!-- 원자료 로그 (접기) -->
   <div class="card">
     <button class="toggle-btn" id="logToggle" aria-expanded="false">▶ 원자료 로그</button>
@@ -392,7 +401,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260721-depthcorr" defer></script>
+<script src="js/app.js?v=20260724-slackoverridefix" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기
@@ -414,6 +423,22 @@ document.addEventListener('DOMContentLoaded', function(){
       detailSec.style.display = open ? 'block' : 'none';
       detailBtn.textContent = open ? '▼ 상세 정보 접기' : '▶ 상세 정보 보기 (판정근거·변화량·모델근거)';
       detailBtn.setAttribute('aria-expanded', open);
+    });
+  }
+  // 물때표 접기 + 처음 열 때 예측 데이터 로드
+  const tideTableBtn = document.getElementById('tideTableToggle');
+  const tideTableSec = document.getElementById('tideTableSection');
+  let tideTableLoaded = false;
+  if(tideTableBtn && tideTableSec){
+    tideTableBtn.addEventListener('click', function(){
+      const open = tideTableSec.style.display === 'none';
+      tideTableSec.style.display = open ? 'block' : 'none';
+      tideTableBtn.textContent = open ? '▼ 물때표 접기' : '▶ 물때표 (12시간 예측, 참고용)';
+      tideTableBtn.setAttribute('aria-expanded', open);
+      if(open && window.renderTideTable){
+        tideTableLoaded = true;
+        window.renderTideTable();
+      }
     });
   }
 });

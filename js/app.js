@@ -1402,11 +1402,17 @@ function saveReleaseLagLog(entries){ try{ localStorage.setItem(RELEASE_LAG_LOG_K
 
 // 조회 1회당 호출: 비조석 구간 교량에서만 방류→수위 시차를 로그에 누적
 function accumulateReleaseLag(b, damRows, waterPts){
-  if(b.tide!==false) return {added:0}; // 조석 구간은 방류·조석 신호가 뒤섞여 신뢰 불가 → 기록 안 함
-  if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0};
+  if(b.tide!==false) return {added:0, reason:'조석 구간 교량이라 제외됨(비조석 6개 교량만 기록)'};
+  if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0, reason:'수위 데이터 부족(3개 미만)'};
   const damPts=rowsToPoints(damRows, DAM_KEYS);
+  const events=findDamStepEvents(damPts);
   const pairs=matchReleaseLagPairs(damPts, waterPts);
-  if(!pairs.length) return {added:0};
+  if(!pairs.length){
+    const reason = events.length
+      ? `방류 이벤트 ${events.length}건 감지됐지만, ${RELEASE_LAG_MIN_WINDOW_MIN}~${RELEASE_LAG_MAX_WINDOW_MIN}분 안에 수위가 ${WATER_RESPONSE_THRESHOLD_CMHR}cm/h 이상 반응하지 않음(조회구간이 너무 짧거나 반응이 약함)`
+      : `방류량이 이 조회구간 안에서 ${DAM_STEP_THRESHOLD}㎥/s 이상 계단식으로 변한 적 없음(damPts ${damPts.length}개, 범위 ${damPts.length?Math.round(Math.min(...damPts.map(d=>d.value)))+'~'+Math.round(Math.max(...damPts.map(d=>d.value))):'?'}㎥/s)`;
+    return {added:0, reason};
+  }
   const existing=loadReleaseLagLog();
   const seen=new Set(existing.map(e=>`${e.code}_${Math.floor(new Date(e.damTime).getTime()/60000)}`));
   let added=0;
@@ -2931,6 +2937,7 @@ async function runQuery(){
     const _wPts2=rowsToPoints(waterRows,_wKeys2);
     const rr=accumulateReleaseLag(b,damRows,_wPts2);
     if(rr.added) log('[방류시차로그]',`${rr.added}건 신규 누적 (교량:${b.bridge}, 누적 ${loadReleaseLagLog().length}건)`);
+    else log('[방류시차로그]',`0건 — ${rr.reason||'알 수 없음'}`);
     renderReleaseLagPanel();
   }catch(e){ log('[오류] accumulateReleaseLag',e.message); }
 

@@ -1414,6 +1414,23 @@ function loadReleaseLagLog(){ try{ const raw=localStorage.getItem(RELEASE_LAG_LO
 function saveReleaseLagLog(entries){ try{ localStorage.setItem(RELEASE_LAG_LOG_KEY, JSON.stringify(entries.slice(-RELEASE_LAG_MAX_ENTRIES))); }catch(e){ log('[방류시차로그 저장실패]', e.message); } }
 
 // 조회 1회당 호출: 비조석 구간 교량에서만 방류→수위 시차를 로그에 누적
+function maxRateInWindow(waterPts, afterTime, minWin, maxWin, avgWindowMin){
+  const searchStart=afterTime.getTime()+minWin*60000;
+  const searchEnd=afterTime.getTime()+maxWin*60000;
+  let maxAbs=0, maxSigned=0;
+  for(let i=1;i<waterPts.length;i++){
+    const t=waterPts[i].time.getTime();
+    if(t<searchStart) continue;
+    if(t>searchEnd) break;
+    let j=i-1;
+    while(j>0 && (t-waterPts[j].time.getTime())<avgWindowMin*60000) j--;
+    const dtHr=(t-waterPts[j].time.getTime())/3600000;
+    if(!(dtHr>0)) continue;
+    const rateCmHr=((waterPts[i].value-waterPts[j].value)*100)/dtHr;
+    if(Math.abs(rateCmHr)>maxAbs){ maxAbs=Math.abs(rateCmHr); maxSigned=rateCmHr; }
+  }
+  return {maxAbs:Number(maxAbs.toFixed(2)), maxSigned:Number(maxSigned.toFixed(2))};
+}
 function accumulateReleaseLag(b, damRows, waterPts){
   if(b.tide!==false) return {added:0, reason:'조석 구간 교량이라 제외됨(비조석 6개 교량만 기록)'};
   if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0, reason:'수위 데이터 부족(3개 미만)'};
@@ -1421,9 +1438,16 @@ function accumulateReleaseLag(b, damRows, waterPts){
   const events=findDamStepEvents(damPts);
   const pairs=matchReleaseLagPairs(damPts, waterPts);
   if(!pairs.length){
-    const reason = events.length
-      ? `방류 이벤트 ${events.length}건 감지됐지만, ${RELEASE_LAG_MIN_WINDOW_MIN}~${RELEASE_LAG_MAX_WINDOW_MIN}분 안에 수위가 ${WATER_RESPONSE_THRESHOLD_CMHR}cm/h 이상 반응하지 않음(조회구간이 너무 짧거나 반응이 약함)`
-      : `방류량이 이 조회구간 안에서 ${DAM_STEP_THRESHOLD}㎥/s 이상 계단식으로 변한 적 없음(damPts ${damPts.length}개, 범위 ${damPts.length?Math.round(Math.min(...damPts.map(d=>d.value)))+'~'+Math.round(Math.max(...damPts.map(d=>d.value))):'?'}㎥/s)`;
+    let reason;
+    if(events.length){
+      const detail=events.map(ev=>{
+        const r=maxRateInWindow(waterPts, ev.time, RELEASE_LAG_MIN_WINDOW_MIN, RELEASE_LAG_MAX_WINDOW_MIN, WATER_RESPONSE_WINDOW_MIN);
+        return `[${mdhhmm(ev.time)} Δ${ev.delta>0?'+':''}${Math.round(ev.delta)}㎥/s → 창내 최대반응 ${r.maxSigned>=0?'+':''}${r.maxSigned}cm/h(임계값 ${WATER_RESPONSE_THRESHOLD_CMHR})]`;
+      }).join(' ');
+      reason=`방류 이벤트 ${events.length}건 감지, 전부 반응 임계값 미달 — ${detail}`;
+    } else {
+      reason=`방류량이 이 조회구간 안에서 ${DAM_STEP_THRESHOLD}㎥/s 이상 계단식으로 변한 적 없음(damPts ${damPts.length}개, 범위 ${damPts.length?Math.round(Math.min(...damPts.map(d=>d.value)))+'~'+Math.round(Math.max(...damPts.map(d=>d.value))):'?'}㎥/s)`;
+    }
     return {added:0, reason};
   }
   const existing=loadReleaseLagLog();

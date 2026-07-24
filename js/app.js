@@ -23,12 +23,21 @@
 // 적용: fw(유량) 없는 관측소에서 수위만으로 유량 계산
 // ※ 범위 밖 수위는 가장 가까운 구간 경계값으로 클램핑
 const HQ_CURVES = {
-  '1018640': { // 광진교 (2011-01-01 적용)
-    name:'광진교', source:'공공데이터포털 HQ곡선',
+  '1018640': { // 광진교
+    // ★ 2026-07-24 재수정: WAMIS 공식 수위-유량곡선식 확인됨(영진님 확인, 2010년 환경부
+    //   자료, 38개 실측치 기반 — 가장 최신). 이전 임시조치(자체 회귀)를 이 공식 곡선으로 교체.
+    //   최하단 구간(0.92~1.40m)은 원본에 잠실수중보 "보 개방"/"보 폐쇄" 두 공식이 있음 —
+    //   앱이 보 게이트 상태를 추적하지 않아 하나를 골라야 했는데, 실측 205일(2026-01~07)
+    //   대조 결과 "보 폐쇄" 가정이 평균오차 113%로 "보 개방"(255%)보다 훨씬 잘 맞아 채택함
+    //   (보통 보는 평상시 폐쇄, 홍수 때만 개방되므로 물리적으로도 타당).
+    //   ⚠ 이 최하단 구간은 WAMIS 원본에도 "1.10m 이하 외삽"이라고 명시된 구간이라, 실측
+    //   대조 오차 113%는 앱의 문제가 아니라 공식 곡선 자체의 알려진 한계임 — 참고로 표시.
+    name:'광진교', source:'WAMIS 수위-유량관계곡선식(2010,환경부, 확인 2026-07-24) — 최하단은 보폐쇄 가정',
     segments:[
-      {min:1.34, max:2.50,  formula:(h)=> 20.769  * Math.pow(h+2.501, 3.414)},
-      {min:2.50, max:4.42,  formula:(h)=>124.768  * Math.pow(h+2.800, 2.220)},
-      {min:4.42, max:10.76, formula:(h)=>468.536  * Math.pow(h+2.063, 1.640)},
+      {min:0.92, max:1.40, formula:(h)=>17925.556 * Math.pow(Math.max(0.001,h-0.920), 2.900)}, // 보폐쇄 가정, 1.10m 이하 공식 외삽구간
+      {min:1.40, max:2.20, formula:(h)=>  747.686 * Math.pow(h+0.430, 1.735)},
+      {min:2.20, max:3.50, formula:(h)=>  513.591 * Math.pow(h+0.890, 1.820)},
+      {min:3.50, max:7.50, formula:(h)=>  409.059 * Math.pow(h+2.060, 1.702)},
     ]
   },
   '1018662': { // 청담대교 (2001-01-01 적용) — 잠수교·반포2교도 준용
@@ -1313,6 +1322,154 @@ function clearTideLagLog(){
   if(!confirm('누적된 조석 시차 로그를 모두 삭제할까요? 되돌릴 수 없습니다.')) return;
   localStorage.removeItem(TIDE_LAG_LOG_KEY);
   renderTideLagPanel();
+}
+
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-07-24 신규: 방류 시차 로그 (releaseLag 실측 검증용)
+// ══════════════════════════════════════════════════════════════
+// [원리] 팔당댐 방류량이 계단식으로 크게 바뀌는 시점(이벤트)을 찾고, 그 변화가
+//   같은 방향(증가→상승/감소→하강)으로 교량 수위에 나타나는 첫 시점을 찾아 그 차이를 시차로 기록.
+// [범위 제한 — 중요] 조석 구간(tide:true) 교량은 절대 기록하지 않음. 조석 신호와
+//   방류 신호가 수위 변화에 뒤섞여서 방류 시차만 순수하게 뽑아낼 수 없기 때문.
+//   비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교, 잠실보 상류)만 기록 —
+//   이 구간은 조석 영향이 없어 수위 변화 = 방류 변화로 봐도 되는 유일한 곳.
+// [한계] 자연 유량 변동(강우 등)과 댐 방류 변화를 구분 못함 — 표본 많이 쌓여야 신뢰도 상승.
+const RELEASE_LAG_LOG_KEY = 'releaseLagLog';
+const RELEASE_LAG_MAX_ENTRIES = 500;
+const RELEASE_LAG_MIN_WINDOW_MIN = 60;   // 60분 미만 시차는 물리적으로 불가 → 오탐 제외
+const RELEASE_LAG_MAX_WINDOW_MIN = 480;  // 8시간 초과는 다른 요인(강우 등) 개입 가능성 높아 제외
+const DAM_STEP_THRESHOLD = 150;          // ㎥/s — 이 이상 변해야 "방류 변경 이벤트"로 인정(노이즈 제외)
+const WATER_RESPONSE_THRESHOLD_CMHR = 3; // cm/h — 교량 수위 반응 인정 기준(20분창 변화율)
+
+// 방류량 시계열에서 유의미한 계단식 변화 시작점(이벤트) 탐지
+function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=30){
+  if(!Array.isArray(damPts) || damPts.length<3) return [];
+  const events=[];
+  for(let i=1;i<damPts.length;i++){
+    const t=damPts[i].time.getTime();
+    let j=i-1;
+    while(j>0 && (t-damPts[j].time.getTime())<windowMin*60000) j--;
+    const delta=damPts[i].value-damPts[j].value;
+    if(Math.abs(delta)<stepThreshold) continue;
+    if(i>1){
+      const tPrev=damPts[i-1].time.getTime();
+      let k=i-2;
+      while(k>0 && (tPrev-damPts[k].time.getTime())<windowMin*60000) k--;
+      const prevDelta=damPts[i-1].value-damPts[k].value;
+      if(Math.abs(prevDelta)>=stepThreshold) continue; // 같은 이벤트의 연속분 → 중복 스킵(rising-edge만 채택)
+    }
+    events.push({time:damPts[i].time, before:damPts[j].value, after:damPts[i].value, delta, direction:Math.sign(delta)});
+  }
+  return events;
+}
+// 방류 이벤트 이후, 같은 방향으로 수위가 반응하기 시작하는 첫 시점 탐색
+function findWaterResponseTime(waterPts, afterTime, direction, minWin=RELEASE_LAG_MIN_WINDOW_MIN, maxWin=RELEASE_LAG_MAX_WINDOW_MIN, rateThreshold=WATER_RESPONSE_THRESHOLD_CMHR){
+  const searchStart=afterTime.getTime()+minWin*60000;
+  const searchEnd=afterTime.getTime()+maxWin*60000;
+  for(let i=1;i<waterPts.length;i++){
+    const t=waterPts[i].time.getTime();
+    if(t<searchStart) continue;
+    if(t>searchEnd) break;
+    let j=i-1;
+    while(j>0 && (t-waterPts[j].time.getTime())<20*60000) j--;
+    const dtHr=(t-waterPts[j].time.getTime())/3600000;
+    if(!(dtHr>0)) continue;
+    const rateCmHr=((waterPts[i].value-waterPts[j].value)*100)/dtHr;
+    if(direction>0 && rateCmHr>=rateThreshold) return {time:waterPts[i].time, value:waterPts[i].value, rateCmHr:Number(rateCmHr.toFixed(1))};
+    if(direction<0 && rateCmHr<=-rateThreshold) return {time:waterPts[i].time, value:waterPts[i].value, rateCmHr:Number(rateCmHr.toFixed(1))};
+  }
+  return null;
+}
+function matchReleaseLagPairs(damPts, waterPts){
+  const events=findDamStepEvents(damPts);
+  const pairs=[];
+  for(const ev of events){
+    const resp=findWaterResponseTime(waterPts, ev.time, ev.direction);
+    if(!resp) continue;
+    const lagMinutes=Math.round((resp.time-ev.time)/60000);
+    if(lagMinutes<RELEASE_LAG_MIN_WINDOW_MIN || lagMinutes>RELEASE_LAG_MAX_WINDOW_MIN) continue;
+    pairs.push({
+      direction: ev.direction>0?'증가':'감소',
+      damTime:ev.time, damBefore:Math.round(ev.before), damAfter:Math.round(ev.after), damDelta:Math.round(ev.delta),
+      waterTime:resp.time, waterValue:resp.value, waterRateCmHr:resp.rateCmHr,
+      lagMinutes
+    });
+  }
+  return pairs;
+}
+function loadReleaseLagLog(){ try{ const raw=localStorage.getItem(RELEASE_LAG_LOG_KEY); return raw?JSON.parse(raw):[]; }catch(e){ return []; } }
+function saveReleaseLagLog(entries){ try{ localStorage.setItem(RELEASE_LAG_LOG_KEY, JSON.stringify(entries.slice(-RELEASE_LAG_MAX_ENTRIES))); }catch(e){ log('[방류시차로그 저장실패]', e.message); } }
+
+// 조회 1회당 호출: 비조석 구간 교량에서만 방류→수위 시차를 로그에 누적
+function accumulateReleaseLag(b, damRows, waterPts){
+  if(b.tide!==false) return {added:0}; // 조석 구간은 방류·조석 신호가 뒤섞여 신뢰 불가 → 기록 안 함
+  if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0};
+  const damPts=rowsToPoints(damRows, DAM_KEYS);
+  const pairs=matchReleaseLagPairs(damPts, waterPts);
+  if(!pairs.length) return {added:0};
+  const existing=loadReleaseLagLog();
+  const seen=new Set(existing.map(e=>`${e.code}_${Math.floor(new Date(e.damTime).getTime()/60000)}`));
+  let added=0;
+  for(const p of pairs){
+    const key=`${b.code}_${Math.floor(p.damTime.getTime()/60000)}`;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    existing.push({
+      bridge:b.bridge, code:b.code, direction:p.direction,
+      damTime:p.damTime.toISOString(), damBefore:p.damBefore, damAfter:p.damAfter, damDelta:p.damDelta,
+      waterTime:p.waterTime.toISOString(), waterValue:p.waterValue, waterRateCmHr:p.waterRateCmHr,
+      lagMinutes:p.lagMinutes, loggedAt:new Date().toISOString()
+    });
+    added++;
+  }
+  if(added) saveReleaseLagLog(existing);
+  return {added};
+}
+function renderReleaseLagPanel(){
+  const el=$('releaseLagPanel'); if(!el) return;
+  const logData=loadReleaseLagLog();
+  if(!logData.length){
+    el.innerHTML='<p class="muted">아직 누적된 방류 시차 데이터가 없습니다. 비조석 구간 교량(강동·구리암사·천호·광진교·올림픽대교·잠실철교)을 조회하면, 그 사이 방류량이 크게 바뀔 때 자동으로 쌓입니다.</p>';
+    return;
+  }
+  const lags=logData.map(e=>e.lagMinutes);
+  const min=Math.min(...lags), max=Math.max(...lags);
+  const byBridge={};
+  for(const e of logData){ (byBridge[e.bridge]=byBridge[e.bridge]||[]).push(e.lagMinutes); }
+  let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min}~${max}분 · <b>참고용, 코드의 releaseLag 값엔 아직 미반영</b><br>`
+         + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교)에서만 기록됩니다 — 조석 구간은 신호가 뒤섞여 제외.</small></p>`;
+  html+='<table class="cmp-table"><thead><tr><th>교량</th><th>건수</th><th>평균 시차</th></tr></thead><tbody>';
+  for(const [br,arr] of Object.entries(byBridge)){
+    const avg=Math.round(arr.reduce((a,v)=>a+v,0)/arr.length);
+    html+=`<tr><td>${br}</td><td>${arr.length}건</td><td>${avg}분</td></tr>`;
+  }
+  html+='</tbody></table>';
+  const recent=[...logData].sort((a,b)=>new Date(b.damTime)-new Date(a.damTime)).slice(0,12);
+  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b></p>';
+  html+='<table class="cmp-table"><thead><tr><th>교량</th><th>방류 변화</th><th>방향</th><th>시차</th><th>수위 반응</th></tr></thead><tbody>';
+  for(const e of recent){
+    html+=`<tr><td>${e.bridge}</td><td>${mdhhmm(new Date(e.damTime))} (${e.damBefore}→${e.damAfter})</td><td>${e.direction}</td><td>${e.lagMinutes}분</td><td>${mdhhmm(new Date(e.waterTime))} (${e.waterRateCmHr>0?'+':''}${e.waterRateCmHr}cm/h)</td></tr>`;
+  }
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+function exportReleaseLagLog(){
+  const logData=loadReleaseLagLog();
+  if(!logData.length){ alert('내보낼 로그가 없습니다.'); return; }
+  const headers=['bridge','code','direction','damTime','damBefore','damAfter','damDelta','waterTime','waterValue','waterRateCmHr','lagMinutes','loggedAt'];
+  const rows=logData.map(e=>headers.map(h=>e[h]??'').join(','));
+  const csv=[headers.join(','), ...rows].join('\n');
+  const blob=new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`release_lag_log_${Date.now()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function clearReleaseLagLog(){
+  if(!confirm('누적된 방류 시차 로그를 모두 삭제할까요? 되돌릴 수 없습니다.')) return;
+  localStorage.removeItem(RELEASE_LAG_LOG_KEY);
+  renderReleaseLagPanel();
 }
 
 // ── fallback (최신 endpoint) ──────────────────────────────────
@@ -2629,6 +2786,10 @@ function init(){
   renderTideLagPanel();
   if($('exportTideLagBtn')) $('exportTideLagBtn').onclick=exportTideLagLog;
   if($('clearTideLagBtn')) $('clearTideLagBtn').onclick=clearTideLagLog;
+  bindToggle('releaseLagToggle','releaseLagSection','▶ 방류 시차 로그 보기','▼ 방류 시차 로그 숨기기');
+  renderReleaseLagPanel();
+  if($('exportReleaseLagBtn')) $('exportReleaseLagBtn').onclick=exportReleaseLagLog;
+  if($('clearReleaseLagBtn')) $('clearReleaseLagBtn').onclick=clearReleaseLagLog;
   log('[초기화]',`교량 ${BRIDGES.length}개`,`Phase 3.6.4 · 해도 수심 기준 정정 + 연속방정식 유속`);
   renderDataFirstPanel();
 }
@@ -2765,6 +2926,13 @@ async function runQuery(){
     if(r.added) log('[조석시차로그]',`${r.added}건 신규 누적 (기준:${b.tide?b.bridge:'신곡보'}, 누적 ${loadTideLagLog().length}건)`);
     renderTideLagPanel();
   }catch(e){ log('[오류] accumulateTideLag',e.message); }
+  try{
+    const _wKeys2=waterMetric?.key?[waterMetric.key]:WATER_KEYS;
+    const _wPts2=rowsToPoints(waterRows,_wKeys2);
+    const rr=accumulateReleaseLag(b,damRows,_wPts2);
+    if(rr.added) log('[방류시차로그]',`${rr.added}건 신규 누적 (교량:${b.bridge}, 누적 ${loadReleaseLagLog().length}건)`);
+    renderReleaseLagPanel();
+  }catch(e){ log('[오류] accumulateReleaseLag',e.message); }
 
   const waterKeys=waterMetric.key?[waterMetric.key]:WATER_KEYS;
   const damKeys=damMetric.key?[damMetric.key]:DAM_KEYS;

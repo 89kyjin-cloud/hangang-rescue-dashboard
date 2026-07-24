@@ -1346,7 +1346,10 @@ function clearTideLagLog(){
 const RELEASE_LAG_LOG_KEY = 'releaseLagLog';
 const RELEASE_LAG_MAX_ENTRIES = 500;
 const RELEASE_LAG_MIN_WINDOW_MIN = 60;   // 60분 미만 시차는 물리적으로 불가 → 오탐 제외
-const RELEASE_LAG_MAX_WINDOW_MIN = 480;  // 8시간 초과는 다른 요인(강우 등) 개입 가능성 높아 제외
+const RELEASE_LAG_MAX_WINDOW_MIN = 1440; // ★ 2026-07-24 수정: 480→1440분(24시간). 실측 그래프 대조 결과
+                                          // 비조석 상류 구간은 반응이 8시간 이후(최대 하루 가까이)에야 나타남 —
+                                          // 8시간 창은 실제 상승 국면을 놓치고 그 이전의 무관한 하강 국면을 보고 있었음.
+                                          // 24시간 이상은 강우 등 다른 요인 개입 가능성 커져 여전히 상한선을 둠.
 const DAM_STEP_THRESHOLD = 150;          // ㎥/s — 이 이상 변해야 "방류 변경 이벤트"로 인정(노이즈 제외)
 const WATER_RESPONSE_THRESHOLD_CMHR = 1.0; // cm/h — 2시간창 평균 변화율 기준(비조석 상류는 반응이 완만해서 하향 조정)
 const WATER_RESPONSE_WINDOW_MIN = 120;      // ★ 2026-07-24 수정: 20분→120분. 상류 구간은 반응이 스텝이 아니라

@@ -192,7 +192,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 <header class="topbar">
   <div>
     <div class="topbar-title">🌊 한강 수색환경</div>
-    <div class="topbar-sub">Phase 3.7.3 · HQ곡선 WAMIS 대조·수정(한강대교 결측구간, 잠수교 전용곡선)</div>
+    <div class="topbar-sub">Phase 3.7.6 · 방류 시차 로그 신규(releaseLag 검증용)</div>
   </div>
   <span class="badge-warn">검증 우선</span>
 </header>
@@ -382,6 +382,19 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     </div>
   </div>
 
+  <!-- 방류 시차 로그 (접기) -->
+  <div class="card">
+    <button class="toggle-btn" id="releaseLagToggle" aria-expanded="false">▶ 방류 시차 로그 보기</button>
+    <div id="releaseLagSection" class="collapsible-section" style="display:none">
+      <p class="muted small">팔당댐 방류량이 크게 바뀌는 시점과, 그 변화가 교량 수위에 나타나는 시점을 조회 시마다 자동 매칭해 시차를 누적합니다. 조석 신호와 뒤섞이지 않도록 비조석 구간 교량(강동·구리암사·천호·광진교·올림픽대교·잠실철교)에서만 기록됩니다. 판정 로직(releaseLag)에는 아직 반영되지 않는 참고용 데이터입니다.</p>
+      <div id="releaseLagPanel" style="margin-top:8px"></div>
+      <div class="btn-row">
+        <button id="exportReleaseLagBtn" class="btn-secondary btn-sm">CSV로 내보내기</button>
+        <button id="clearReleaseLagBtn" class="btn-danger btn-sm">로그 삭제</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 물때표 (접기) -->
   <div class="card">
     <button class="toggle-btn" id="tideTableToggle" aria-expanded="false">▶ 물때표 (12시간 예측, 참고용)</button>
@@ -401,7 +414,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260724-hqcurvefix" defer></script>
+<script src="js/app.js?v=20260724-releaselaglog" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기

@@ -1219,6 +1219,11 @@ function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate, waterPt
     const winStart=p.incheonTime.getTime()-3600000, winEnd=p.bridgeTime.getTime()+3600000;
     const damWin=damPts.filter(d=>d.time.getTime()>=winStart && d.time.getTime()<=winEnd).map(d=>d.value);
     const damAvg=damWin.length?Number((damWin.reduce((a,v)=>a+v,0)/damWin.length).toFixed(1)):null;
+    // ★ 2026-07-24 신규: 신곡보 owl/swl(교량 반응 시점 기준) 기록 — 조석차단 임계값(-0.5m) 검증용
+    const singokSwl=nearest(singokRows, p.bridgeTime, SINGOK_KEYS, 90);
+    const singokOwl=nearest(singokRows, p.bridgeTime, SINGOK_OWL_KEYS, 90);
+    const singokDiff=(singokSwl && singokOwl && !singokSwl.stale && !singokOwl.stale)
+      ? Number((singokOwl.value - singokSwl.value).toFixed(3)) : null;
     existing.push({
       bridge:b.bridge,             // 조회 당시 선택 교량 (참고)
       refPoint:refLabel,           // 시차 기준 관측소명
@@ -1230,6 +1235,9 @@ function accumulateTideLag(b, tideRows, damRows, singokRows, searchDate, waterPt
       bridgeValue:p.bridgeValue,
       lagMinutes:p.lagMinutes,
       damAvg,
+      singokSwl: singokSwl && !singokSwl.stale ? singokSwl.value : null,
+      singokOwl: singokOwl && !singokOwl.stale ? singokOwl.value : null,
+      singokOwlMinusSwl: singokDiff,
       tideNumberN:tn?.n??null,
       tideNumberName:tn?.name??null,
       tideNumberSource:tn?.source??null,
@@ -1281,8 +1289,9 @@ function renderTideLagPanel(){
   const min=lags.length?Math.min(...lags):null;
   const max=lags.length?Math.max(...lags):null;
   const recent=[...logData].sort((a,b)=>new Date(b.incheonTime)-new Date(a.incheonTime)).slice(0,12);
+  const withSingok = logData.filter(e=>e.singokOwlMinusSwl!=null).length;
   let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min??'?'}~${max??'?'}분 · <b>참고용, 실시간 판정에는 미반영</b><br>`
-         + `<small>전체 평균은 저방류·고방류가 섞여 의미가 없으므로 아래 구간별로 확인하세요.</small></p>`;
+         + `<small>${withSingok}건은 신곡보 owl/swl도 같이 기록됨(조석차단 임계값 검증용, CSV에서 확인) — 전체 평균은 저방류·고방류가 섞여 의미가 없으므로 아래 구간별로 확인하세요.</small></p>`;
   html+=damBandStatsHtml(logData);
   html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b></p>';
   html+='<table class="cmp-table"><thead><tr><th>인천</th><th>유형</th><th>관측소</th><th>도달</th><th>시차</th><th>방류량</th><th>물때</th></tr></thead><tbody>';
@@ -1302,7 +1311,7 @@ function renderTideLagPanel(){
 function exportTideLagLog(){
   const logData=loadTideLagLog();
   if(!logData.length){ alert('내보낼 로그가 없습니다.'); return; }
-  const headers=['bridge','refPoint','refCode','tideType','incheonTime','incheonValue','bridgeTime','bridgeValue','lagMinutes','damAvg','tideNumberN','tideNumberName','tideNumberSource','loggedAt'];
+  const headers=['bridge','refPoint','refCode','tideType','incheonTime','incheonValue','bridgeTime','bridgeValue','lagMinutes','damAvg','singokSwl','singokOwl','singokOwlMinusSwl','tideNumberN','tideNumberName','tideNumberSource','loggedAt'];
   const rows=logData.map(e=>headers.map(h=>{
     // 구버전 호환: bridgeTime/bridgeValue 없으면 singok 필드로 대체
     if(h==='bridgeTime') return e.bridgeTime??e.singokTime??'';
@@ -1339,7 +1348,11 @@ const RELEASE_LAG_MAX_ENTRIES = 500;
 const RELEASE_LAG_MIN_WINDOW_MIN = 60;   // 60분 미만 시차는 물리적으로 불가 → 오탐 제외
 const RELEASE_LAG_MAX_WINDOW_MIN = 480;  // 8시간 초과는 다른 요인(강우 등) 개입 가능성 높아 제외
 const DAM_STEP_THRESHOLD = 150;          // ㎥/s — 이 이상 변해야 "방류 변경 이벤트"로 인정(노이즈 제외)
-const WATER_RESPONSE_THRESHOLD_CMHR = 3; // cm/h — 교량 수위 반응 인정 기준(20분창 변화율)
+const WATER_RESPONSE_THRESHOLD_CMHR = 1.0; // cm/h — 2시간창 평균 변화율 기준(비조석 상류는 반응이 완만해서 하향 조정)
+const WATER_RESPONSE_WINDOW_MIN = 120;      // ★ 2026-07-24 수정: 20분→120분. 상류 구간은 반응이 스텝이 아니라
+                                             // 며칠에 걸쳐 완만하게 누적되는 형태라, 20분 순간변화율로는
+                                             // 절대 안 걸림(실측 사례: 광진교 4일간 1.3→1.85m 상승, 20분 순간
+                                             // 변화율은 노이즈에 묻혀 3cm/h를 넘은 적이 없었음). 2시간 평균으로 완화.
 
 // 방류량 시계열에서 유의미한 계단식 변화 시작점(이벤트) 탐지
 function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=30){
@@ -1371,7 +1384,7 @@ function findWaterResponseTime(waterPts, afterTime, direction, minWin=RELEASE_LA
     if(t<searchStart) continue;
     if(t>searchEnd) break;
     let j=i-1;
-    while(j>0 && (t-waterPts[j].time.getTime())<20*60000) j--;
+    while(j>0 && (t-waterPts[j].time.getTime())<WATER_RESPONSE_WINDOW_MIN*60000) j--;
     const dtHr=(t-waterPts[j].time.getTime())/3600000;
     if(!(dtHr>0)) continue;
     const rateCmHr=((waterPts[i].value-waterPts[j].value)*100)/dtHr;
@@ -2373,7 +2386,7 @@ function renderReasonPanel(b,incidentState,currentState,q){
   const reliability=calcReliability(b,incidentState,currentState,q);
   const items=[
     {label:'신곡수중보', value:singokTideState.swl!==null?`swl ${singokTideState.swl.toFixed(2)}m`:'조회 실패',
-     score:singokTideState.status!=='unknown'?0:0, desc:singokStatusLabel(singokTideState.swl).text},
+     score:singokTideState.status!=='unknown'?0:0, desc:singokStatusLabel(singokTideState.swl, singokTideState.owl).text},
     {label:'조석 상태', value:currentState.tide?currentState.tide.phase:'전파 없음/조회 불가', score:currentState.tideActive===true?(currentState.tide?.phase?.includes('밀물')?+2:-2):0, desc:currentState.tideStatusNote},
     {label:'방류량', value:currentState.damImpact?`${currentState.damImpact.value.toFixed(0)}㎥/s`:'자료 없음', score:currentState.damImpact?.value>=1000?-2:currentState.damImpact?.value>=500?-1:0, desc:currentState.damImpact?`팔당 ${b.releaseLag}분 보정`:'방류 자료 없음'},
     {label:'수위 변화', value:currentState.wTrend?`${currentState.wTrend.delta>=0?'+':''}${currentState.wTrend.delta}m`:'계산 불가', score:currentState.wTrend?.delta>0.05?+1:currentState.wTrend?.delta<-0.05?-1:0, desc:currentState.waterSource==='estimated'?'계산값(추정)':'HRFCO 실측'},

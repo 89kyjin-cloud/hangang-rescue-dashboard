@@ -627,6 +627,31 @@ const BRIDGES = [
   {bridge:'행주대교',    zone:'하류 조석',         station:'서울시(행주대교)', code:'1019630', tide:true, tideRealtime:true, offset:250, releaseLag:330},
 ];
 
+// ★ 2026-07-24 신규: 만조/간조 offset 분리
+// ─────────────────────────────────────────────────────────────
+// [발견 근거] 조석 시차 로그 42건 분석(영진님 CSV 제공) 결과, 기존 offset 공식은
+//   만조 데이터로는 잘 맞지만(평균오차 -8분, 표준편차 32분) 간조엔 전혀 안 맞음
+//   (평균오차 -62분, 표준편차 104분) — 즉 만조와 간조는 서로 다른 속도로 전파된다.
+// [방법] 관측소별 (간조 관측평균 − 만조 관측평균) 델타를 구해서, 기존 offset(만조 기준으로
+//   검증된 값)에 이 델타를 더해 간조용 offset을 만든다. 회귀식의 거리·방류량 계수는
+//   부호가 물리적으로 말이 안 되는 경우가 있어(표본 부족) 채택하지 않았다 — 대신 이미
+//   검증된 거리-감쇠 구조(기존 offset)에 관측소별 상수 보정만 얹는 보수적 방법을 썼다.
+// [표본] 청담대교 n=3, 잠수교 n=4, 한강대교 n=6 — 전부 표본 적음, 참고용.
+//   행주대교는 n=1이고 부호까지 반대라 신뢰 불가 → 미적용. 반포2교는 데이터 자체 없음 → 미적용.
+const STATION_LOWTIDE_DELTA = {
+  '1018662': {delta:-71,   n:3, note:'청담대교: 간조 187분(n=3) vs 만조 258분(n=4)'},
+  '1018680': {delta:-27.5, n:4, note:'잠수교: 간조 228분(n=4) vs 만조 255분(n=8)'},
+  '1018683': {delta:-62,   n:6, note:'한강대교: 간조 207분(n=6) vs 만조 269분(n=10)'},
+  // '1019630' 행주대교, '1018681' 반포2교: 표본 부족/모순으로 미적용(기존 단일 offset 유지)
+};
+// 교량의 만조용/간조용 offset을 반환. tideType이 없거나 델타 자료가 없으면 기존 offset 그대로.
+function offsetForTideType(b, tideType){
+  const base = b.offset||0;
+  if(tideType!=='간조') return base;
+  const d = STATION_LOWTIDE_DELTA[b.code];
+  return d ? base + d.delta : base;
+}
+
 // ── 물때 계산 함수 ─────────────────────────────────────────────
 // 물때 명칭 변환
 function tideNameFromN(n){
@@ -942,7 +967,14 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
   const rows=[];
   for(let i=0;i<=n;i++){
     const t = new Date(now.getTime() + i*stepMin*60000);
-    const ta = tideAt(futureTideRows, t, b.offset||0);
+    let ta = tideAt(futureTideRows, t, b.offset||0);
+    if(ta && ta.phase && ta.phase.includes('썰물')){
+      const lowOffset = offsetForTideType(b,'간조');
+      if(lowOffset !== (b.offset||0)){
+        const taLow = tideAt(futureTideRows, t, lowOffset);
+        if(taLow) ta = taLow;
+      }
+    }
     const rateCmHr = ta?.rateCmHr ?? null;
     let cont=null, flowDir=null;
     if(rateCmHr!=null && damCms!=null && wlNow!=null){
@@ -1327,6 +1359,14 @@ function makePointState(label,b,time,waterRows,damRows,tideRows,waterMetric,damM
   // 강한 영향 또는 약한 영향이면 조석 데이터 적용
   if((tideActive===true || tideActive==='weak') && tideRows.length){
     tide=tideAt(tideRows,time,b.offset||0);
+    // ★ 2026-07-24: 썰물(간조 접근) 구간이면 간조용 offset으로 재조회 — 위 STATION_LOWTIDE_DELTA 참고
+    if(tide && tide.phase && tide.phase.includes('썰물')){
+      const lowOffset = offsetForTideType(b,'간조');
+      if(lowOffset !== (b.offset||0)){
+        const tideLow = tideAt(tideRows,time,lowOffset);
+        if(tideLow){ tideLow.offsetUsed='간조보정'; tide = tideLow; }
+      }
+    }
   }
   let tideStatusNote;
   if(!b.tide){
@@ -1547,12 +1587,12 @@ function fmtTidePoint(b,t,tideActive){
   if(tideActive==='weak') return `〜 신곡수중보 역류 가능성 → 조석 약한 영향 (인천 조위 참고)`;
   if(tideActive===null) return '⚠ 신곡수중보 수위 조회 실패 → 조석 전파 여부 판단 불가';
   if(!t) return '조석 전파 중이나 조위 자료 없음';
-  const offset=b.offset||0;
+  const offset=(t.offsetUsed==='간조보정') ? offsetForTideType(b,'간조') : (b.offset||0);
   const bridgeBestTime=t.best?.time?new Date(t.best.time.getTime()+offset*60000):null;
   let turn='';
-  if(t.nextTurn){const bridgeTurn=new Date(t.nextTurn.time.getTime()+offset*60000);turn=` · 다음 ${t.nextTurn.type} 교량 도달추정 ${hhmm(bridgeTurn)} (인천 실제 ${hhmm(t.nextTurn.time)}, ${t.nextTurn.value.toFixed(1)}cm)`;}
+  if(t.nextTurn){const turnOffset=offsetForTideType(b,t.nextTurn.type);const bridgeTurn=new Date(t.nextTurn.time.getTime()+turnOffset*60000);turn=` · 다음 ${t.nextTurn.type} 교량 도달추정 ${hhmm(bridgeTurn)} (인천 실제 ${hhmm(t.nextTurn.time)}, ${t.nextTurn.value.toFixed(1)}cm)`;}
   const rate=t.rateCmHr!==null?` · 변화율 ${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h`:'';
-  const baseTxt=bridgeBestTime?`인천 관측 ${pretty(t.best.time)} + ${offset}분 보정 = 교량기준 ${pretty(bridgeBestTime)}`:`인천기준 ${t.shifted?pretty(t.shifted):''}`;
+  const baseTxt=bridgeBestTime?`인천 관측 ${pretty(t.best.time)} + ${offset}분${t.offsetUsed==='간조보정'?'(간조보정)':''} 보정 = 교량기준 ${pretty(bridgeBestTime)}`:`인천기준 ${t.shifted?pretty(t.shifted):''}`;
   return `${t.phase} · 인천 조위 ${t.best.value.toFixed(1)}cm · ${baseTxt}${rate}${turn}`;
 }
 
@@ -2742,9 +2782,14 @@ async function runQuery(){
   (function(){
     const el=$('tideNextTurn');if(!el)return;
     if(!currentState.tide||currentState.tideActive!==true){el.innerHTML='';return;}
-    const t=currentState.tide,offset=b.offset||0;
-    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) 실측값 + ${offset}분 도달지연 보정 · 신곡수중보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
-    if(t.nextTurn){const bt=new Date(t.nextTurn.time.getTime()+offset*60000);html+=`<div class="tide-turn-item"><b>다음 ${t.nextTurn.type} · 교량 도달추정</b><span>${hhmm(bt)}</span><div class="tide-ref-note">⚠ 이 시각은 실측이 아니라 예측입니다 — 인천에서 실제 ${t.nextTurn.type}가 일어난 시각(${hhmm(t.nextTurn.time)})에 교량별 도달지연(+${offset}분, 표본 적음)을 더한 값</div></div>`;}
+    const t=currentState.tide,offset=(t && t.offsetUsed==='간조보정') ? offsetForTideType(b,'간조') : (b.offset||0);
+    let html=`<div class="tide-turn-item"><b>현재 조석</b><span>${t.phase}</span><div class="tide-ref-note">인천(${TIDE_STATION}) 실측값 + ${offset}분 도달지연 보정${t.offsetUsed==='간조보정'?' (간조 보정)':''} · 신곡수중보 swl ${singokSwlAtSearch?.toFixed(2)??'?'}m</div></div>`;
+    if(t.nextTurn){
+      const turnOffset=offsetForTideType(b,t.nextTurn.type);
+      const bt=new Date(t.nextTurn.time.getTime()+turnOffset*60000);
+      const lowNote = t.nextTurn.type==='간조' ? (STATION_LOWTIDE_DELTA[b.code]?` · 간조 보정 적용(${STATION_LOWTIDE_DELTA[b.code].note}, 표본 적어 참고용)`:' · 간조 보정 자료 없음, 만조용 offset 그대로 사용') : '';
+      html+=`<div class="tide-turn-item"><b>다음 ${t.nextTurn.type} · 교량 도달추정</b><span>${hhmm(bt)}</span><div class="tide-ref-note">⚠ 이 시각은 실측이 아니라 예측입니다 — 인천에서 실제 ${t.nextTurn.type}가 일어난 시각(${hhmm(t.nextTurn.time)})에 교량별 도달지연(+${turnOffset}분)을 더한 값${lowNote}</div></div>`;
+    }
     if(t.rateCmHr!==null)html+=`<div class="tide-turn-item"><b>변화율</b><span>${t.rateCmHr>0?'+':''}${t.rateCmHr}cm/h</span><div class="tide-ref-note">인천 실측 기준(교량 도달지연 미반영)</div></div>`;
     el.innerHTML=html;
   })();

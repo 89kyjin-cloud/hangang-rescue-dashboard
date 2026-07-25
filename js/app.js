@@ -1375,7 +1375,10 @@ function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=1
       let k=i-2;
       while(k>0 && (tPrev-damPts[k].time.getTime())<windowMin*60000) k--;
       const prevDelta=damPts[i-1].value-damPts[k].value;
-      if(Math.abs(prevDelta)>=stepThreshold) continue; // 같은 이벤트의 연속분 → 중복 스킵(rising-edge만 채택)
+      // ★ 2026-07-24 버그수정: 방향까지 같아야 "연속분"으로 스킵. 기존엔 크기만 봐서
+      // 감소이벤트 직후 방향이 반대인 급증이벤트를 잘못 흡수해버리는 경우가 있었음
+      // (실측 사례: 방류 소폭감소→직후 급증 구간에서 급증이 통째로 누락됨).
+      if(Math.abs(prevDelta)>=stepThreshold && Math.sign(prevDelta)===Math.sign(delta)) continue;
     }
     events.push({time:damPts[i].time, before:damPts[j].value, after:damPts[i].value, delta, direction:Math.sign(delta)});
   }
@@ -1437,12 +1440,24 @@ function maxRateInWindow(waterPts, afterTime, minWin, maxWin, avgWindowMin){
   }
   return {maxAbs:Number(maxAbs.toFixed(2)), maxSigned:Number(maxSigned.toFixed(2))};
 }
+function findMaxWindowDelta(damPts, windowMin){
+  let best={delta:0, time:null, before:null, after:null};
+  for(let i=1;i<damPts.length;i++){
+    const t=damPts[i].time.getTime();
+    let j=i-1;
+    while(j>0 && (t-damPts[j].time.getTime())<windowMin*60000) j--;
+    const delta=damPts[i].value-damPts[j].value;
+    if(Math.abs(delta)>Math.abs(best.delta)) best={delta, time:damPts[i].time, before:damPts[j].value, after:damPts[i].value};
+  }
+  return best;
+}
 function accumulateReleaseLag(b, damRows, waterPts){
   if(b.tide!==false) return {added:0, reason:'조석 구간 교량이라 제외됨(비조석 6개 교량만 기록)'};
   if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0, reason:'수위 데이터 부족(3개 미만)'};
   const damPts=rowsToPoints(damRows, DAM_KEYS);
   const events=findDamStepEvents(damPts);
   const pairs=matchReleaseLagPairs(damPts, waterPts);
+  const maxDelta=findMaxWindowDelta(damPts, 180); // 진단용: 3시간창 기준 실제 최대 변화(임계값·중복제거 무관)
   if(!pairs.length){
     let reason;
     if(events.length){
@@ -1450,9 +1465,9 @@ function accumulateReleaseLag(b, damRows, waterPts){
         const r=maxRateInWindow(waterPts, ev.time, RELEASE_LAG_MIN_WINDOW_MIN, RELEASE_LAG_MAX_WINDOW_MIN, WATER_RESPONSE_WINDOW_MIN);
         return `[${mdhhmm(ev.time)} Δ${ev.delta>0?'+':''}${Math.round(ev.delta)}㎥/s → 창내 최대반응 ${r.maxSigned>=0?'+':''}${r.maxSigned}cm/h(임계값 ${WATER_RESPONSE_THRESHOLD_CMHR})]`;
       }).join(' ');
-      reason=`방류 이벤트 ${events.length}건 감지, 전부 반응 임계값 미달 — ${detail}`;
+      reason=`방류 이벤트 ${events.length}건 감지, 전부 반응 임계값 미달 — ${detail} | 진단: 전구간 3h창 최대변화 ${maxDelta.time?mdhhmm(maxDelta.time)+' '+(maxDelta.delta>0?'+':'')+Math.round(maxDelta.delta)+'㎥/s('+Math.round(maxDelta.before)+'→'+Math.round(maxDelta.after)+')':'없음'}`;
     } else {
-      reason=`방류량이 이 조회구간 안에서 ${DAM_STEP_THRESHOLD}㎥/s 이상 계단식으로 변한 적 없음(damPts ${damPts.length}개, 범위 ${damPts.length?Math.round(Math.min(...damPts.map(d=>d.value)))+'~'+Math.round(Math.max(...damPts.map(d=>d.value))):'?'}㎥/s)`;
+      reason=`방류량이 이 조회구간 안에서 ${DAM_STEP_THRESHOLD}㎥/s 이상 계단식으로 변한 적 없음(damPts ${damPts.length}개, 범위 ${damPts.length?Math.round(Math.min(...damPts.map(d=>d.value)))+'~'+Math.round(Math.max(...damPts.map(d=>d.value))):'?'}㎥/s) | 진단: 전구간 3h창 최대변화 ${maxDelta.time?mdhhmm(maxDelta.time)+' '+(maxDelta.delta>0?'+':'')+Math.round(maxDelta.delta)+'㎥/s('+Math.round(maxDelta.before)+'→'+Math.round(maxDelta.after)+')':'없음'}`;
     }
     return {added:0, reason};
   }

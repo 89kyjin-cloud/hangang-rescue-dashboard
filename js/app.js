@@ -1009,7 +1009,7 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
   return rows;
 }
 
-function renderTideTableRows(rows, offsetMin){
+function renderTideTableRows(rows, offsetMin, bridgeName){
   if(!rows || !rows.length) return '<p class="muted small">데이터 없음</p>';
   const trs = rows.map(r=>{
     const timeTxt = hhmm(r.t);
@@ -1029,8 +1029,8 @@ function renderTideTableRows(rows, offsetMin){
   }).join('');
   return `<table style="width:100%;border-collapse:collapse">
     <thead><tr style="border-bottom:1px solid var(--border)">
-      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">시각(교량 도달추정)</th>
-      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">조석(인천+${offsetMin}분, 신뢰도 높음)</th>
+      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">시각(${bridgeName||'교량'} 도달추정)</th>
+      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">조석(인천+${offsetMin}분→${bridgeName||'교량'}, 신뢰도 높음)</th>
       <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">방향·유속(추정, 참고용)</th>
     </tr></thead>
     <tbody>${trs}</tbody>
@@ -1053,12 +1053,13 @@ async function renderTideTable(){
     const damCms = currentState?.damImpact?.value ?? null;
     el.innerHTML = `
       <div style="background:#1a1405;border:1px solid #b7791f;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+        📍 <b>${b.bridge}</b> 기준 물때표<br>
         ⚠ <b>가정 기반 예측입니다</b> — 팔당댐 방류량을 지금 값(${damCms!=null?Math.round(damCms)+'㎥/s':'조회 안됨'})으로
-        고정한 채, 인천 조석 예보(KHOA)에 이 교량 offset(${b.offset||0}분)만 더해 추정한 표입니다.<br>
+        고정한 채, 인천 조석 예보(KHOA)에 ${b.bridge} offset(${b.offset||0}분)만 더해 추정한 표입니다.<br>
         <b>조석 시각(고조·저조)</b>은 신뢰도가 비교적 높지만, <b>방향·유속</b>은 방류량이 실제로 바뀌면
         바로 틀려지는 참고용 수치입니다 — 절대 단독 판단 근거로 쓰지 마세요.
       </div>
-      ${renderTideTableRows(rows, b.offset||0)}
+      ${renderTideTableRows(rows, b.offset||0, b.bridge)}
     `;
   }catch(e){
     el.innerHTML = `<p class="muted small">예측 조회 실패: ${e.message}</p>`;

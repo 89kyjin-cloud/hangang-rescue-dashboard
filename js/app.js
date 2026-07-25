@@ -1454,7 +1454,11 @@ function findMaxWindowDelta(damPts, windowMin){
 function accumulateReleaseLag(b, damRows, waterPts){
   if(b.tide!==false) return {added:0, reason:'조석 구간 교량이라 제외됨(비조석 6개 교량만 기록)'};
   if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0, reason:'수위 데이터 부족(3개 미만)'};
-  const damPts=rowsToPoints(damRows, DAM_KEYS);
+  // ★ 2026-07-25 근본원인 수정: rowsToPoints는 정렬을 안 해줌 — HRFCO가 내림차순으로 줄 수 있어서
+  // 반드시 오름차순 정렬 필요. 이걸 빠뜨려서 이번 세션 내내 창-탐색 로직이 시간 순서를 거꾸로
+  // 잡고 있었을 가능성이 높음(진단 로그에서 "1431→3837"처럼 앞뒤 안 맞는 매칭이 나온 원인).
+  const damPts=rowsToPoints(damRows, DAM_KEYS).sort((a,b)=>a.time-b.time);
+  waterPts=[...waterPts].sort((a,b)=>a.time-b.time);
   const events=findDamStepEvents(damPts);
   const pairs=matchReleaseLagPairs(damPts, waterPts);
   const maxDelta=findMaxWindowDelta(damPts, 180); // 진단용: 3시간창 기준 실제 최대 변화(임계값·중복제거 무관)

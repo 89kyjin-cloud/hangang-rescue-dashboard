@@ -1358,7 +1358,10 @@ const WATER_RESPONSE_WINDOW_MIN = 120;      // ★ 2026-07-24 수정: 20분→12
                                              // 변화율은 노이즈에 묻혀 3cm/h를 넘은 적이 없었음). 2시간 평균으로 완화.
 
 // 방류량 시계열에서 유의미한 계단식 변화 시작점(이벤트) 탐지
-function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=30){
+function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=180){
+  // ★ 2026-07-24 수정: 30분→180분(3시간). 실측 대조 결과 방류 변화가 30분 안에 훅 뛰는 게
+  // 아니라 몇 시간에 걸쳐 서서히 램프업되는 경우가 많아서, 30분 창으로 끊어보면 매 구간이
+  // 임계값 밑이라 큰 누적 변화(예: 2600→3836)를 통째로 놓치고 있었음.
   if(!Array.isArray(damPts) || damPts.length<3) return [];
   const events=[];
   for(let i=1;i<damPts.length;i++){

@@ -1524,11 +1524,18 @@ function accumulateReleaseLag(b, damRows, waterPts){
     const key=`${b.code}_${Math.floor(p.damTime.getTime()/60000)}`;
     if(seen.has(key)) continue;
     seen.add(key);
+    // ★ 2026-08-02 신규: 최소창(60분) 없이 재탐색해서 60분이 진짜 반응인지 floor 아티팩트인지 검증.
+    //   지속성 기준(RESPONSE_SUSTAIN_MIN/RATIO)은 동일하게 적용 — 이것만으로도 노이즈는 걸러지므로,
+    //   minWin=0으로 풀었을 때 결과가 크게 당겨지면 60분은 floor였다는 뜻.
+    const eventForDir = events.find(ev=>ev.time.getTime()===p.damTime.getTime());
+    const unclamped = eventForDir ? findWaterResponseTime(waterPts, eventForDir.time, eventForDir.direction, 0, RELEASE_LAG_MAX_WINDOW_MIN) : null;
+    const unclampedLag = unclamped ? Math.round((unclamped.time - eventForDir.time)/60000) : null;
+    const floorSuspect = (unclampedLag!=null && p.lagMinutes<=65 && unclampedLag < p.lagMinutes - 15);
     existing.push({
       bridge:b.bridge, code:b.code, direction:p.direction,
       damTime:p.damTime.toISOString(), damBefore:p.damBefore, damAfter:p.damAfter, damDelta:p.damDelta,
       waterTime:p.waterTime.toISOString(), waterValue:p.waterValue, waterRateCmHr:p.waterRateCmHr,
-      lagMinutes:p.lagMinutes, loggedAt:new Date().toISOString()
+      lagMinutes:p.lagMinutes, unclampedLagMinutes:unclampedLag, floorSuspect, loggedAt:new Date().toISOString()
     });
     added++;
   }
@@ -1544,10 +1551,12 @@ function renderReleaseLagPanel(){
   }
   const lags=logData.map(e=>e.lagMinutes);
   const min=Math.min(...lags), max=Math.max(...lags);
+  const floorSuspectCount = logData.filter(e=>e.floorSuspect).length;
   const byBridge={};
   for(const e of logData){ (byBridge[e.bridge]=byBridge[e.bridge]||[]).push(e.lagMinutes); }
   let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min}~${max}분 · <b>참고용, 코드의 releaseLag 값엔 아직 미반영</b><br>`
-         + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교)에서만 기록됩니다 — 조석 구간은 신호가 뒤섞여 제외.</small></p>`;
+         + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교)에서만 기록됩니다 — 조석 구간은 신호가 뒤섞여 제외.</small>`
+         + (floorSuspectCount ? `<br><small style="color:#f59e0b">⚠ ${floorSuspectCount}건은 "60분 하한선" 의심(최소창 없이 재탐색하면 훨씬 이른 시점이 나옴) — 아래 표의 ⏱ 표시 참고</small>` : '') + `</p>`;
   html+='<table class="cmp-table"><thead><tr><th>교량</th><th>건수</th><th>평균 시차</th></tr></thead><tbody>';
   for(const [br,arr] of Object.entries(byBridge)){
     const avg=Math.round(arr.reduce((a,v)=>a+v,0)/arr.length);
@@ -1555,10 +1564,12 @@ function renderReleaseLagPanel(){
   }
   html+='</tbody></table>';
   const recent=[...logData].sort((a,b)=>new Date(b.damTime)-new Date(a.damTime)).slice(0,12);
-  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b></p>';
+  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b> · ⏱ = 최소창(60분) 없이 재탐색한 값 (60분과 15분 이상 차이나면 하한선 의심)</p>';
   html+='<table class="cmp-table"><thead><tr><th>교량</th><th>방류 변화</th><th>방향</th><th>시차</th><th>수위 반응</th></tr></thead><tbody>';
   for(const e of recent){
-    html+=`<tr><td>${e.bridge}</td><td>${mdhhmm(new Date(e.damTime))} (${e.damBefore}→${e.damAfter})</td><td>${e.direction}</td><td>${e.lagMinutes}분</td><td>${mdhhmm(new Date(e.waterTime))} (${e.waterRateCmHr>0?'+':''}${e.waterRateCmHr}cm/h)</td></tr>`;
+    const floorTxt = e.unclampedLagMinutes!=null
+      ? `<br><small style="color:${e.floorSuspect?'#f59e0b':'var(--muted)'}">⏱${e.unclampedLagMinutes}분${e.floorSuspect?' (하한선 의심)':''}</small>` : '';
+    html+=`<tr><td>${e.bridge}</td><td>${mdhhmm(new Date(e.damTime))} (${e.damBefore}→${e.damAfter})</td><td>${e.direction}</td><td>${e.lagMinutes}분${floorTxt}</td><td>${mdhhmm(new Date(e.waterTime))} (${e.waterRateCmHr>0?'+':''}${e.waterRateCmHr}cm/h)</td></tr>`;
   }
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -1566,7 +1577,7 @@ function renderReleaseLagPanel(){
 function exportReleaseLagLog(){
   const logData=loadReleaseLagLog();
   if(!logData.length){ alert('내보낼 로그가 없습니다.'); return; }
-  const headers=['bridge','code','direction','damTime','damBefore','damAfter','damDelta','waterTime','waterValue','waterRateCmHr','lagMinutes','loggedAt'];
+  const headers=['bridge','code','direction','damTime','damBefore','damAfter','damDelta','waterTime','waterValue','waterRateCmHr','lagMinutes','unclampedLagMinutes','floorSuspect','loggedAt'];
   const rows=logData.map(e=>headers.map(h=>e[h]??'').join(','));
   const csv=[headers.join(','), ...rows].join('\n');
   const blob=new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});

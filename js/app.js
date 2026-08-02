@@ -223,9 +223,10 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
   // ★ 수심: 해도 실측(방류 200㎥/s 기준 최소 수심) 우선. 없으면 추정 하상고 폴백.
   //   최소 수심을 쓰면 단면적이 작게 나와 유속이 크게 산출됨 → 안전 측 보수적.
   const cd = chartDepthFor(b.bridge, b.code, wl);
-  const depth = cd?.main ?? (wl!=null && sec.bedEl!=null ? wl - sec.bedEl : null);
+  const depth = cd?.avgPier ?? cd?.main ?? (wl!=null && sec.bedEl!=null ? wl - sec.bedEl : null);
   if(!(depth>0)) return null;
-  const depthSrc = cd?.main ? (cd.corrected?`해도 실시간보정(Δh=${cd.deltaH>=0?'+':''}${cd.deltaH}m,${cd.reliability})`:'해도 실측(방류200 기준, 정적)') : '추정 하상고';
+  const depthSrc = cd?.avgPier ? `해도 실측(교각 ${Object.keys(getBedElForBridge(b.bridge,NAV_CHART_DB)?.piers||{}).length}곳 평균${cd.corrected?', 실시간보정':', 방류200 기준'})`
+    : cd?.main ? (cd.corrected?`해도 실시간보정(Δh=${cd.deltaH>=0?'+':''}${cd.deltaH}m,${cd.reliability})`:'해도 실측(방류200 기준, 정적)') : '추정 하상고';
   const area = geo.widthM * depth * sec.shape;
   const vel = Q/area;
   // 물리적 타당성 검사: 한강 조석 구간에서 |유속| 2m/s 초과는 비현실적
@@ -269,7 +270,7 @@ function calcVelocity(fw, wl, stationCode, bridgeName){
   if(!sec || wl === null) return null;
   // ★ 해도 실측 수심(방류 200㎥/s 기준) 우선 — 기존 `wl − 하상고`는 전제가 틀렸음
   const cd = bridgeName ? chartDepthFor(bridgeName, stationCode, wl) : null;
-  const depth = cd?.main ?? (wl - sec.bedEl);
+  const depth = cd?.avgPier ?? cd?.main ?? (wl - sec.bedEl);
   if(depth <= 0.1) return null;
   const area = sec.width * depth * sec.shape;
 
@@ -369,15 +370,15 @@ function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont
     const v=cont.vel, a=Math.abs(v);
     const detail=`구간 ${cont.reachKm}km·수면적 ${cont.surfAreaKm2}km² · 저류 ${cont.dVdt>0?'+':''}${cont.dVdt}㎥/s · 통과유량 ${cont.Q}㎥/s`;
     if(cont.dir==='up'){
-      return {signedVel:-a, absVel:a, dir:'up', dirLabel:'상류향 역류',
+      return {signedVel:-a, absVel:a, dir:'up', dirLabel:'상류향 역류', reliable:cont.reliable,
               src:'연속방정식(저류법)',
               note:`밀물 역류 — ${detail}${damSurging?' ⚠ 방류 급증 동반, 오차 증가':''}`};
     }
     if(cont.dir==='slack'){
-      return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)',
+      return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(유속 최소)', reliable:cont.reliable,
               src:'연속방정식(저류법)', note:`통과유량 ≈0 — ${detail}`};
     }
-    return {signedVel:a, absVel:a, dir:'down', dirLabel:'하류향',
+    return {signedVel:a, absVel:a, dir:'down', dirLabel:'하류향', reliable:cont.reliable,
             src:'연속방정식(저류법)', note:`하류 흐름 — ${detail}`};
   }
 
@@ -472,11 +473,36 @@ let singokTideState = { status:'unknown', swl:null, time:null, checkedAt:null };
 let LAST_QUERY_CTX = null; // ★ 2026-07-21: 물때표(예측) 기능용 — 마지막 조회의 b/currentState/키 저장
 
 // ── 물때 계산 ──────────────────────────────────────────────────
-// 1순위: KHOA 조석 데이터(tideRows)의 고/저조 진폭으로 실측 기반 계산
-// 2순위(fallback): 달력 역산 — 앵커 1999-12-17 (2026-07-01=8물 검증 완료)
-// ※ 달력 역산은 ±1~2물 오차 가능 → 반드시 "달력 역산" 라벨 표시
-const LUNAR_ANCHOR = new Date(1999, 11, 17, 0, 0, 0); // 1999-12-17 (검증된 앵커)
-const LUNAR_CYCLE = 14.7653;
+// ★ 2026-07-25 전면 재수정: 기존 "관측 기반"(조차 순위 1~8) 방식은 실제 물때 번호
+//   (1~13물+조금+무시, 15일 주기) 와 전혀 다른 척도였음 — 실사용자 확인 결과 오늘
+//   실제 3물인데 대시보드는 7물로 표시. 원인 둘:
+//   ① "관측 기반" 계산이 진짜 물때 정의(음력 날짜 기반 15일 순환)가 아니라 그냥
+//      앞뒤 8일 중 조차 순위를 1~8로 매긴 것이었음 — 근본적으로 다른 지표.
+//   ② 기존 달력 역산 앵커(1999-12-17, 14.7653일 주기)도 재검증하니 실제와 어긋남.
+//   바다타임(국립해양조사원 공식) 실측 대조로 새 기준일 확보: 2026-07-23 = 1물.
+//   물때는 음력 월 경계와 무관하게 그냥 매일 +1, 15일마다 순환(1~13물→조금→무시)
+//   하므로 복잡한 음력 변환 없이 단순 날짜 차이만으로 정확히 계산 가능.
+const TIDE_NUM_ANCHOR = new Date(2026, 6, 23, 0, 0, 0); // 2026-07-23 = 1물 (바다타임 실측 확인, 2026-07-25)
+function tideNumberCalc(date){
+  const dayOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((dayOnly - TIDE_NUM_ANCHOR) / 86400000);
+  const k = ((diffDays % 15) + 15) % 15; // 0~14
+  let n, name;
+  if(k <= 12){ n = k+1; name = (n===8) ? '중간물(조금쪽)' : tideNameFromN(n); }
+  else if(k === 13){ n = 8; name = '조금'; }
+  else { n = 14; name = '무시'; }
+  return {
+    n, name,
+    basis: `달력 역산 (2026-07-23=1물 기준 검증, 15일 순환 · ±수일 오차 시 재검증 필요)`,
+    source: 'calc'
+  };
+}
+
+// 메인: 정확도가 검증된 달력 역산을 그대로 사용.
+// (기존 "관측 기반" 조차-순위 방식은 물때 정의 자체와 달라서 제거함 — 아래 참고용 함수는 남겨두되 호출 안 함)
+function tideNumber(date, tideRows){
+  return tideNumberCalc(date);
+}
 
 // ── 한강 교량 좌표 및 하구거리 ────────────────────────────────
 // 위도·경도: 실측 GPS 기반 (Google Maps 검증)
@@ -731,32 +757,7 @@ function tideNumberFromRows(date, tideRows){
   };
 }
 
-// 2순위(fallback): 달력 역산
-// 앵커 1999-12-17 → 2026-07-01=8물 검증 완료
-// ±1~2물 오차 가능, 반드시 "달력 역산" 라벨 표시
-function tideNumberCalc(date){
-  const dayOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diffDays = (dayOnly - LUNAR_ANCHOR) / 86400000;
-  const cyclePos = ((diffDays % LUNAR_CYCLE) + LUNAR_CYCLE) % LUNAR_CYCLE;
-  const step = LUNAR_CYCLE / 15;
-  let n = Math.floor(cyclePos / step) + 1;
-  if(n > 15) n = 15; if(n < 1) n = 1;
-  const name = tideNameFromN(n);
-  return {
-    n, name,
-    basis: `달력 역산 (±1~2물 오차 가능 · 조석 데이터 없을 때만 사용)`,
-    source: 'calc'
-  };
-}
-
-// 메인: tideRows 있으면 실측 기반, 없으면 달력 역산
-function tideNumber(date, tideRows){
-  if(tideRows && tideRows.length >= 6){
-    const fromRows = tideNumberFromRows(date, tideRows);
-    if(fromRows) return fromRows;
-  }
-  return tideNumberCalc(date);
-}
+// (구 버전 tideNumberCalc/tideNumber는 위쪽(신규 검증판)으로 대체되어 제거함 — 2026-07-25)
 
 // ── 신곡수중보 조석 전파 판단 ──────────────────────────────────
 // ── 신곡수중보 조석 영향 판단 (owl-swl 수위차 기반) ────────────────
@@ -1012,14 +1013,22 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
 function renderTideTableRows(rows, offsetMin, bridgeName){
   if(!rows || !rows.length) return '<p class="muted small">데이터 없음</p>';
   const trs = rows.map(r=>{
-    const timeTxt = hhmm(r.t);
+    const timeTxt = mdhhmm(r.t);
     const tideTxt = r.tideVal!=null ? `${r.phase} (${r.tideVal.toFixed(0)}cm)` : '조회 실패';
     let dirTxt='—', dirColor='var(--muted)';
     if(r.flowDir){
+      const unreliable = r.flowDir.reliable===false;
       if(r.flowDir.dir==='slack'){ dirTxt='⏸ 정조'; dirColor='#0ea56b'; }
       else if(r.flowDir.dir==='up'){ dirTxt=`↑상류 ${r.flowDir.absVel.toFixed(2)}m/s`; dirColor='#3b82f6'; }
       else if(r.flowDir.dir==='down'){ dirTxt=`↓하류 ${r.flowDir.absVel.toFixed(2)}m/s`; dirColor='#f59e0b'; }
       else { dirTxt='혼합/불확실'; dirColor='#b7791f'; }
+      // ★ 2026-08-02 수정: 원거리(잠실보 15km 초과) 구간 근사는 신뢰도 낮음 플래그가
+      // 있었는데 여기까지 전달이 안 돼서, 행주대교(29km) 등에서 7~8m/s 같은 비현실적
+      // 값이 경고 없이 그대로 표시되던 버그. 방향은 유지하되 숫자엔 강한 경고 부여.
+      if(unreliable && r.flowDir.dir!=='slack'){
+        dirTxt += ' ⚠️신뢰불가';
+        dirColor = '#ef4444';
+      }
     }
     return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:5px 6px;font-size:12px;white-space:nowrap">${timeTxt}</td>
@@ -1701,7 +1710,7 @@ function effectiveVelocity(state){
   }
   if(f.dir==='up'){
     return {value:f.absVel, signed:f.signedVel, label:'상류향 역류',
-            source:f.src||'추정', dir:'up', invalid:!byCont,
+            source:f.src||'추정', dir:'up', invalid:!byCont || f.reliable===false,
             note:`${f.note||''}${hq!=null?` · HQ곡선 원값 ${hq.toFixed(2)}m/s는 조석 역류 구간에서 무효라 제외`:''}`};
   }
   if(f.dir==='mixed'){
@@ -1709,7 +1718,7 @@ function effectiveVelocity(state){
   }
   // 하류: 연속방정식이 있으면 그 값을 우선
   if(byCont){
-    return {value:f.absVel, label:velocityLabel(f.absVel)?.label??'', source:f.src, dir:'down', invalid:false, note:f.note};
+    return {value:f.absVel, label:velocityLabel(f.absVel)?.label??'', source:f.src, dir:'down', invalid:f.reliable===false, note:f.note};
   }
   return {value:hq, label:state.velInfo?.label??'', source:state.velSource??'', dir:'down', invalid:false};
 }
@@ -2141,18 +2150,33 @@ function getH200(stationCode){
 
 // 교량명 → 해도 기준 수심(방류 200㎥/s) {main, deepest} · stationCode+wl 주면 가능한 경우 실시간 보정
 // 보정 불가/미제공 시 기존과 동일하게 200㎥/s 기준 정적값(최소 수심) 반환
+// ★ 2026-07-25 신규: 교각별(구간별) 평균 수심 — 유속 계산의 단면적에 사용.
+// 기존엔 '주항로' 한 지점 수심만 썼는데, 실제로는 교량마다 얕은 구간(북단·선착장 방향 등)이
+// 섞여있어서 단일 지점보다 여러 교각 실측치의 평균이 단면적을 더 대표한다.
+function avgPierDepthOf(info){
+  if(!info?.piers) return null;
+  const depths = Object.values(info.piers).map(z=>{
+    if(z.bedEl_repr!=null) return Math.abs(z.bedEl_repr);
+    if(z.bedEl_max!=null && z.bedEl_min!=null) return (Math.abs(z.bedEl_max)+Math.abs(z.bedEl_min))/2;
+    return null;
+  }).filter(v=>v!=null && v>0);
+  if(!depths.length) return null;
+  return Number((depths.reduce((a,v)=>a+v,0)/depths.length).toFixed(2));
+}
 function chartDepthFor(bridgeName, stationCode, wl){
   const info = getBedElForBridge(bridgeName, NAV_CHART_DB);
   if(!info) return null;
-  const base = { main: chartDepth(info.bedEl_main), deepest: chartDepth(info.bedEl_deep), warn: chartDepth(info.bedEl_warn) };
+  const avgPier = avgPierDepthOf(info);
+  const base = { main: chartDepth(info.bedEl_main), deepest: chartDepth(info.bedEl_deep), warn: chartDepth(info.bedEl_warn), avgPier };
   if(stationCode==null || wl==null) return {...base, corrected:false};
   const h200 = getH200(stationCode);
   if(!h200) return {...base, corrected:false}; // 이 관측소는 보정 불가(광진교·한강대교 등)
   const deltaH = Number((wl - h200.h).toFixed(2));
   const corrMain = base.main!=null ? Number(Math.max(0.1, base.main+deltaH).toFixed(2)) : null;
   const corrDeep = base.deepest!=null ? Number(Math.max(0.1, base.deepest+deltaH).toFixed(2)) : null;
+  const corrAvgPier = avgPier!=null ? Number(Math.max(0.1, avgPier+deltaH).toFixed(2)) : null;
   return {
-    main:corrMain, deepest:corrDeep, warn:base.warn, corrected:true,
+    main:corrMain, deepest:corrDeep, warn:base.warn, avgPier:corrAvgPier, corrected:true,
     baseMain:base.main, baseDeep:base.deepest, deltaH,
     reliability: DEPTH_CORR_STATIONS[stationCode], h200:h200.h, h200InRange:h200.inRange,
   };

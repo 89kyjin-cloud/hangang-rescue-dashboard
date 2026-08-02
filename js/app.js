@@ -1366,6 +1366,12 @@ const WATER_RESPONSE_WINDOW_MIN = 120;      // ★ 2026-07-24 수정: 20분→12
                                              // 며칠에 걸쳐 완만하게 누적되는 형태라, 20분 순간변화율로는
                                              // 절대 안 걸림(실측 사례: 광진교 4일간 1.3→1.85m 상승, 20분 순간
                                              // 변화율은 노이즈에 묻혀 3cm/h를 넘은 적이 없었음). 2시간 평균으로 완화.
+const RESPONSE_SUSTAIN_MIN = 90;   // ★ 2026-08-02 신규: 실측 CSV 분석 결과 36건 중 23건(64%)이 정확히
+                                    // 최소창(60분)에 몰려있었음 — 진짜 반응이 아니라 배경 노이즈가 우연히
+                                    // 임계값을 스치는 순간을 잡고 있었던 것. "한 번 넘으면 인정" 대신
+                                    // "넘은 뒤 일정 시간 이상 같은 방향이 계속 유지돼야 인정"으로 강화.
+const RESPONSE_SUSTAIN_RATIO = 0.6; // 지속창 안에서 이 비율 이상 시점이 방향 유지해야 "지속됨"으로 인정
+const RESPONSE_SUSTAIN_THRESHOLD_FACTOR = 0.5; // 지속 확인 시엔 완화된 기준(원 임계값의 절반)으로 방향성만 확인
 
 // 방류량 시계열에서 유의미한 계단식 변화 시작점(이벤트) 탐지
 function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=180){
@@ -1394,7 +1400,31 @@ function findDamStepEvents(damPts, stepThreshold=DAM_STEP_THRESHOLD, windowMin=1
   }
   return events;
 }
+// 후보 시점 이후 일정 시간 동안 같은 방향의 변화율이 유지되는지 확인 (노이즈 필터)
+function isResponseSustained(waterPts, startIdx, direction, rateThreshold){
+  const startTime = waterPts[startIdx].time.getTime();
+  const endTime = startTime + RESPONSE_SUSTAIN_MIN*60000;
+  const relaxedThreshold = rateThreshold * RESPONSE_SUSTAIN_THRESHOLD_FACTOR;
+  let checked=0, ok=0;
+  for(let i=startIdx;i<waterPts.length;i++){
+    const t=waterPts[i].time.getTime();
+    if(t>endTime) break;
+    let j=i-1;
+    while(j>0 && (t-waterPts[j].time.getTime())<WATER_RESPONSE_WINDOW_MIN*60000) j--;
+    const dtHr=(t-waterPts[j].time.getTime())/3600000;
+    if(!(dtHr>0)) continue;
+    const rateCmHr=((waterPts[i].value-waterPts[j].value)*100)/dtHr;
+    checked++;
+    const stillCrossing = (direction>0 && rateCmHr>=relaxedThreshold) || (direction<0 && rateCmHr<=-relaxedThreshold);
+    if(stillCrossing) ok++;
+  }
+  if(checked===0) return false;
+  return (ok/checked) >= RESPONSE_SUSTAIN_RATIO;
+}
 // 방류 이벤트 이후, 같은 방향으로 수위가 반응하기 시작하는 첫 시점 탐색
+// ★ 2026-08-02 수정: 임계값을 처음 넘는 순간 바로 인정하지 않고, 그 뒤 RESPONSE_SUSTAIN_MIN
+// 동안 방향이 유지되는지(isResponseSustained) 추가로 확인함 — 실측 CSV에서 60분(최소창)에
+// 응답이 몰리는 현상(노이즈 오탐)이 발견되어 도입.
 function findWaterResponseTime(waterPts, afterTime, direction, minWin=RELEASE_LAG_MIN_WINDOW_MIN, maxWin=RELEASE_LAG_MAX_WINDOW_MIN, rateThreshold=WATER_RESPONSE_THRESHOLD_CMHR){
   const searchStart=afterTime.getTime()+minWin*60000;
   const searchEnd=afterTime.getTime()+maxWin*60000;
@@ -1407,8 +1437,10 @@ function findWaterResponseTime(waterPts, afterTime, direction, minWin=RELEASE_LA
     const dtHr=(t-waterPts[j].time.getTime())/3600000;
     if(!(dtHr>0)) continue;
     const rateCmHr=((waterPts[i].value-waterPts[j].value)*100)/dtHr;
-    if(direction>0 && rateCmHr>=rateThreshold) return {time:waterPts[i].time, value:waterPts[i].value, rateCmHr:Number(rateCmHr.toFixed(1))};
-    if(direction<0 && rateCmHr<=-rateThreshold) return {time:waterPts[i].time, value:waterPts[i].value, rateCmHr:Number(rateCmHr.toFixed(1))};
+    const crosses = (direction>0 && rateCmHr>=rateThreshold) || (direction<0 && rateCmHr<=-rateThreshold);
+    if(!crosses) continue;
+    if(!isResponseSustained(waterPts, i, direction, rateThreshold)) continue; // 노이즈로 판단, 계속 탐색
+    return {time:waterPts[i].time, value:waterPts[i].value, rateCmHr:Number(rateCmHr.toFixed(1))};
   }
   return null;
 }

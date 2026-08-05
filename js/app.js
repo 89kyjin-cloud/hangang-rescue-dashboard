@@ -649,7 +649,7 @@ const BRIDGES = [
   {bridge:'천호대교',    zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:265},
   {bridge:'광진교',      zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:266},
   {bridge:'올림픽대교',  zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:268},
-  {bridge:'잠실철교',    zone:'잠실수중보 상류',    station:'서울시(청담대교)', code:'1018662', tide:false, tideRealtime:false, offset:null, releaseLag:270},
+  {bridge:'잠실철교',    zone:'잠실수중보 상류',    station:'서울시(광진교)', code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:270},
   // ─── 잠실수중보 하류 (신곡수중보 swl 실시간 판단) ─────────────
   {bridge:'잠실대교',    zone:'수중보 하류(상)',    station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:282, releaseLag:272},
   {bridge:'청담대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:280, releaseLag:274},
@@ -1350,7 +1350,8 @@ function clearTideLagLog(){
 //   같은 방향(증가→상승/감소→하강)으로 교량 수위에 나타나는 첫 시점을 찾아 그 차이를 시차로 기록.
 // [범위 제한 — 중요] 조석 구간(tide:true) 교량은 절대 기록하지 않음. 조석 신호와
 //   방류 신호가 수위 변화에 뒤섞여서 방류 시차만 순수하게 뽑아낼 수 없기 때문.
-//   비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교, 잠실보 상류)만 기록 —
+//   비조석 구간 중에서도 실제 관측소 자체가 조석 없는 곳(강동·구리암사·천호·광진교·올림픽대교,
+//   전부 광진교 관측소, 잠실철교 포함 — 2026-08-02 station 매핑 오류 수정)만 기록 —
 //   이 구간은 조석 영향이 없어 수위 변화 = 방류 변화로 봐도 되는 유일한 곳.
 // [한계] 자연 유량 변동(강우 등)과 댐 방류 변화를 구분 못함 — 표본 많이 쌓여야 신뢰도 상승.
 const RELEASE_LAG_LOG_KEY = 'releaseLagLog';
@@ -1493,8 +1494,16 @@ function findMaxWindowDelta(damPts, windowMin){
   }
   return best;
 }
+// ★ 2026-08-02 발견 및 수정: 잠실철교(tide:false)가 실제로는 청담대교(1018662, 조석 있는 관측소)
+// 수위를 빌려쓰고 있었음 — "교량 위치는 조석 없음"과 "빌려쓰는 관측소 자체가 조석 없음"은 다른 얘기.
+// 잠실철교는 지리적으로 다른 5개 비조석 교량과 같은 잠실보 상류 구간이라, station 매핑 자체를
+// 광진교(1018640)로 정정함(BRIDGES 배열 수정). 잠실철교의 들쭉날쭉했던 시차(60~520분)가
+// 청담대교의 잔여 조석 신호를 방류 반응으로 착각한 결과였을 가능성이 높음.
+// 아래 체크는 향후 비슷한 매핑 오류가 생겨도 자동으로 걸러지도록 남겨둔 안전장치.
+const GENUINELY_NONTIDAL_STATION_CODES = ['1018640']; // 광진교만 해당 — 나머지 5개 실측 관측소는 전부 조석 영향권
 function accumulateReleaseLag(b, damRows, waterPts){
   if(b.tide!==false) return {added:0, reason:'조석 구간 교량이라 제외됨(비조석 6개 교량만 기록)'};
+  if(!GENUINELY_NONTIDAL_STATION_CODES.includes(b.code)) return {added:0, reason:`교량 자체는 조석 제외 구간이지만, 빌려쓰는 관측소(${b.station||b.code})가 실제로는 조석 영향권이라 신호 오염 우려로 제외됨(광진교 관측소 교량만 기록)`};
   if(!Array.isArray(waterPts) || waterPts.length<3) return {added:0, reason:'수위 데이터 부족(3개 미만)'};
   // ★ 2026-07-25 근본원인 수정: rowsToPoints는 정렬을 안 해줌 — HRFCO가 내림차순으로 줄 수 있어서
   // 반드시 오름차순 정렬 필요. 이걸 빠뜨려서 이번 세션 내내 창-탐색 로직이 시간 순서를 거꾸로
@@ -1546,7 +1555,7 @@ function renderReleaseLagPanel(){
   const el=$('releaseLagPanel'); if(!el) return;
   const logData=loadReleaseLagLog();
   if(!logData.length){
-    el.innerHTML='<p class="muted">아직 누적된 방류 시차 데이터가 없습니다. 비조석 구간 교량(강동·구리암사·천호·광진교·올림픽대교·잠실철교)을 조회하면, 그 사이 방류량이 크게 바뀔 때 자동으로 쌓입니다.</p>';
+    el.innerHTML='<p class="muted">아직 누적된 방류 시차 데이터가 없습니다. 비조석 구간 교량(강동·구리암사·천호·광진교·올림픽대교·잠실철교, 전부 광진교 관측소 공유)을 조회하면, 그 사이 방류량이 크게 바뀔 때 자동으로 쌓입니다.</p>';
     return;
   }
   const lags=logData.map(e=>e.lagMinutes);
@@ -1555,7 +1564,7 @@ function renderReleaseLagPanel(){
   const byBridge={};
   for(const e of logData){ (byBridge[e.bridge]=byBridge[e.bridge]||[]).push(e.lagMinutes); }
   let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min}~${max}분 · <b>참고용, 코드의 releaseLag 값엔 아직 미반영</b><br>`
-         + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교)에서만 기록됩니다 — 조석 구간은 신호가 뒤섞여 제외.</small>`
+         + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교, 전부 광진교 관측소)에서만 기록됩니다.</small>`
          + (floorSuspectCount ? `<br><small style="color:#f59e0b">⚠ ${floorSuspectCount}건은 "60분 하한선" 의심(최소창 없이 재탐색하면 훨씬 이른 시점이 나옴) — 아래 표의 ⏱ 표시 참고</small>` : '') + `</p>`;
   html+='<table class="cmp-table"><thead><tr><th>교량</th><th>건수</th><th>평균 시차</th></tr></thead><tbody>';
   for(const [br,arr] of Object.entries(byBridge)){

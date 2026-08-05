@@ -651,7 +651,12 @@ const BRIDGES = [
   {bridge:'올림픽대교',  zone:'수중보 상류',       station:'서울시(광진교)',   code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:268},
   {bridge:'잠실철교',    zone:'잠실수중보 상류',    station:'서울시(광진교)', code:'1018640', tide:false, tideRealtime:false, offset:null, releaseLag:270},
   // ─── 잠실수중보 하류 (신곡수중보 swl 실시간 판단) ─────────────
-  {bridge:'잠실대교',    zone:'수중보 하류(상)',    station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:282, releaseLag:272},
+  // ★ 2026-08-02 재분류(현장 실측 근거, 영진님 확인): 잠실대교는 잠실수중보 바로 하류라
+  // 지금까지 tide:true·offset 282분(같은 관측소 공유 교량 중 최장)으로 "조석 가장 약하게
+  // 도달"로 모델링돼 있었으나, 실제 현장에서는 조석 영향이 방류량 대비 무시할 수준이라는
+  // 확인을 받아 tide:false로 전환. 잠실철교(매핑 오류 수정)와는 다른 사유 — 이쪽은 실측 기반
+  // 재분류. 수위 관측소는 그대로 청담대교 유지(물리적으로 가장 가까운 실측 지점이라 유효).
+  {bridge:'잠실대교',    zone:'수중보 하류(상, 조석 무시 가능)', station:'서울시(청담대교)', code:'1018662', tide:false, tideRealtime:false, offset:null, releaseLag:272},
   {bridge:'청담대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:280, releaseLag:274},
   {bridge:'영동대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:278, releaseLag:276},
   {bridge:'성수대교',    zone:'중상류',            station:'서울시(청담대교)', code:'1018662', tide:true, tideRealtime:true, offset:277, releaseLag:280},
@@ -1356,7 +1361,18 @@ function clearTideLagLog(){
 // [한계] 자연 유량 변동(강우 등)과 댐 방류 변화를 구분 못함 — 표본 많이 쌓여야 신뢰도 상승.
 const RELEASE_LAG_LOG_KEY = 'releaseLagLog';
 const RELEASE_LAG_MAX_ENTRIES = 500;
-const RELEASE_LAG_MIN_WINDOW_MIN = 60;   // 60분 미만 시차는 물리적으로 불가 → 오탐 제외
+const RELEASE_LAG_MIN_WINDOW_MIN = 60;   // (구) 전 교량 공통 하한 — 아래 물리 기반 하한으로 대체됨, 최소 안전값으로만 유지
+// ★ 2026-08-05 신규: 강수 데이터 없이도 걸러지는 명백한 오탐 — 팔당댐~교량 거리를 홍수파
+// 전파속도(4m/s, 매우 관대하게 잡은 상한)로 나누면 그 교량의 "물리적으로 가능한 최소 시차"가
+// 나옴. 실측 사례: 올림픽대교(25km)는 최소 104분 걸려야 하는데 로그엔 0~60분짜리가 잔뜩
+// 있었음 — 이건 노이즈가 아니라 애초에 물리법칙 위반이라 강수 여부와 무관하게 배제 가능.
+const MAX_WAVE_CELERITY_MPS = 4; // 관대하게 잡은 홍수파 전파속도 상한(실측 유속 1.5~2.3m/s보다 훨씬 빠르게 잡음)
+function physicalMinLagMin(bridgeName){
+  const geo = BRIDGE_GEO[bridgeName];
+  if(!geo || geo.distFromPaldangKm==null) return RELEASE_LAG_MIN_WINDOW_MIN;
+  const minutes = (geo.distFromPaldangKm*1000) / MAX_WAVE_CELERITY_MPS / 60;
+  return Math.max(RELEASE_LAG_MIN_WINDOW_MIN, Math.round(minutes));
+}
 const RELEASE_LAG_MAX_WINDOW_MIN = 1440; // ★ 2026-07-24 수정: 480→1440분(24시간). 실측 그래프 대조 결과
                                           // 비조석 상류 구간은 반응이 8시간 이후(최대 하루 가까이)에야 나타남 —
                                           // 8시간 창은 실제 상승 국면을 놓치고 그 이전의 무관한 하강 국면을 보고 있었음.
@@ -1445,14 +1461,15 @@ function findWaterResponseTime(waterPts, afterTime, direction, minWin=RELEASE_LA
   }
   return null;
 }
-function matchReleaseLagPairs(damPts, waterPts){
+function matchReleaseLagPairs(damPts, waterPts, bridgeName){
+  const minWin = physicalMinLagMin(bridgeName);
   const events=findDamStepEvents(damPts);
   const pairs=[];
   for(const ev of events){
-    const resp=findWaterResponseTime(waterPts, ev.time, ev.direction);
+    const resp=findWaterResponseTime(waterPts, ev.time, ev.direction, minWin);
     if(!resp) continue;
     const lagMinutes=Math.round((resp.time-ev.time)/60000);
-    if(lagMinutes<RELEASE_LAG_MIN_WINDOW_MIN || lagMinutes>RELEASE_LAG_MAX_WINDOW_MIN) continue;
+    if(lagMinutes<minWin || lagMinutes>RELEASE_LAG_MAX_WINDOW_MIN) continue;
     pairs.push({
       direction: ev.direction>0?'증가':'감소',
       damTime:ev.time, damBefore:Math.round(ev.before), damAfter:Math.round(ev.after), damDelta:Math.round(ev.delta),
@@ -1511,13 +1528,14 @@ function accumulateReleaseLag(b, damRows, waterPts){
   const damPts=rowsToPoints(damRows, DAM_KEYS).sort((a,b)=>a.time-b.time);
   waterPts=[...waterPts].sort((a,b)=>a.time-b.time);
   const events=findDamStepEvents(damPts);
-  const pairs=matchReleaseLagPairs(damPts, waterPts);
+  const pairs=matchReleaseLagPairs(damPts, waterPts, b.bridge);
   const maxDelta=findMaxWindowDelta(damPts, 180); // 진단용: 3시간창 기준 실제 최대 변화(임계값·중복제거 무관)
+  const physMin = physicalMinLagMin(b.bridge);
   if(!pairs.length){
     let reason;
     if(events.length){
       const detail=events.map(ev=>{
-        const r=maxRateInWindow(waterPts, ev.time, RELEASE_LAG_MIN_WINDOW_MIN, RELEASE_LAG_MAX_WINDOW_MIN, WATER_RESPONSE_WINDOW_MIN);
+        const r=maxRateInWindow(waterPts, ev.time, physMin, RELEASE_LAG_MAX_WINDOW_MIN, WATER_RESPONSE_WINDOW_MIN);
         return `[${mdhhmm(ev.time)} Δ${ev.delta>0?'+':''}${Math.round(ev.delta)}㎥/s → 창내 최대반응 ${r.maxSigned>=0?'+':''}${r.maxSigned}cm/h(임계값 ${WATER_RESPONSE_THRESHOLD_CMHR})]`;
       }).join(' ');
       reason=`방류 이벤트 ${events.length}건 감지, 전부 반응 임계값 미달 — ${detail} | 진단: 전구간 3h창 최대변화 ${maxDelta.time?mdhhmm(maxDelta.time)+' '+(maxDelta.delta>0?'+':'')+Math.round(maxDelta.delta)+'㎥/s('+Math.round(maxDelta.before)+'→'+Math.round(maxDelta.after)+')':'없음'}`;
@@ -1533,13 +1551,13 @@ function accumulateReleaseLag(b, damRows, waterPts){
     const key=`${b.code}_${Math.floor(p.damTime.getTime()/60000)}`;
     if(seen.has(key)) continue;
     seen.add(key);
-    // ★ 2026-08-02 신규: 최소창(60분) 없이 재탐색해서 60분이 진짜 반응인지 floor 아티팩트인지 검증.
-    //   지속성 기준(RESPONSE_SUSTAIN_MIN/RATIO)은 동일하게 적용 — 이것만으로도 노이즈는 걸러지므로,
-    //   minWin=0으로 풀었을 때 결과가 크게 당겨지면 60분은 floor였다는 뜻.
+    // ★ 2026-08-05 수정: 이제 matchReleaseLagPairs가 물리적 최소(physMin)를 이미 하한선으로
+    //   적용하므로, 여기 unclamped 체크는 "물리적 하한선 안에서도 지속성 필터가 floor에
+    //   붙어있는지"를 보는 2차 진단(참고용)으로 격하. minWin=0(물리 하한도 무시)으로 풀었을 때와 비교.
     const eventForDir = events.find(ev=>ev.time.getTime()===p.damTime.getTime());
     const unclamped = eventForDir ? findWaterResponseTime(waterPts, eventForDir.time, eventForDir.direction, 0, RELEASE_LAG_MAX_WINDOW_MIN) : null;
     const unclampedLag = unclamped ? Math.round((unclamped.time - eventForDir.time)/60000) : null;
-    const floorSuspect = (unclampedLag!=null && p.lagMinutes<=65 && unclampedLag < p.lagMinutes - 15);
+    const floorSuspect = (unclampedLag!=null && p.lagMinutes<=physMin+5 && unclampedLag < p.lagMinutes - 15);
     existing.push({
       bridge:b.bridge, code:b.code, direction:p.direction,
       damTime:p.damTime.toISOString(), damBefore:p.damBefore, damAfter:p.damAfter, damDelta:p.damDelta,
@@ -1565,7 +1583,7 @@ function renderReleaseLagPanel(){
   for(const e of logData){ (byBridge[e.bridge]=byBridge[e.bridge]||[]).push(e.lagMinutes); }
   let html=`<p class="muted small">누적 ${logData.length}건 · 시차 범위 ${min}~${max}분 · <b>참고용, 코드의 releaseLag 값엔 아직 미반영</b><br>`
          + `<small>비조석 구간(강동·구리암사·천호·광진교·올림픽대교·잠실철교, 전부 광진교 관측소)에서만 기록됩니다.</small>`
-         + (floorSuspectCount ? `<br><small style="color:#f59e0b">⚠ ${floorSuspectCount}건은 "60분 하한선" 의심(최소창 없이 재탐색하면 훨씬 이른 시점이 나옴) — 아래 표의 ⏱ 표시 참고</small>` : '') + `</p>`;
+         + (floorSuspectCount ? `<br><small style="color:#f59e0b">⚠ ${floorSuspectCount}건은 물리적 최소시간 하한선 의심(모든 하한을 무시하고 재탐색하면 훨씬 이른 시점이 나옴) — 아래 표의 ⏱ 표시 참고</small>` : '') + `</p>`;
   html+='<table class="cmp-table"><thead><tr><th>교량</th><th>건수</th><th>평균 시차</th></tr></thead><tbody>';
   for(const [br,arr] of Object.entries(byBridge)){
     const avg=Math.round(arr.reduce((a,v)=>a+v,0)/arr.length);
@@ -1573,7 +1591,7 @@ function renderReleaseLagPanel(){
   }
   html+='</tbody></table>';
   const recent=[...logData].sort((a,b)=>new Date(b.damTime)-new Date(a.damTime)).slice(0,12);
-  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b> · ⏱ = 최소창(60분) 없이 재탐색한 값 (60분과 15분 이상 차이나면 하한선 의심)</p>';
+  html+='<p class="muted small" style="margin-top:10px"><b>최근 기록</b> · 시차는 이제 교량별 거리 기반 물리적 최소시간(팔당~교량 거리÷4m/s)을 하한으로 적용 · ⏱ = 모든 하한 무시하고 재탐색한 값</p>';
   html+='<table class="cmp-table"><thead><tr><th>교량</th><th>방류 변화</th><th>방향</th><th>시차</th><th>수위 반응</th></tr></thead><tbody>';
   for(const e of recent){
     const floorTxt = e.unclampedLagMinutes!=null

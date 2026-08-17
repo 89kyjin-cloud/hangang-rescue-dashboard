@@ -1114,7 +1114,7 @@ async function renderTideTable(){
     const now=new Date();
     const future=new Date(now.getTime()+13*3600000);
     const futureTideRows = await getTideRowsRange(tideKey, now, future);
-    const rows = buildTideTable(b, currentState, futureTideRows, 12, 60);
+    const rows = buildTideTable(b, currentState, futureTideRows, 12, 10);
     if(!rows){ el.innerHTML='<p class="muted small">예측 데이터를 만들 수 없습니다 (조석 조회 실패 또는 조회 이력 없음).</p>'; return; }
     const damCms = currentState?.damImpact?.value ?? null;
     const damping = rows.damping || {ratio:null, n:0};

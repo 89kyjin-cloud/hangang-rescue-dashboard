@@ -219,7 +219,15 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
   if(!(geo.distJamsilKm>0)) return null;   // 잠실대교=0km는 구간이 없어 계산 불가
 
   let dVdt, surfArea, method, reliable, gapKm=null;
-  const multi = stationRates?.length ? reachStorageRate(geo.distJamsilKm, stationRates) : null;
+  // ★ 2026-08-17 개선: 대상 교량 자신의 실측 변화율(rateCmHr)을 보간의 '실제 앵커점'으로
+  // 추가 — 기존엔 다중 관측소 적분에서 이 값을 안 쓰고 먼 이웃 관측소 두 점만으로
+  // 직선보간해서, 그 사이에 낀 교량(예: 성산대교, 한강대교13km~행주대교29km 사이)의
+  // 국지 신호가 심하게 희석됐음(실측으로 50배+ 과소평가 확인). 대상 교량 지점에
+  // 실측점을 끼워넣으면 그 주변 구간은 남의 값 어림짐작이 아니라 자기 실측 기준이 됨.
+  const augmentedRates = (stationRates?.length && rateCmHr!=null)
+    ? [...stationRates.filter(s=>Math.abs(s.distKm-geo.distJamsilKm)>0.1), {distKm:geo.distJamsilKm, rateCmHr}]
+    : stationRates;
+  const multi = augmentedRates?.length ? reachStorageRate(geo.distJamsilKm, augmentedRates) : null;
   const GAP_UNRELIABLE_KM = 10; // ★ 2026-08-17: 실측(성산대교) 근거로 도입한 임계값
   if(multi){
     // ★ 관측소별 실측 변화율로 구간 적분 — 조석 진폭 감쇠 반영

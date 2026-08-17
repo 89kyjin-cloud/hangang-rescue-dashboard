@@ -192,7 +192,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 <header class="topbar">
   <div>
     <div class="topbar-title">🌊 한강 수색환경</div>
-    <div class="topbar-sub">Phase 3.9.9 · 물때표도 다중관측소+자기실측 앵커 적용</div>
+    <div class="topbar-sub">Phase 3.10.1 · 정조판정 국지실측 우선(부이 실측 검증)</div>
   </div>
   <span class="badge-warn">검증 우선</span>
 </header>
@@ -349,6 +349,12 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     <div id="depthCard"><p class="muted">조회 후 표시됩니다.</p></div>
   </div>
 
+  <!-- 항행 정보 카드 -->
+  <div class="card" style="border-color:#1e3a5f">
+    <div class="section-title">🚤 항행 정보 <span class="muted">(운항기준도)</span></div>
+    <div id="navInfoCard"><p class="muted">조회 후 표시됩니다.</p></div>
+  </div>
+
   <!-- 교량 현황판 -->
   <div class="card">
     <div class="section-title">한강 전체 교량</div>
@@ -410,7 +416,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260817-futuremultistation" defer></script>
+<script src="js/app.js?v=20260817-localslackpriority" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기

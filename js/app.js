@@ -151,6 +151,17 @@ function reachStorageRate(targetKm, stationRates){
   const pts=[{distKm:0, rateCmHr:0}, ...stationRates.filter(s=>s.rateCmHr!=null)]
     .sort((a,b)=>a.distKm-b.distKm);
   if(pts.length<2) return null;
+  // ★ 2026-08-17 신규: 대상 교량이 걸쳐있는 두 실측 지점 사이 간격이 너무 넓으면
+  // (예: 한강대교 13km~행주대교 29km, 16km 공백) 직선보간이 국지적 신호를 심하게
+  // 희석시킴 — 실측 사례(성산대교 20.5km, 도보속도 상류역류 관측 vs 계산 저류 92㎥/s,
+  // 50배 이상 과소평가)로 확인됨. targetKm이 속한 구간의 간격을 계산해 반환.
+  let gapKm=0;
+  for(let i=0;i<pts.length-1;i++){
+    if(targetKm>=pts[i].distKm && targetKm<=pts[i+1].distKm){
+      gapKm = pts[i+1].distKm - pts[i].distKm; break;
+    }
+  }
+  if(targetKm>pts[pts.length-1].distKm) gapKm = targetKm - pts[pts.length-1].distKm;
   const rateAt=(km)=>{
     if(km<=pts[0].distKm) return pts[0].rateCmHr;
     if(km>=pts[pts.length-1].distKm) return pts[pts.length-1].rateCmHr;
@@ -185,7 +196,7 @@ function reachStorageRate(targetKm, stationRates){
     dVdt += wMid*segLen*rMid;
     area += wMid*segLen;
   }
-  return {dVdt, surfArea:area};
+  return {dVdt, surfArea:area, maxGapKm:gapKm};
 }
 
 // ── 연속방정식(저류법) 유속 ──────────────────────────────────
@@ -207,12 +218,16 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
   if(geo.distJamsilKm==null || !geo.widthM) return null;
   if(!(geo.distJamsilKm>0)) return null;   // 잠실대교=0km는 구간이 없어 계산 불가
 
-  let dVdt, surfArea, method, reliable;
+  let dVdt, surfArea, method, reliable, gapKm=null;
   const multi = stationRates?.length ? reachStorageRate(geo.distJamsilKm, stationRates) : null;
+  const GAP_UNRELIABLE_KM = 10; // ★ 2026-08-17: 실측(성산대교) 근거로 도입한 임계값
   if(multi){
     // ★ 관측소별 실측 변화율로 구간 적분 — 조석 진폭 감쇠 반영
-    dVdt=multi.dVdt; surfArea=multi.surfArea;
-    method='관측소 실측 구간적분'; reliable=true;
+    dVdt=multi.dVdt; surfArea=multi.surfArea; gapKm=multi.maxGapKm;
+    method='관측소 실측 구간적분';
+    // 대상 교량이 넓은 보간 공백(예: 한강대교13km~행주대교29km) 안에 있으면
+    // 국지적 신호가 희석되어 신뢰 불가 — 실측 사례로 확인(50배+ 과소평가)
+    reliable = !(gapKm!=null && gapKm>GAP_UNRELIABLE_KM);
   } else {
     // 폴백: 구간 전체를 대상 교량 변화율로 근사 (구간이 길수록 과대평가)
     surfArea=reachSurfaceArea(geo.distJamsilKm);
@@ -239,7 +254,7 @@ function calcContinuityVelocity(b, wl, rateCmHr, damCms, stationRates){
     sectionArea:Math.round(area),
     reachKm:geo.distJamsilKm,
     depth, depthSrc,
-    method, reliable,
+    method, reliable, gapKm,
     dir: vel<-0.03?'up' : vel>0.03?'down' : 'slack'
   };
 }
@@ -368,7 +383,8 @@ function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont
   // ★ 1순위: 연속방정식(질량보존) — 조석 역류 구간에서도 성립
   if(cont){
     const v=cont.vel, a=Math.abs(v);
-    const detail=`구간 ${cont.reachKm}km·수면적 ${cont.surfAreaKm2}km² · 저류 ${cont.dVdt>0?'+':''}${cont.dVdt}㎥/s · 통과유량 ${cont.Q}㎥/s`;
+    const gapNote = (cont.gapKm!=null && cont.gapKm>10) ? ` ⚠ 실측 관측소 간 공백 ${cont.gapKm}km — 보간으로 국지신호 희석 가능` : '';
+    const detail=`구간 ${cont.reachKm}km·수면적 ${cont.surfAreaKm2}km² · 저류 ${cont.dVdt>0?'+':''}${cont.dVdt}㎥/s · 통과유량 ${cont.Q}㎥/s${gapNote}`;
     if(cont.dir==='up'){
       return {signedVel:-a, absVel:a, dir:'up', dirLabel:'상류향 역류', reliable:cont.reliable,
               src:'연속방정식(저류법)',
@@ -957,6 +973,30 @@ async function getTideRowsRange(key,start,end){
 }
 
 // ── 조석 분석 ────────────────────────────────────────────────
+// ── 조석 진폭 감쇠비 (2026-08-11 신규) ─────────────────────────────
+// 물때표가 인천 조위 곡선 기울기를 그대로 유속 계산에 넣다 보니, 조석이 가장 급할 때
+// (밀물/썰물 전환 급구간)마다 비현실적인 유속(4~5m/s)이 나오고 "신뢰불가"가 남발되는 문제.
+// 원인: 인천은 진폭 700cm+인데 교량은 훨씬 완만하게 움직임(감쇠) — 이 감쇠를 반영 안 했음.
+// 조석 시차 로그에 이미 쌓여있는 (인천값, 교량값) 쌍으로 실측 감쇠비를 구해서 적용.
+// 표본 부족(4건 미만)이면 감쇠 없이(기존과 동일) 진행하되 화면에 그 사실을 명시 —
+// 근거 없는 기본값을 임의로 넣지 않음(이전 세션에서 반복된 실수를 피함).
+function stationAmplitudeDamping(refCode){
+  const log = loadTideLagLog().filter(e=>e.refCode===refCode && e.incheonValue!=null && e.bridgeValue!=null);
+  if(log.length<4) return {ratio:null, n:log.length};
+  log.sort((a,b)=>new Date(a.incheonTime)-new Date(b.incheonTime));
+  const ratios=[];
+  for(let i=1;i<log.length;i++){
+    const incheonRange = Math.abs(log[i].incheonValue - log[i-1].incheonValue); // cm
+    const bridgeRange = Math.abs(log[i].bridgeValue - log[i-1].bridgeValue)*100; // m→cm
+    if(incheonRange<30) continue; // 변화 너무 작으면 노이즈 위험 → 제외
+    const r = bridgeRange/incheonRange;
+    if(r>0 && r<=2) ratios.push(r); // 2배 넘는 증폭은 물리적으로 비현실적 → 이상치 제외
+  }
+  if(!ratios.length) return {ratio:null, n:0};
+  const avg = ratios.reduce((a,v)=>a+v,0)/ratios.length;
+  return {ratio:Number(avg.toFixed(3)), n:ratios.length};
+}
+
 function tideAt(rows,target,offsetMin=0){
   const shifted=new Date(target.getTime()-offsetMin*60000);
   const items=[];
@@ -990,6 +1030,7 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
   if(!futureTideRows || !futureTideRows.length) return null;
   const damCms = currentState?.damImpact?.value ?? null;
   const wlNow  = currentState?.water?.value ?? null;
+  const damping = stationAmplitudeDamping(b.code);
   const now = new Date();
   const n = Math.max(1, Math.floor(hours*60/stepMin));
   const rows=[];
@@ -1003,7 +1044,9 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
         if(taLow) ta = taLow;
       }
     }
-    const rateCmHr = ta?.rateCmHr ?? null;
+    const rawRateCmHr = ta?.rateCmHr ?? null;
+    // ★ 2026-08-11: 인천 조위 기울기를 그대로 쓰지 않고, 실측 감쇠비(있으면) 적용
+    const rateCmHr = (rawRateCmHr!=null && damping.ratio!=null) ? Number((rawRateCmHr*damping.ratio).toFixed(2)) : rawRateCmHr;
     let cont=null, flowDir=null;
     if(rateCmHr!=null && damCms!=null && wlNow!=null){
       cont = calcContinuityVelocity(b, wlNow, rateCmHr, damCms, null); // 관측소 실측 없이 단일근사만(미래라 당연)
@@ -1012,6 +1055,7 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
     }
     rows.push({ t, phase: ta?.phase ?? '?', tideVal: ta?.best?.value ?? null, rateCmHr, flowDir });
   }
+  rows.damping = damping; // 배너 표시용
   return rows;
 }
 
@@ -1065,11 +1109,16 @@ async function renderTideTable(){
     const rows = buildTideTable(b, currentState, futureTideRows, 12, 60);
     if(!rows){ el.innerHTML='<p class="muted small">예측 데이터를 만들 수 없습니다 (조석 조회 실패 또는 조회 이력 없음).</p>'; return; }
     const damCms = currentState?.damImpact?.value ?? null;
+    const damping = rows.damping || {ratio:null, n:0};
+    const dampingTxt = damping.ratio!=null
+      ? `조석 진폭 감쇠비 ${damping.ratio}(실측 ${damping.n}건 기반) 적용됨 — 인천 조위 기울기를 그대로 안 쓰고 이 교량 실측 반응 비율로 낮춤.`
+      : `⚠ 조석 진폭 감쇠비 미적용(조석 시차 로그 표본 ${damping.n}건, 4건 미만) — 인천 조위 기울기를 그대로 써서 <b>유속이 과대추정될 수 있음</b>. 조회를 계속하면 표본이 쌓여 자동 적용됩니다.`;
     el.innerHTML = `
       <div style="background:#1a1405;border:1px solid #b7791f;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
         📍 <b>${b.bridge}</b> 기준 물때표<br>
         ⚠ <b>가정 기반 예측입니다</b> — 팔당댐 방류량을 지금 값(${damCms!=null?Math.round(damCms)+'㎥/s':'조회 안됨'})으로
         고정한 채, 인천 조석 예보(KHOA)에 ${b.bridge} offset(${b.offset||0}분)만 더해 추정한 표입니다.<br>
+        ${dampingTxt}<br>
         <b>조석 시각(고조·저조)</b>은 신뢰도가 비교적 높지만, <b>방향·유속</b>은 방류량이 실제로 바뀌면
         바로 틀려지는 참고용 수치입니다 — 절대 단독 판단 근거로 쓰지 마세요.
       </div>

@@ -133,11 +133,11 @@ function reachSurfaceArea(distKm){
 // ── 연속방정식용 관측소 위치 (잠실보 기준 거리) ───────────────
 // 각 관측소가 대표하는 지점의 거리 — 구간별 저류 계산에 사용
 const CONT_STATIONS = [
-  {code:'1018662', name:'청담대교', distKm:2.5},
-  {code:'1018680', name:'잠수교',   distKm:9.5},
-  {code:'1018681', name:'반포2교',  distKm:9.5},
-  {code:'1018683', name:'한강대교', distKm:13},
-  {code:'1019630', name:'행주대교', distKm:29},
+  {code:'1018662', name:'청담대교', distKm:2.5, repBridge:'청담대교'},
+  {code:'1018680', name:'잠수교',   distKm:9.5, repBridge:'잠수교'},
+  {code:'1018681', name:'반포2교',  distKm:9.5, repBridge:'반포대교'},
+  {code:'1018683', name:'한강대교', distKm:13,  repBridge:'한강대교'},
+  {code:'1019630', name:'행주대교', distKm:29,  repBridge:'행주대교'},
 ];
 
 // 구간별 저류 증가율 계산 (관측소 실측 변화율 사용)
@@ -1039,6 +1039,15 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
   const damCms = currentState?.damImpact?.value ?? null;
   const wlNow  = currentState?.water?.value ?? null;
   const damping = stationAmplitudeDamping(b.code);
+  // ★ 2026-08-17: 물때표는 그동안 "관측소 실측 없이 단일근사만" 썼는데, 대상 교량이
+  // 15km 넘게 떨어져 있으면(예: 성산대교 20.5km) 미래 예측 전 구간이 무조건 신뢰불가로
+  // 뜨는 문제가 있었음. 다른 실측 관측소들도 각자 자기 offset+감쇠비로 미래 변화율을
+  // 합성해서 stationRates를 구성하면, 실시간 조회 때처럼 다중 관측소 적분(+자기실측
+  // 앵커)을 미래 예측에도 쓸 수 있음.
+  const stationDamping = CONT_STATIONS.map(st=>{
+    const repB = BRIDGES.find(bb=>bb.bridge===st.repBridge);
+    return {code:st.code, distKm:st.distKm, offset:repB?.offset??0, damp:stationAmplitudeDamping(st.code)};
+  });
   const now = new Date();
   const n = Math.max(1, Math.floor(hours*60/stepMin));
   const rows=[];
@@ -1055,9 +1064,17 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
     const rawRateCmHr = ta?.rateCmHr ?? null;
     // ★ 2026-08-11: 인천 조위 기울기를 그대로 쓰지 않고, 실측 감쇠비(있으면) 적용
     const rateCmHr = (rawRateCmHr!=null && damping.ratio!=null) ? Number((rawRateCmHr*damping.ratio).toFixed(2)) : rawRateCmHr;
+    // 다른 실측 관측소들의 같은 시각 합성 변화율 (각자 offset+감쇠비 적용)
+    const stationRates = stationDamping.map(sd=>{
+      const taS = tideAt(futureTideRows, t, sd.offset);
+      const rawS = taS?.rateCmHr ?? null;
+      if(rawS==null) return null;
+      const rS = sd.damp.ratio!=null ? rawS*sd.damp.ratio : rawS;
+      return {distKm:sd.distKm, rateCmHr:rS};
+    }).filter(Boolean);
     let cont=null, flowDir=null;
     if(rateCmHr!=null && damCms!=null && wlNow!=null){
-      cont = calcContinuityVelocity(b, wlNow, rateCmHr, damCms, null); // 관측소 실측 없이 단일근사만(미래라 당연)
+      cont = calcContinuityVelocity(b, wlNow, rateCmHr, damCms, stationRates.length?stationRates:null);
       const slackState = { atSlackNow: Math.abs(rateCmHr) < SLACK_RATE_THRESHOLD };
       flowDir = applyReverseFlow(null, true, rateCmHr, slackState, null, cont);
     }

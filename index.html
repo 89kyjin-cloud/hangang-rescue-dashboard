@@ -192,7 +192,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 <header class="topbar">
   <div>
     <div class="topbar-title">🌊 한강 수색환경</div>
-    <div class="topbar-sub">Phase 3.9.6 · 대상교량 자기실측치를 보간 앵커로 주입(정확도 개선)</div>
+    <div class="topbar-sub">Phase 3.9.8 · 화면 배치 순서 조정(물때표·통합그래프 상단 이동)</div>
   </div>
   <span class="badge-warn">검증 우선</span>
 </header>
@@ -282,10 +282,23 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
         <div class="dc-value color-muted" id="dc-tide">—</div>
         <div class="dc-sub" id="dc-tide-sub">조회 전</div>
       </div>
-      <div class="dc-item dc-full" style="min-height:0;padding:10px">
-        <div id="combinedChart" class="chart-wrap" style="min-height:220px"></div>
-        <div id="combinedChartNote" class="chart-note"></div>
-      </div>
+    </div>
+  </div>
+
+  <!-- 물때표 (접기) -->
+  <div class="card">
+    <button class="toggle-btn" id="tideTableToggle" aria-expanded="false">▶ 물때표 (12시간 예측, 참고용)</button>
+    <div id="tideTableSection" class="collapsible-section" style="display:none">
+      <div id="tideTablePanel" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- 통합 그래프 (접기) -->
+  <div class="card">
+    <button class="toggle-btn" id="combinedToggle" aria-expanded="false">▶ 통합 그래프 (고급)</button>
+    <div id="combinedSection" class="collapsible-section" style="display:none">
+      <div id="combinedChart" class="chart-wrap" style="min-height:400px"></div>
+      <div id="combinedChartNote" class="chart-note"></div>
     </div>
   </div>
 
@@ -360,15 +373,6 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     </div>
   </div>
 
-  <!-- 통합 그래프 (접기) -->
-  <div class="card">
-    <button class="toggle-btn" id="combinedToggle" aria-expanded="false">▶ 통합 그래프 (고급)</button>
-    <div id="combinedSection" class="collapsible-section" style="display:none">
-      <div id="combinedChart" class="chart-wrap" style="min-height:400px"></div>
-      <div id="combinedChartNote" class="chart-note"></div>
-    </div>
-  </div>
-
   <!-- 조석 시차 로그 (접기) -->
   <div class="card">
     <button class="toggle-btn" id="tideLagToggle" aria-expanded="false">▶ 조석 시차 로그 보기</button>
@@ -395,14 +399,6 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     </div>
   </div>
 
-  <!-- 물때표 (접기) -->
-  <div class="card">
-    <button class="toggle-btn" id="tideTableToggle" aria-expanded="false">▶ 물때표 (12시간 예측, 참고용)</button>
-    <div id="tideTableSection" class="collapsible-section" style="display:none">
-      <div id="tideTablePanel" style="margin-top:8px"></div>
-    </div>
-  </div>
-
 
   <!-- 원자료 로그 (접기) -->
   <div class="card">
@@ -414,7 +410,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
 
 </main>
 
-<script src="js/app.js?v=20260817-selfanchor" defer></script>
+<script src="js/app.js?v=20260817-layout-reorder" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function(){
   // API 키 접기/펼치기

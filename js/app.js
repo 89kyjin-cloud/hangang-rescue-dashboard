@@ -393,6 +393,21 @@ function applyReverseFlow(hqVel, tideActive, rateCmHr, slackState, damRise, cont
     const v=cont.vel, a=Math.abs(v);
     const gapNote = (cont.gapKm!=null && cont.gapKm>10) ? ` ⚠ 실측 관측소 간 공백 ${cont.gapKm}km — 보간으로 국지신호 희석 가능` : '';
     const detail=`구간 ${cont.reachKm}km·수면적 ${cont.surfAreaKm2}km² · 저류 ${cont.dVdt>0?'+':''}${cont.dVdt}㎥/s · 통과유량 ${cont.Q}㎥/s${gapNote}`;
+    // ★ 2026-08-17 신규: 실측(부이 투하) 검증 결과, 구간적분(0~20km대)이 먼 관측소
+    // 데이터에 끌려가 로컬 실제 흐름(거의 정조)과 어긋나는 사례 확인(성산대교).
+    // 2026-07-24에 "수위변화≈0→정조" 사전판정을 없앤 건 고유량(그때 3,358㎥/s,
+    // 기준의 17배)에서만 깨지는 가정이었음 — 방류량이 평범한 수준(HIGH_DISCHARGE_CMS
+    // 미만)일 때는 이 교량 자신의 실측 변화율이 정조 임계값 이내면 구간적분보다
+    // 로컬 실측을 우선한다(로컬 신호가 더 직접적이고, 부이로 실측 검증됨).
+    const HIGH_DISCHARGE_CMS = 1000; // 2026-07 실제 오판정 사례(3,358)보다 훨씬 낮게, 평상시 방류(~150~400)보단 훨씬 높게 설정
+    const impliedDamCms = (cont.Q!=null && cont.dVdt!=null) ? cont.Q + cont.dVdt : null;
+    const localNearSlack = rateCmHr!=null && Math.abs(rateCmHr) < SLACK_RATE_THRESHOLD;
+    const highDischarge = impliedDamCms!=null && impliedDamCms >= HIGH_DISCHARGE_CMS;
+    if(cont.dir!=='slack' && localNearSlack && !highDischarge){
+      return {signedVel:0, absVel:0, dir:'slack', dirLabel:'정조(국지 실측 우선)', reliable:cont.reliable,
+              src:'실측 변화율(국지) 우선 — 구간적분과 불일치',
+              note:`이 교량 실측 변화율 ${rateCmHr}cm/h(정조 임계값 ${SLACK_RATE_THRESHOLD}cm/h 이내)인데 구간적분은 ${cont.dir==='up'?'상류':'하류'} ${a}m/s로 계산됨 — 방류량 ${impliedDamCms!=null?Math.round(impliedDamCms):'?'}㎥/s로 고유량 아니라서 국지 실측을 우선함(2026-08-17 부이 실측 대조로 확인). ${detail}`};
+    }
     if(cont.dir==='up'){
       return {signedVel:-a, absVel:a, dir:'up', dirLabel:'상류향 역류', reliable:cont.reliable,
               src:'연속방정식(저류법)',
@@ -2337,6 +2352,47 @@ function depthLabel(depth){
   return              {cls:'bad',       label:'🔴 매우 깊음', note:`수심 ${depth.toFixed(1)}m — 감압 필수`};
 }
 
+// ★ 2026-08-17 신규: 운항기준도 JSON의 bridges 배열(speedLimit·mainSpan·notes)이
+// 로드만 되고 화면에 전혀 안 쓰이고 있던 걸 발견 — 규정 속도제한, 안전 비고
+// (예: "달빛노을교 수직여유고 7.207m", "저수심 구역 주의"), 주항로 경간 정보를
+// 카드로 노출.
+function getNavInfoForBridge(bridgeName, db){
+  if(!db || !Array.isArray(db.bridges)) return null;
+  const matches = db.bridges.filter(b=>b.name===bridgeName);
+  if(!matches.length) return null;
+  const spans=[];
+  for(const m of matches){
+    const ms = m.mainSpan;
+    if(Array.isArray(ms)) spans.push(...ms);
+    else if(ms) spans.push(ms);
+  }
+  return {
+    speedLimit: matches.find(m=>m.speedLimit)?.speedLimit ?? null,
+    notes: [...new Set(matches.map(m=>m.notes).filter(Boolean))],
+    spans,
+    zone: matches[0].zone ?? null,
+  };
+}
+function renderNavInfoCard(navInfo, approachTable){
+  if(!navInfo && !approachTable) return '';
+  let html='';
+  if(navInfo){
+    const hasAny = navInfo.speedLimit || navInfo.notes.length || navInfo.spans.length;
+    if(hasAny){
+      html += `<div class="kv"><b>규정 속도제한</b><span>${navInfo.speedLimit ?? '미지정(운항기준도 미등록)'}</span></div>`;
+      if(navInfo.notes.length) html += `<div class="kv"><b>안전 비고</b><span>${navInfo.notes.join(' · ')}</span></div>`;
+      if(navInfo.spans.length){
+        const spanTxt = navInfo.spans.map(s=>`P${s.fromPier}~P${s.toPier} ${s.span_m}m`).join(', ');
+        html += `<div class="kv"><b>주항로 경간</b><span>${spanTxt}</span></div>`;
+      }
+    }
+  }
+  if(approachTable){
+    html += `<p class="muted small" style="margin-top:8px">접근 속도 가이드(운항기준도 공통): 200m 지점 ${approachTable['200m']} → 100m ${approachTable['100m']} → 접안 ${approachTable.docking} → 10m 이내 ${approachTable['10m']}</p>`;
+  }
+  return html || '<p class="muted small">이 교량은 운항기준도에 속도제한·비고 정보가 등록돼있지 않습니다.</p>';
+}
+
 function renderDepthCard(b, incidentState, currentState, db){
   const el = $('depthCard'); if(!el) return;
 
@@ -3143,6 +3199,13 @@ async function runQuery(){
 
   // 렌더링
   try{ renderDepthCard(b, incidentState, currentState, NAV_CHART_DB); }catch(e){ log('[오류] renderDepthCard',e.message); }
+  try{
+    const navEl=$('navInfoCard');
+    if(navEl){
+      const navInfo=getNavInfoForBridge(b.bridge, NAV_CHART_DB);
+      navEl.innerHTML = renderNavInfoCard(navInfo, NAV_CHART_DB?.speedLimitOnApproach);
+    }
+  }catch(e){ log('[오류] renderNavInfoCard',e.message); }
 
   try{ renderSummary(b,incidentState,currentState,decision,tideRows); }catch(e){ log('[오류] renderSummary',e.message,e.stack?.split('\n')[1]); }
   try{ renderPointCompare(b,incidentState,currentState); }catch(e){ log('[오류] renderPointCompare',e.message,e.stack?.split('\n')[1]); }

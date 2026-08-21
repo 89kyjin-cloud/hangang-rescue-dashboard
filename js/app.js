@@ -2224,15 +2224,58 @@ function getBedElForBridge(bridgeName, db){
   };
 }
 
+// ★ 2026-08-21 신규: 교각 구간별 "참고용" 상대 유속 추정 (강함/보통/약함/거의없음/없음)
+// ─────────────────────────────────────────────────────────────
+// [배경] 20-4 후보 검토 중 확인된 한계: 해도 JSON엔 교각 구간별 "폭(width)" 데이터가
+//   없다(mainSpan은 교량당 1~3개 주항로 경간뿐, bedLevels.piers의 개별 zone과 부분적으로만
+//   매칭됨). 폭이 없으면 Q(유량)를 구간별로 정확히 배분하는 계산은 원천적으로 불가능하다.
+// [절충안] 정밀 유속(m/s) 대신 "그 지점이 대략 얼마나 세게 흐를지"의 5단계 상대 등급만
+//   제공한다. 근거: Manning 근사(개수로 유속 v ∝ 수심^(2/3), 동일 폭·조도 가정 — 표준
+//   수리학적 근사). 이 교량 전체의 실효 유속(연속방정식/HQ곡선 기반, 이미 계산됨)에
+//   그 구간 수심과 평균 수심의 비율(수심비)^(2/3)을 곱해 상대 배율을 구한다.
+// [한계, 반드시 명시] ① 폭이 균등하다고 가정(실제로는 구간마다 다를 수 있음)
+//   ② 교각 국부수축(bridge contraction) 효과 — 폭이 좁아지는 구간은 Manning 근사와
+//      반대로(깊이와 무관하게) 국부적으로 더 빨라질 수 있음, 이 모델은 이를 반영 못함
+//   ③ 전체 유속 자체가 미검증 추정치(⚠ 문구 참고)라면 이 등급도 마찬가지로 참고용 이하
+//   → 절대값(m/s)은 표시하지 않고 5단계 등급만 제공, "미검증·참고용" 문구 필수 동반.
+const PIER_VEL_NONE=0.05, PIER_VEL_ALMOST=0.2, PIER_VEL_WEAK=0.5, PIER_VEL_MODERATE=1.0;
+function pierFlowLabel(vAbs){
+  if(vAbs==null || !Number.isFinite(vAbs)) return null;
+  if(vAbs < PIER_VEL_NONE)    return {label:'없음',     color:'var(--muted)'};
+  if(vAbs < PIER_VEL_ALMOST)  return {label:'거의없음', color:'var(--green)'};
+  if(vAbs < PIER_VEL_WEAK)    return {label:'약함',     color:'var(--green)'};
+  if(vAbs < PIER_VEL_MODERATE)return {label:'보통',     color:'var(--yellow)'};
+  return                              {label:'강함',     color:'var(--red)'};
+}
+// zone의 대표 수심(하상고 절대값) — avgPierDepthOf()와 동일 로직으로 기준 통일
+function pierZoneReprDepth(z){
+  if(z.bedEl_repr!=null) return Math.abs(z.bedEl_repr);
+  if(z.bedEl_max!=null && z.bedEl_min!=null) return (Math.abs(z.bedEl_max)+Math.abs(z.bedEl_min))/2;
+  return null;
+}
+// avgDepth: 교량 평균수심(avgPierDepthOf, 정적 200㎥/s 기준) · evValue: 실효유속(m/s, 부호 무관 절대값 사용)
+function estimatePierFlowTag(z, avgDepth, evValue){
+  if(!(avgDepth>0) || evValue==null) return '';
+  const reprDepth = pierZoneReprDepth(z);
+  if(!(reprDepth>0)) return '';
+  const ratio = Math.pow(reprDepth/avgDepth, 2/3);
+  const vEst = Math.abs(evValue) * ratio;
+  const lbl = pierFlowLabel(vEst);
+  if(!lbl) return '';
+  return `<span style="font-size:11px;font-weight:800;color:${lbl.color};margin-left:8px;white-space:nowrap">${lbl.label}</span>`;
+}
+
 // ★ 2026-07-21 신규: 교각/구간별 수심 상세 렌더링
 // piers 객체의 각 zone: {bedEl_max(얕은쪽), bedEl_min(깊은쪽, 없으면 deepest), bedEl_repr, location, note}
 // bedEl_max가 0에 더 가까움(덜 음수) = 그 구간에서 가장 얕은 지점 = 안전상 가장 중요한 값
-function renderPierZones(piers){
+// avgDepth/evValue: ★2026-08-21 신규 — 있으면 구간별 상대 유속 등급(참고용) 함께 표시
+function renderPierZones(piers, avgDepth=null, evValue=null){
   if(!piers || !Object.keys(piers).length) return '';
   const zones = Object.entries(piers).map(([key,z])=>{
     const shallow = z.bedEl_max!=null ? chartDepth(z.bedEl_max) : null;
     const deepV   = z.bedEl_min!=null ? chartDepth(z.bedEl_min) : (z.deepest!=null ? chartDepth(z.deepest) : null);
-    return {key, shallow, deep:deepV, location:z.location||key, note:z.note||''};
+    const flowTag = estimatePierFlowTag(z, avgDepth, evValue);
+    return {key, shallow, deep:deepV, location:z.location||key, note:z.note||'', flowTag};
   }).filter(z=>z.shallow!==null || z.deep!==null)
     .sort((a,b)=>(a.shallow??a.deep??99)-(b.shallow??b.deep??99)); // 얕은 구간(위험) 먼저
 
@@ -2245,14 +2288,19 @@ function renderPierZones(piers){
       ? `${z.shallow.toFixed(1)}~${z.deep.toFixed(1)}m` : `${(z.shallow??z.deep).toFixed(1)}m`;
     return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
       <span style="flex:1;font-size:12px">${z.location}${danger?' 🚫':warn?' ⚠':''}</span>
-      <span style="font-weight:700;color:${color};white-space:nowrap">${rangeTxt}</span>
+      <span style="white-space:nowrap"><span style="font-weight:700;color:${color}">${rangeTxt}</span>${z.flowTag}</span>
     </div>${z.note?`<div style="font-size:11px;color:${color};margin:-2px 0 4px">${z.note}</div>`:''}`;
   }).join('');
+
+  const flowLegend = (avgDepth>0 && evValue!=null)
+    ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">유속 등급(강함/보통/약함/거의없음/없음)은 <b>미검증 참고치</b> — 구간별 폭 데이터가 없어 폭이 균등하다고 가정한 근사(Manning 근사, 수심비^(2/3))다. 교각 국부수축으로 인한 국지 가속은 반영 안 됨 — 절대 신뢰 금지, 현장 확인 우선.</div>`
+    : '';
 
   return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px">
     <div style="font-size:12px;font-weight:700;margin-bottom:4px">📍 구간별(교각별) 상세 수심 — 가장 얕은 구간 우선 표시</div>
     ${rows}
     <div style="font-size:10px;color:var(--muted);margin-top:4px">해도 원본 실측 샘플 기반. 대표값(주항로/최심)은 이 구간들의 대표치일 뿐 — 특정 교각·저수심 경계 근처 수색 시 이 표를 우선 확인.</div>
+    ${flowLegend}
   </div>`;
 }
 
@@ -2470,7 +2518,7 @@ function renderDepthCard(b, incidentState, currentState, db){
     </div>
     ${vcTxt?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;font-size:13px">${vcTxt}</div>`:''}
     ${decompWarn}
-    ${renderPierZones(bedInfo?.piers)}
+    ${renderPierZones(bedInfo?.piers, avgPierDepthOf(bedInfo), effectiveVelocity(currentState)?.value ?? null)}
     <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
       출처: ${bedInfo?.source||'운항기준도'}<br>
       ${bedInfo?.note ? '※ '+bedInfo.note.slice(0,60) : ''}

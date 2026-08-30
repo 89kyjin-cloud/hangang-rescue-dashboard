@@ -1034,9 +1034,40 @@ function tideAt(rows,target,offsetMin=0){
   const rateCmHr=(delta!==null&&hours)?Number((delta/hours).toFixed(1)):null;
   const phase=delta==null?'확인중':delta>0.3?'밀물 진행':delta<-0.3?'썰물 진행':'정체';
   const nextTurn=findNextTurn(items,bestIdx);
-  return{best,prev,diffMin:Math.round(bestDiff/60000),delta,rateCmHr,phase,count:items.length,shifted,nextTurn};
+  const prevTurn=findPrevTurn(items,bestIdx);
+  const standingWave=standingWavePhase(prevTurn,nextTurn,shifted);
+  return{best,prev,diffMin:Math.round(bestDiff/60000),delta,rateCmHr,phase,count:items.length,shifted,nextTurn,prevTurn,standingWave};
 }
 function findNextTurn(items,idx){ if(idx<1||idx>=items.length-2)return null; let prevSign=Math.sign(items[idx].value-items[idx-1].value); for(let i=idx+1;i<items.length-1;i++){const sign=Math.sign(items[i+1].value-items[i].value);if(prevSign!==0&&sign!==0&&sign!==prevSign){const type=prevSign>0?'만조':'간조';return{type,time:items[i].time,value:items[i].value};}if(sign!==0)prevSign=sign;} return null; }
+// ★ 2026-08-21 신규: findNextTurn의 대칭 버전 — idx 이전(과거)에서 가장 가까운 전환점을 찾음.
+function findPrevTurn(items,idx){ if(idx<2||idx>=items.length)return null; let nextSign=Math.sign(items[idx].value-items[idx-1].value); for(let i=idx-1;i>0;i--){const sign=Math.sign(items[i].value-items[i-1].value);if(nextSign!==0&&sign!==0&&sign!==nextSign){const type=nextSign>0?'간조':'만조';return{type,time:items[i].time,value:items[i].value};}if(sign!==0)nextSign=sign;} return null; }
+
+// ★ 2026-08-21 신규: 정재파(폐쇄형 하천 구간) 가설 기반 "전환시점 근접도" 계산
+// ─────────────────────────────────────────────────────────────
+// [배경] 영진님 현장 체감(08-21, 08:08 영동대교) — 실측 변화율(-3cm/h)로는 "정조" 판정인데
+//   실제론 물이 꽤 강하게 들어오는 중이었음. 팔당댐~신곡수중보로 양끝이 막힌 구간은 진행파가
+//   아니라 정재파에 가까울 수 있는데, 정재파에서는 수위 변화율이 0인 전환시점(고조/저조)에
+//   오히려 유속이 최대, 변화율이 최대인 중간시점에 유속이 0에 가깝다 — 지금 모델(변화율을
+//   유속 대리지표로 사용)과 정반대. 이 물리적 관계가 맞다면 임계값을 조정해도 못 고침.
+// [방법] 고정폭 시간창(예: ±60분) 대신, 이전/다음 실제 전환 시각으로 위상(0=직전전환,
+//   1=다음전환)을 만들고 cos(위상·π)의 절대값으로 "전환 근접도"를 구함 — 그 물때(사리/조금)의
+//   실제 주기 길이에 자동으로 맞춰지므로 고정 시간창보다 정확함.
+// [한계] 가설 단계, 부이 실측으로 아직 검증 안 됨 — 방향 판정 자체는 안 바꾸고 경고 문구만 추가.
+function standingWavePhase(prevTurn,nextTurn,now){
+  if(!prevTurn||!nextTurn) return null;
+  const total=nextTurn.time-prevTurn.time;
+  if(!(total>0)) return null;
+  const elapsed=now-prevTurn.time;
+  if(elapsed<0||elapsed>total) return null; // now가 두 전환 사이 밖이면(외삽) 계산 안 함
+  const frac=elapsed/total;
+  const alert=Math.abs(Math.cos(frac*Math.PI));
+  return {frac:Number(frac.toFixed(3)), alert:Number(alert.toFixed(3))};
+}
+function standingWaveWarnText(tide){
+  const sw=tide?.standingWave;
+  if(!sw||sw.alert==null||sw.alert<0.85) return '';
+  return ` · ⚠ 전환시점 근접(위상 ${Math.round(sw.frac*100)}%, 미검증 가설) — 정재파 특성상 유속이 오히려 최대일 수 있음, 현장 확인 필수`;
+}
 
 // ══════════════════════════════════════════════════════════════
 // ★ 2026-07-21 신규: 물때표 (교량별 방류·조석 예측 타임테이블)
@@ -1099,12 +1130,68 @@ function buildTideTable(b, currentState, futureTideRows, hours=12, stepMin=60){
   return rows;
 }
 
+// ══════════════════════════════════════════════════════════════
+// ★ 2026-08-29 신규: "투신시점" 기준 물때표 (실측 기반)
+// ══════════════════════════════════════════════════════════════
+// [배경] 위 buildTideTable()은 "지금"부터 미래로 뻗어나가는 표라, 방류량을
+//   "조회시점 값 그대로 고정"이라는 가정을 깔 수밖에 없다(미래 방류량 예보 API가 없음).
+// [차이점] 투신시점은 이미 지나간 시각이라 조석·방류량·수위 전부 실측값이 존재한다.
+//   그래서 이 표는 각 10분 스텝마다 "그 시각 실제 관측된 방류량·수위"를 그대로 조회해서
+//   쓴다 — buildTideTable처럼 하나의 고정값을 전 구간에 복붙하지 않는다.
+//   → 방향·유속의 신뢰도가 미래 물때표보다 원칙적으로 더 높다(가정이 없으므로).
+// [한계] 그래도 방향·유속 자체는 여전히 참고판정(연속방정식 근사)이지 실측 유속계가
+//   아니다 — "가정 기반"이라는 딱지만 뗄 수 있을 뿐, 방법론적 한계(정재파 가능성 등)는
+//   실시간 조회와 동일하게 남아있다.
+function buildIncidentTideTable(b, centerTime, tideRows, damRows, waterRows, waterMetric, damMetric, hoursBefore=1, hoursAfter=1, stepMin=10){
+  if(!b || !b.tide) return null; // 조석 제외 구간(잠실보 상류)은 의미 없음
+  if(!tideRows || !tideRows.length) return null;
+  const waterKeys=waterMetric?.key?[waterMetric.key]:WATER_KEYS;
+  const damKeys=damMetric?.key?[damMetric.key]:DAM_KEYS;
+  const damping = stationAmplitudeDamping(b.code);
+  const startT = new Date(centerTime.getTime()-hoursBefore*3600000);
+  const n = Math.max(1, Math.floor((hoursBefore+hoursAfter)*60/stepMin));
+  const rows=[];
+  for(let i=0;i<=n;i++){
+    const t = new Date(startT.getTime() + i*stepMin*60000);
+    let ta = tideAt(tideRows, t, b.offset||0);
+    if(ta && ta.phase && ta.phase.includes('썰물')){
+      const lowOffset = offsetForTideType(b,'간조');
+      if(lowOffset !== (b.offset||0)){
+        const taLow = tideAt(tideRows, t, lowOffset);
+        if(taLow) ta = taLow;
+      }
+    }
+    const rawRateCmHr = ta?.rateCmHr ?? null;
+    const rateCmHr = (rawRateCmHr!=null && damping.ratio!=null) ? Number((rawRateCmHr*damping.ratio).toFixed(2)) : rawRateCmHr;
+
+    // ★ 핵심 차이: "지금 값 고정"이 아니라 그 시각 실제 관측값을 조회
+    const damImpactTime = new Date(t.getTime()-(b.releaseLag||0)*60000);
+    const damPt = nearest(damRows, damImpactTime, damKeys, 90);
+    const waterPt = nearest(waterRows, t, waterKeys, MAX_NEAREST_MIN);
+    const damCms = damPt?.value ?? null;
+    const wlNow = waterPt?.value ?? null;
+
+    let cont=null, flowDir=null;
+    if(rateCmHr!=null && damCms!=null && wlNow!=null){
+      cont = calcContinuityVelocity(b, wlNow, rateCmHr, damCms, null);
+      const slackState = { atSlackNow: Math.abs(rateCmHr) < SLACK_RATE_THRESHOLD };
+      flowDir = applyReverseFlow(null, true, rateCmHr, slackState, null, cont);
+    }
+    rows.push({ t, phase: ta?.phase ?? '?', tideVal: ta?.best?.value ?? null, rateCmHr, flowDir, damCms, wlNow });
+  }
+  rows.damping = damping;
+  return rows;
+}
+
 function renderTideTableRows(rows, offsetMin, bridgeName){
   if(!rows || !rows.length) return '<p class="muted small">데이터 없음</p>';
+  // ★ 2026-08-21 수정: "인천 조위(원본)"과 "교량 실제 추정 유속"이 같은 밀물/썰물·정조
+  // 용어를 쓰다 보니 서로 다른 기준인데도 모순처럼 보여 혼동 유발(영진님 08-21 피드백).
+  // → 두 값을 배지(인천/교량)로 명확히 분리해서 한 줄씩 나란히 표시.
   const trs = rows.map(r=>{
     const timeTxt = mdhhmm(r.t);
     const tideTxt = r.tideVal!=null ? `${r.phase} (${r.tideVal.toFixed(0)}cm)` : '조회 실패';
-    let dirTxt='—', dirColor='var(--muted)';
+    let dirTxt='자료 없음', dirColor='var(--muted)';
     if(r.flowDir){
       const unreliable = r.flowDir.reliable===false;
       if(r.flowDir.dir==='slack'){ dirTxt='⏸ 정조'; dirColor='#0ea56b'; }
@@ -1119,20 +1206,29 @@ function renderTideTableRows(rows, offsetMin, bridgeName){
         dirColor = '#ef4444';
       }
     }
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:5px 6px;font-size:12px;white-space:nowrap">${timeTxt}</td>
-      <td style="padding:5px 6px;font-size:12px">${tideTxt}</td>
-      <td style="padding:5px 6px;font-size:12px;font-weight:700;color:${dirColor}">${dirTxt}</td>
-    </tr>`;
+    const obsTxt = (r.damCms!=null || r.wlNow!=null)
+      ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">실측: ${r.damCms!=null?Math.round(r.damCms)+'㎥/s':'?'} · ${r.wlNow!=null?r.wlNow.toFixed(2)+'m':'?'}</div>`
+      : '';
+    return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:3px">${timeTxt}</div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <span style="flex-shrink:0;font-size:9px;font-weight:800;color:#7dd3fc;background:#0d3b5c;border-radius:4px;padding:2px 6px">인천</span>
+        <span style="font-size:12px">${tideTxt}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="flex-shrink:0;font-size:9px;font-weight:800;color:#fbbf24;background:#3a2705;border-radius:4px;padding:2px 6px">교량</span>
+        <span style="font-size:12px;font-weight:700;color:${dirColor}">${dirTxt}</span>
+      </div>
+      ${obsTxt}
+    </div>`;
   }).join('');
-  return `<table style="width:100%;border-collapse:collapse">
-    <thead><tr style="border-bottom:1px solid var(--border)">
-      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">시각(${bridgeName||'교량'} 도달추정)</th>
-      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">조석(인천+${offsetMin}분→${bridgeName||'교량'}, 신뢰도 높음)</th>
-      <th style="text-align:left;font-size:11px;color:var(--muted);padding:4px 6px">방향·유속(추정, 참고용)</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
+  return `<div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5">
+      <span style="color:#7dd3fc;font-weight:700">인천</span> = 인천 조위 예보 원본(${bridgeName||'교량'} 도달시차 ${offsetMin}분 적용, 신뢰도 높음, 진폭은 인천 기준 그대로) ·
+      <span style="color:#fbbf24;font-weight:700">교량</span> = 위 인천값에 이 교량의 실측 감쇠비까지 반영한 <b>실제 예상 방향·유속</b>(참고용)
+    </div>
+    ${trs}
+  </div>`;
 }
 
 async function renderTideTable(){
@@ -1167,6 +1263,41 @@ async function renderTideTable(){
   }catch(e){
     el.innerHTML = `<p class="muted small">예측 조회 실패: ${e.message}</p>`;
     log('[물때표 오류]', e.message);
+  }
+}
+
+// ★ 2026-08-29 신규: "투신시점" 기준 물때표(실측 기반) 렌더링
+// buildTideTable()과 달리 새로 API를 호출하지 않고, 이미 이번 조회 때 받아온
+// tideRows/damRows/waterRows(투신~조회시점 구간, 이미 releaseLag+90분 여유를 두고
+// 받아옴)를 그대로 재사용한다 — 전부 실측이라 새로 조회할 필요가 없다.
+async function renderIncidentTideTable(){
+  const el=$('incidentTideTablePanel'); if(!el) return;
+  if(!LAST_QUERY_CTX){ el.innerHTML='<p class="muted small">먼저 위에서 환경 조회를 1회 실행한 뒤 열어주세요.</p>'; return; }
+  const {b, incident, tideRows, damRows, waterRows, waterMetric, damMetric} = LAST_QUERY_CTX;
+  if(!b.tide){ el.innerHTML='<p class="muted small">이 교량은 잠실수중보 상류(조석 제외 구간)라 물때표가 의미 없습니다.</p>'; return; }
+  if(!incident){ el.innerHTML='<p class="muted small">투신시점 정보가 없습니다.</p>'; return; }
+  try{
+    const rows = buildIncidentTideTable(b, incident, tideRows, damRows, waterRows, waterMetric, damMetric, 1, 1, 10);
+    if(!rows){ el.innerHTML='<p class="muted small">투신시점 물때표를 만들 수 없습니다 (조석 조회 실패 또는 조회 이력 없음).</p>'; return; }
+    const damping = rows.damping || {ratio:null, n:0};
+    const dampingTxt = damping.ratio!=null
+      ? `조석 진폭 감쇠비 ${damping.ratio}(실측 ${damping.n}건 기반) 적용됨.`
+      : `⚠ 조석 진폭 감쇠비 미적용(표본 ${damping.n}건, 4건 미만) — 유속이 과대추정될 수 있음.`;
+    el.innerHTML = `
+      <div style="background:#0a1f14;border:1px solid #1f9d5c;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;line-height:1.6">
+        📍 <b>${b.bridge}</b> · 투신시점(${mdhhmm(incident)}) 전후 1시간 물때표<br>
+        ✅ <b>실측 기반입니다</b> — 이미 지나간 시각이라 조석·방류량(${b.releaseLag||0}분 지연 보정)·수위를
+        각 10분마다 그때그때 실제 관측값으로 조회했습니다. 미래 물때표처럼 "방류량을 한 값으로 고정"하는
+        가정이 없습니다.<br>
+        ${dampingTxt}<br>
+        <b>방향·유속은 여전히 참고판정</b>(연속방정식 근사)입니다 — 실측 유속계 값이 아니며, 정재파
+        가능성 등 방법론적 한계는 실시간 조회와 동일하게 남아있습니다.
+      </div>
+      ${renderTideTableRows(rows, b.offset||0, b.bridge)}
+    `;
+  }catch(e){
+    el.innerHTML = `<p class="muted small">투신시점 물때표 조회 실패: ${e.message}</p>`;
+    log('[투신시점 물때표 오류]', e.message);
   }
 }
 
@@ -1928,7 +2059,7 @@ function directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrendL
     if(flowDir.dir==='down')
       return `⬇ 물이 나가는 중 · 하류향 ${flowDir.absVel.toFixed(2)}m/s (${rateTxt})${turnSoon}`;
     if(flowDir.dir==='slack')
-      return `⏸ 정조 — 통과유량 ≈0 (${rateTxt})`;
+      return `⏸ 정조 — 통과유량 ≈0 (${rateTxt})${standingWaveWarnText(tide)}`;
     if(flowDir.dir==='mixed')
       return `혼합·불확실 — 수위 상승과 방류 급증 동반 (${rateTxt}) · 현장 확인 필수`;
   }
@@ -1936,7 +2067,7 @@ function directionLabel(b,wTrendShort,damImpact,tide,tideActive,damTrend,wTrendL
   // 2순위: 실측 변화율 부호
   if(rate!==null){
     const abs=Math.abs(rate);
-    if(abs < FLOW_RATE_SLACK) return `⏸ 정체·정조 부근 (${rateTxt})`;
+    if(abs < FLOW_RATE_SLACK) return `⏸ 정체·정조 부근 (${rateTxt})${standingWaveWarnText(tide)}`;
     if(rate > 0){
       if(damSurging)
         return `수위 ${flowStrengthLabel(abs)} 상승 (${rateTxt}) · 방류 급증(+${Math.round(damRise)}㎥/s/h) — 역류 여부 불확실`;
@@ -3340,7 +3471,9 @@ async function runQuery(){
   $('inputStatus').textContent=`조회 완료${dataCapped?` · ⚠ HRFCO 데이터 ${Math.round((search-end)/60000)}분 지연`:''} · 신곡수중보 swl=${singokTideState.swl?.toFixed(2)??'조회실패'}m`;
   // ★ 화면 회전 시 재렌더를 위해 마지막 조회 파라미터 저장
   window._lastRunQuery = runQuery;
-  LAST_QUERY_CTX = {b, currentState, key, tideKey, search};
+  // ★ 2026-08-29 수정: incident/tideRows/damRows/waterRows/waterMetric/damMetric 추가
+  // — 투신시점 물때표(renderIncidentTideTable)가 재조회 없이 재사용하기 위함
+  LAST_QUERY_CTX = {b, currentState, key, tideKey, search, incident, tideRows, damRows, waterRows, waterMetric, damMetric};
 }
 
 document.addEventListener('DOMContentLoaded', init);

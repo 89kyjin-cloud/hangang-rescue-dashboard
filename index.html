@@ -293,6 +293,14 @@ pre{white-space:pre-wrap;word-break:break-all;background:#06090f;color:#4a6080;b
     </div>
   </div>
 
+  <!-- ★ 2026-08-29 신규: 투신시점 물때표 (실측 기반, 접기) -->
+  <div class="card">
+    <button class="toggle-btn" id="incidentTideTableToggle" aria-expanded="false">▶ 투신시점 물때표 (실측 기반)</button>
+    <div id="incidentTideTableSection" class="collapsible-section" style="display:none">
+      <div id="incidentTideTablePanel" style="margin-top:8px"></div>
+    </div>
+  </div>
+
   <!-- 통합 그래프 (접기) -->
   <div class="card">
     <button class="toggle-btn" id="combinedToggle" aria-expanded="false">▶ 통합 그래프 (고급)</button>
@@ -453,6 +461,20 @@ document.addEventListener('DOMContentLoaded', function(){
       if(open && window.renderTideTable){
         tideTableLoaded = true;
         window.renderTideTable();
+      }
+    });
+  }
+  // ★ 2026-08-29 신규: 투신시점 물때표(실측 기반) 접기
+  const incidentTideTableBtn = document.getElementById('incidentTideTableToggle');
+  const incidentTideTableSec = document.getElementById('incidentTideTableSection');
+  if(incidentTideTableBtn && incidentTideTableSec){
+    incidentTideTableBtn.addEventListener('click', function(){
+      const open = incidentTideTableSec.style.display === 'none';
+      incidentTideTableSec.style.display = open ? 'block' : 'none';
+      incidentTideTableBtn.textContent = open ? '▼ 투신시점 물때표 접기' : '▶ 투신시점 물때표 (실측 기반)';
+      incidentTideTableBtn.setAttribute('aria-expanded', open);
+      if(open && window.renderIncidentTideTable){
+        window.renderIncidentTideTable();
       }
     });
   }
